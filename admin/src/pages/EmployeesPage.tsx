@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
-  Alert,
   Box,
   Button,
   Chip,
@@ -38,14 +37,10 @@ import {
   resetPassword,
   updateUser,
 } from '../api';
-
-const roleLabel: Record<string, string> = {
-  director: 'Direktor',
-  employee: 'Xodim',
-  admin: 'Admin',
-};
+import { useAppSettings } from '../i18n/LanguageContext';
 
 export default function EmployeesPage() {
+  const { t } = useAppSettings();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [dialogOpen, setDialogOpen] = useState(false);
@@ -60,6 +55,12 @@ export default function EmployeesPage() {
     department: '',
     phone: '',
   });
+
+  const roleLabel = (role: string) => {
+    if (role === 'director') return t('director');
+    if (role === 'employee') return t('employee');
+    return t('admin');
+  };
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -103,7 +104,7 @@ export default function EmployeesPage() {
           department: form.department || null,
           phone: form.phone || null,
         });
-        setSnack('Yangilandi');
+        setSnack(t('updated'));
       } else {
         await createUser({
           login: form.login,
@@ -114,38 +115,38 @@ export default function EmployeesPage() {
           department: form.department || undefined,
           phone: form.phone || undefined,
         });
-        setSnack('Qo\'shildi');
+        setSnack(t('added'));
       }
       setDialogOpen(false);
       load();
-    } catch (e: unknown) {
-      setSnack('Xatolik yuz berdi');
+    } catch {
+      setSnack(t('error'));
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm('O\'chirishni tasdiqlaysizmi?')) return;
+    if (!confirm(t('confirmDelete'))) return;
     await deleteUser(id);
-    setSnack('O\'chirildi');
+    setSnack(t('deleted'));
     load();
   };
 
   const handleResetPassword = async (u: User) => {
-    const pw = prompt('Yangi parol (min 6 belgi):');
+    const pw = prompt(t('passwordPrompt'));
     if (!pw || pw.length < 6) return;
     await resetPassword(u.id, pw);
-    setSnack('Parol yangilandi');
+    setSnack(t('passwordChanged'));
   };
 
   const handleResetDevice = async (id: string) => {
     await resetDevice(id);
-    setSnack('Qurilma ulandi');
+    setSnack(t('deviceReset'));
     load();
   };
 
   const handleApproveDevice = async (id: string, approve: boolean) => {
     await approveDevice(id, approve);
-    setSnack(approve ? 'Qurilma tasdiqlandi' : 'Rad etildi');
+    setSnack(approve ? t('deviceApproved') : t('deviceRejected'));
     load();
   };
 
@@ -153,30 +154,24 @@ export default function EmployeesPage() {
     <Box>
       <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
         <Box>
-          <Typography variant="h5" fontWeight={700}>
-            Xodimlar va Direktorlar
-          </Typography>
-          <Typography variant="body2" color="text.secondary">
-            Login, parol, lavozim va rol shu yerda belgilanadi
-          </Typography>
+          <Typography variant="h5" fontWeight={700}>{t('employeesTitle')}</Typography>
+          <Typography variant="body2" color="text.secondary">{t('employeesDesc')}</Typography>
         </Box>
-        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>
-          Qo&apos;shish
-        </Button>
+        <Button variant="contained" startIcon={<AddIcon />} onClick={openCreate}>{t('add')}</Button>
       </Box>
 
       {loading ? (
-        <Typography>Yuklanmoqda...</Typography>
+        <Typography>{t('loading')}</Typography>
       ) : (
         <Table sx={{ bgcolor: 'background.paper', borderRadius: 2, overflow: 'hidden' }}>
           <TableHead>
             <TableRow sx={{ bgcolor: '#2563EB', '& th': { color: 'white', fontWeight: 600 } }}>
-              <TableCell>Ism</TableCell>
-              <TableCell>Login</TableCell>
-              <TableCell>Rol</TableCell>
-              <TableCell>Bo&apos;lim</TableCell>
-              <TableCell>Qurilma</TableCell>
-              <TableCell align="right">Amallar</TableCell>
+              <TableCell>{t('name')}</TableCell>
+              <TableCell>{t('login')}</TableCell>
+              <TableCell>{t('role')}</TableCell>
+              <TableCell>{t('department')}</TableCell>
+              <TableCell>{t('device')}</TableCell>
+              <TableCell align="right">{t('actions')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
@@ -185,34 +180,30 @@ export default function EmployeesPage() {
                 <TableCell>{u.fullName}</TableCell>
                 <TableCell>{u.login}</TableCell>
                 <TableCell>
-                  <Chip
-                    label={roleLabel[u.role]}
-                    size="small"
-                    color={u.role === 'director' ? 'primary' : 'default'}
-                  />
+                  <Chip label={roleLabel(u.role)} size="small" color={u.role === 'director' ? 'primary' : 'default'} />
                 </TableCell>
                 <TableCell>{u.department ?? '—'}</TableCell>
                 <TableCell>
                   {u.pendingDeviceId ? (
                     <Box sx={{ display: 'flex', gap: 0.5 }}>
-                      <IconButton size="small" color="success" title="Tasdiqlash" onClick={() => handleApproveDevice(u.id, true)}>
+                      <IconButton size="small" color="success" title={t('deviceApprove')} onClick={() => handleApproveDevice(u.id, true)}>
                         <CheckCircleIcon fontSize="small" />
                       </IconButton>
-                      <IconButton size="small" color="error" title="Rad etish" onClick={() => handleApproveDevice(u.id, false)}>
+                      <IconButton size="small" color="error" title={t('deviceReject')} onClick={() => handleApproveDevice(u.id, false)}>
                         <DeleteIcon fontSize="small" />
                       </IconButton>
                     </Box>
                   ) : u.deviceId ? (
-                    <Chip label="Bog'langan" size="small" color="success" variant="outlined" />
+                    <Chip label={t('deviceLinked')} size="small" color="success" variant="outlined" />
                   ) : (
-                    <Chip label="Yo'q" size="small" variant="outlined" />
+                    <Chip label={t('deviceNone')} size="small" variant="outlined" />
                   )}
                 </TableCell>
                 <TableCell align="right">
-                  <IconButton size="small" onClick={() => openEdit(u)}><EditIcon /></IconButton>
-                  <IconButton size="small" onClick={() => handleResetPassword(u)}><LockResetIcon /></IconButton>
-                  <IconButton size="small" onClick={() => handleResetDevice(u.id)}><PhoneAndroidIcon /></IconButton>
-                  <IconButton size="small" color="error" onClick={() => handleDelete(u.id)}><DeleteIcon /></IconButton>
+                  <IconButton size="small" onClick={() => openEdit(u)} title={t('edit')}><EditIcon /></IconButton>
+                  <IconButton size="small" onClick={() => handleResetPassword(u)} title={t('resetPassword')}><LockResetIcon /></IconButton>
+                  <IconButton size="small" onClick={() => handleResetDevice(u.id)} title={t('resetDevice')}><PhoneAndroidIcon /></IconButton>
+                  <IconButton size="small" color="error" onClick={() => handleDelete(u.id)} title={t('delete')}><DeleteIcon /></IconButton>
                 </TableCell>
               </TableRow>
             ))}
@@ -221,29 +212,29 @@ export default function EmployeesPage() {
       )}
 
       <Dialog open={dialogOpen} onClose={() => setDialogOpen(false)} maxWidth="sm" fullWidth>
-        <DialogTitle>{editUser ? 'Tahrirlash' : 'Yangi xodim / direktor'}</DialogTitle>
+        <DialogTitle>{editUser ? t('dialogEdit') : t('dialogNew')}</DialogTitle>
         <DialogContent sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 1 }}>
           {!editUser && (
             <>
-              <TextField label="Login" value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} required />
-              <TextField label="Parol" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
+              <TextField label={t('login')} value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value })} required />
+              <TextField label={t('password')} type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required />
             </>
           )}
-          <TextField label="To'liq ism" value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
+          <TextField label={t('fullName')} value={form.fullName} onChange={(e) => setForm({ ...form, fullName: e.target.value })} required />
           <FormControl fullWidth>
-            <InputLabel>Rol</InputLabel>
-            <Select value={form.role} label="Rol" onChange={(e) => setForm({ ...form, role: e.target.value as 'director' | 'employee' })}>
-              <MenuItem value="employee">Xodim</MenuItem>
-              <MenuItem value="director">Direktor</MenuItem>
+            <InputLabel>{t('role')}</InputLabel>
+            <Select value={form.role} label={t('role')} onChange={(e) => setForm({ ...form, role: e.target.value as 'director' | 'employee' })}>
+              <MenuItem value="employee">{t('employee')}</MenuItem>
+              <MenuItem value="director">{t('director')}</MenuItem>
             </Select>
           </FormControl>
-          <TextField label="Lavozim" value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
-          <TextField label="Bo'lim" value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
-          <TextField label="Telefon" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
+          <TextField label={t('position')} value={form.position} onChange={(e) => setForm({ ...form, position: e.target.value })} />
+          <TextField label={t('department')} value={form.department} onChange={(e) => setForm({ ...form, department: e.target.value })} />
+          <TextField label={t('phone')} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setDialogOpen(false)}>Bekor</Button>
-          <Button variant="contained" onClick={handleSave}>Saqlash</Button>
+          <Button onClick={() => setDialogOpen(false)}>{t('cancel')}</Button>
+          <Button variant="contained" onClick={handleSave}>{t('save')}</Button>
         </DialogActions>
       </Dialog>
 

@@ -19,6 +19,7 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
@@ -34,27 +35,18 @@ fun DirectorDashboardScreen(
     LaunchedEffect(Unit) { viewModel.load() }
 
     LiquidBackground(Modifier.fillMaxSize()) {
-        LazyColumn(
-            contentPadding = PaddingValues(16.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
+        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             item {
                 Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text("Dashboard", color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    FloatingActionButton(
-                        onClick = onCreateTask,
-                        containerColor = VazifaColors.Primary,
-                        modifier = Modifier.size(48.dp),
-                    ) {
+                    Text(localized("dash_title"), color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 24.sp)
+                    FloatingActionButton(onClick = onCreateTask, containerColor = VazifaColors.Primary, modifier = Modifier.size(48.dp)) {
                         Icon(Icons.Default.Add, null, tint = Color.White)
                     }
                 }
             }
+            item { state.stats?.let { StatsGrid(it) } }
             item {
-                state.stats?.let { StatsGrid(it) }
-            }
-            item {
-                Text("So'nggi vazifalar", color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
+                Text(localized("dash_recent_tasks"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
             }
             items(state.tasks.take(5), key = { it.id }) { task ->
                 TaskRow(task, onClick = { onTaskClick(task.id) })
@@ -67,12 +59,12 @@ fun DirectorDashboardScreen(
 private fun StatsGrid(stats: DashboardStats) {
     Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard("Xodimlar", "${stats.totalEmployees}", Icons.Default.People, Modifier.weight(1f))
-            StatCard("Faol", "${stats.activeTasks}", Icons.Default.Assignment, Modifier.weight(1f))
+            StatCard(localized("dash_employees"), "${stats.totalEmployees}", Icons.Default.People, Modifier.weight(1f))
+            StatCard(localized("dash_active"), "${stats.activeTasks}", Icons.Default.Assignment, Modifier.weight(1f))
         }
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-            StatCard("Bajarilgan", "${stats.completedTasks}", Icons.Default.CheckCircle, Modifier.weight(1f), VazifaColors.Success)
-            StatCard("Kechikkan", "${stats.overdueTasks}", Icons.Default.Warning, Modifier.weight(1f), VazifaColors.Danger)
+            StatCard(localized("dash_completed"), "${stats.completedTasks}", Icons.Default.CheckCircle, Modifier.weight(1f), VazifaColors.Success)
+            StatCard(localized("dash_overdue"), "${stats.overdueTasks}", Icons.Default.Warning, Modifier.weight(1f), VazifaColors.Danger)
         }
     }
 }

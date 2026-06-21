@@ -1,0 +1,5 @@
+#!/bin/sh
+# Co-authored-by: Cursor satrlarini commit xabaridan olib tashlaydi
+COMMIT_MSG_FILE=$1
+grep -vi '^Co-authored-by: Cursor' "$COMMIT_MSG_FILE" > "$COMMIT_MSG_FILE.tmp"
+mv "$COMMIT_MSG_FILE.tmp" "$COMMIT_MSG_FILE"

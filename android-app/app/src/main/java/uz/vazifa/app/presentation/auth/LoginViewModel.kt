@@ -15,7 +15,7 @@ data class LoginUiState(
     val login: String = "",
     val password: String = "",
     val loading: Boolean = false,
-    val error: String? = null,
+    val errorKey: String? = null,
     val loggedIn: Boolean = false,
 )
 
@@ -24,23 +24,23 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
     private val _state = MutableStateFlow(LoginUiState())
     val state = _state.asStateFlow()
 
-    fun onLoginChange(v: String) = _state.update { it.copy(login = v, error = null) }
-    fun onPasswordChange(v: String) = _state.update { it.copy(password = v, error = null) }
+    fun onLoginChange(v: String) = _state.update { it.copy(login = v, errorKey = null) }
+    fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorKey = null) }
 
     fun login(deviceId: String) {
         viewModelScope.launch {
-            _state.update { it.copy(loading = true, error = null) }
+            _state.update { it.copy(loading = true, errorKey = null) }
             try {
                 auth.login(_state.value.login.trim(), _state.value.password, deviceId)
                 _state.update { it.copy(loading = false, loggedIn = true) }
             } catch (e: HttpException) {
-                val msg = when (e.code()) {
-                    403 -> "Qurilma admin tasdig'ini kutmoqda"
-                    else -> "Login yoki parol noto'g'ri"
+                val key = when (e.code()) {
+                    403 -> "login_device_pending"
+                    else -> "login_error"
                 }
-                _state.update { it.copy(loading = false, error = msg) }
+                _state.update { it.copy(loading = false, errorKey = key) }
             } catch (_: Exception) {
-                _state.update { it.copy(loading = false, error = "Ulanish xatoligi") }
+                _state.update { it.copy(loading = false, errorKey = "login_network_error") }
             }
         }
     }

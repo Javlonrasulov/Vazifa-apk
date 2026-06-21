@@ -18,16 +18,16 @@ export class AuditLog {
   @JoinColumn({ name: 'userId' })
   user: User | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   userId: string | null;
 
   @Column({ type: 'enum', enum: AuditAction })
   action: AuditAction;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   entityType: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   entityId: string | null;
 
   @Column({ type: 'jsonb', nullable: true })

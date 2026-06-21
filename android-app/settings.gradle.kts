@@ -12,5 +12,5 @@ dependencyResolutionManagement {
         mavenCentral()
     }
 }
-rootProject.name = "Vazifa"
+rootProject.name = "Lider Vazifa"
 include(":app")

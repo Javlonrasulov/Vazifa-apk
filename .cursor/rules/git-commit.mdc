@@ -1,0 +1,31 @@
+---
+description: Git commit xabarlari — o'zbek tilida, qisqa va aniq
+alwaysApply: true
+---
+
+# Git commit qoidalari
+
+Commit yaratganda quyidagilarga rioya qil:
+
+- Xabar **o'zbek tilida**, **qisqa** (1 qator, ~50 belgigacha) va **aniq** bo'lsin
+- Nima o'zgarganini tushuntirsin: `fix`, `add`, `update` o'rniga to'g'ridan-to'g'ri vazifani yoz
+- Inglizcha commit xabarlaridan foydalanma
+- **`Co-authored-by` qo'shma** — hech qachon `Co-authored-by: Cursor` yoki boshqa co-author satrlarini qo'shma
+
+## Namunalar
+
+```
+Admin panelga xodim qidiruv qo'shildi
+Vazifa statusi yangilash xatosi tuzatildi
+Android login ekrani dizayni yangilandi
+Backend JWT muddati sozlandi
+.gitignore va docker-compose qo'shildi
+```
+
+## Noto'g'ri
+
+```
+Fix bug in task module
+Initial commit: Vazifa task management system
+Co-authored-by: Cursor <cursoragent@cursor.com>
+```

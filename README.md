@@ -1,4 +1,4 @@
-# Vazifa — Xodimlar Vazifalarini Boshqarish Tizimi
+# Lider Vazifa — Xodimlar Vazifalarini Boshqarish Tizimi
 
 Korxona ichida vazifalar berish, nazorat qilish va avtomatik eslatmalar.
 

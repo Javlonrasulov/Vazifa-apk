@@ -4,6 +4,7 @@ import android.content.Intent
 import android.net.Uri
 import android.os.Build
 import android.provider.Settings
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -12,7 +13,6 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -22,7 +22,9 @@ import androidx.core.app.NotificationManagerCompat
 import com.google.firebase.messaging.FirebaseMessaging
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidBackground
+import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
 
@@ -52,9 +54,7 @@ fun NotificationGateScreen(
 
     LiquidBackground(Modifier.fillMaxSize()) {
         Column(
-            Modifier
-                .align(Alignment.Center)
-                .padding(32.dp),
+            Modifier.align(Alignment.Center).padding(32.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
             Icon(
@@ -65,48 +65,48 @@ fun NotificationGateScreen(
             )
             Spacer(Modifier.height(24.dp))
             Text(
-                "Ilovadan foydalanish uchun bildirishnomalarni yoqing",
+                localized("notif_title"),
                 color = LiquidTheme.text,
                 fontWeight = FontWeight.Bold,
                 fontSize = 20.sp,
                 textAlign = TextAlign.Center,
             )
             Spacer(Modifier.height(12.dp))
-            Text(
-                "Vazifalar va muddat eslatmalari push orqali yuboriladi. Ruxsatsiz ilova ishlamaydi.",
-                color = LiquidTheme.textMuted,
-                fontSize = 14.sp,
-                textAlign = TextAlign.Center,
-            )
+            Text(localized("notif_desc"), color = LiquidTheme.textMuted, fontSize = 14.sp, textAlign = TextAlign.Center)
             Spacer(Modifier.height(32.dp))
             Button(
                 onClick = {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                        val intent = Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
-                            putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
-                        }
-                        context.startActivity(intent)
+                        context.startActivity(
+                            Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                                putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                            },
+                        )
                     } else {
-                        context.startActivity(Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
-                            data = Uri.parse("package:${context.packageName}")
-                        })
+                        context.startActivity(
+                            Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+                                data = Uri.parse("package:${context.packageName}")
+                            },
+                        )
                     }
                 },
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(50),
-                colors = ButtonDefaults.buttonColors(containerColor = VazifaColors.Primary),
+                shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
             ) {
-                Text("Sozlamalarni ochish")
+                Text(localized("notif_open_settings"), fontWeight = FontWeight.SemiBold)
             }
             Spacer(Modifier.height(12.dp))
             OutlinedButton(
                 onClick = { checkAndProceed() },
                 enabled = !checking,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(50),
+                shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                colors = ButtonDefaults.outlinedButtonColors(contentColor = LiquidTheme.text),
+                border = BorderStroke(1.dp, LiquidGlass.GlassDarkBorderStrong),
             ) {
                 if (checking) CircularProgressIndicator(modifier = Modifier.size(24.dp))
-                else Text("Tekshirish")
+                else Text(localized("notif_check"))
             }
         }
     }

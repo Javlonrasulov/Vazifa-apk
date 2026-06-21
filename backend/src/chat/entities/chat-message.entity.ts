@@ -30,13 +30,13 @@ export class ChatMessage {
   @Column({ type: 'text', nullable: true })
   body: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   filePath: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   fileName: string | null;
 
-  @Column({ nullable: true })
+  @Column({ type: 'varchar', nullable: true })
   mimeType: string | null;
 
   @Column({ default: false })

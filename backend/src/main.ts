@@ -23,8 +23,8 @@ async function bootstrap() {
   app.useStaticAssets(join(process.cwd(), uploadDir), { prefix: '/uploads/' });
 
   const swagger = new DocumentBuilder()
-    .setTitle('Vazifa API')
-    .setDescription('Xodimlar vazifalarini boshqarish tizimi')
+    .setTitle('Lider Vazifa API')
+    .setDescription('Lider Vazifa — xodimlar vazifalarini boshqarish tizimi')
     .setVersion('1.0')
     .addBearerAuth()
     .build();

@@ -1,14 +1,13 @@
 package uz.vazifa.app.data.repository
 
 import android.content.Context
-import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.flow.map
 import uz.vazifa.app.data.remote.ApiClient
+import uz.vazifa.app.data.remote.FcmRequest
 import uz.vazifa.app.data.remote.LoginRequest
 import uz.vazifa.app.data.remote.TokenStore
 import uz.vazifa.app.data.remote.UserDto
@@ -26,9 +25,6 @@ class AuthRepository @Inject constructor(
     private val KEY_ACCESS = stringPreferencesKey("access_token")
     private val KEY_REFRESH = stringPreferencesKey("refresh_token")
     private val KEY_USER = stringPreferencesKey("user_json")
-    private val KEY_DARK = booleanPreferencesKey("dark_theme")
-
-    val isDarkMode: Flow<Boolean> = context.dataStore.data.map { it[KEY_DARK] ?: true }
 
     suspend fun login(login: String, password: String, deviceId: String): UserDto {
         val res = api.api.login(LoginRequest(login, password, deviceId))
@@ -54,14 +50,14 @@ class AuthRepository @Inject constructor(
     suspend fun logout() {
         tokenStore.accessToken = null
         tokenStore.refreshToken = null
-        context.dataStore.edit { it.clear() }
-    }
-
-    suspend fun setDarkMode(dark: Boolean) {
-        context.dataStore.edit { it[KEY_DARK] = dark }
+        context.dataStore.edit {
+            it.remove(KEY_ACCESS)
+            it.remove(KEY_REFRESH)
+            it.remove(KEY_USER)
+        }
     }
 
     suspend fun updateFcm(token: String, enabled: Boolean) {
-        api.api.updateFcm(uz.vazifa.app.data.remote.FcmRequest(token, enabled))
+        api.api.updateFcm(FcmRequest(token, enabled))
     }
 }

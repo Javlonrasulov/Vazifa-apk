@@ -1,7 +1,7 @@
 package uz.vazifa.app.presentation.navigation
 
-import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -24,9 +24,9 @@ import uz.vazifa.app.presentation.dashboard.DirectorDashboardScreen
 import uz.vazifa.app.presentation.notifications.NotificationGateScreen
 import uz.vazifa.app.presentation.profile.ProfileScreen
 import uz.vazifa.app.presentation.tasks.*
+import uz.vazifa.app.presentation.theme.LiquidBackground
+import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
-import uz.vazifa.app.presentation.theme.VazifaColors
-import androidx.compose.material3.MaterialTheme
 import javax.inject.Inject
 
 @HiltViewModel
@@ -59,7 +59,7 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
 
     var selectedTab by remember { mutableStateOf(if (isDirector) AppTab.HOME else AppTab.TASKS) }
 
-    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+    Box(Modifier.fillMaxSize()) {
         NavHost(
             navController,
             startDestination = Routes.SPLASH,
@@ -74,8 +74,10 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
                         }
                     }
                 }
-                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                    CircularProgressIndicator(color = VazifaColors.Primary)
+                LiquidBackground(Modifier.fillMaxSize()) {
+                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = LiquidGlass.Blue)
+                    }
                 }
             }
             composable(Routes.LOGIN) {

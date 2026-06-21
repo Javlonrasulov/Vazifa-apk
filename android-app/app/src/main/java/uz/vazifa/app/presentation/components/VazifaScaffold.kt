@@ -1,0 +1,86 @@
+package uz.vazifa.app.presentation.components
+
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.runtime.Composable
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.dp
+import uz.vazifa.app.presentation.theme.LiquidBackground
+import uz.vazifa.app.presentation.theme.LiquidGlass
+import uz.vazifa.app.presentation.theme.LiquidTheme
+import uz.vazifa.app.presentation.theme.liquidGlassThemed
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+fun VazifaStackScaffold(
+    title: String,
+    onBack: () -> Unit,
+    content: @Composable (PaddingValues) -> Unit,
+) {
+    Scaffold(
+        containerColor = LiquidTheme.bg,
+        topBar = {
+            TopAppBar(
+                modifier = Modifier.drawBehind {
+                    drawLine(
+                        color = LiquidGlass.GlassDarkBorder,
+                        start = Offset(0f, size.height),
+                        end = Offset(size.width, size.height),
+                        strokeWidth = 1f,
+                    )
+                },
+                title = {
+                    Text(title, fontWeight = FontWeight.Bold, color = LiquidTheme.text)
+                },
+                navigationIcon = {
+                    IconButton(
+                        onClick = onBack,
+                        modifier = Modifier
+                            .size(40.dp)
+                            .clip(RoundedCornerShape(16.dp))
+                            .liquidGlassThemed(radius = 16.dp),
+                    ) {
+                        Icon(
+                            Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = localized("com_back"),
+                            tint = LiquidGlass.BlueLight,
+                        )
+                    }
+                },
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = LiquidTheme.bgMid.copy(alpha = 0.88f),
+                    titleContentColor = LiquidTheme.text,
+                    navigationIconContentColor = LiquidGlass.BlueLight,
+                ),
+            )
+        },
+    ) { padding ->
+        LiquidBackground(Modifier.fillMaxSize()) {
+            content(padding)
+        }
+    }
+}
+
+@Composable
+fun VazifaScreenBox(padding: PaddingValues, content: @Composable () -> Unit) {
+    Box(Modifier.fillMaxSize().padding(padding)) {
+        content()
+    }
+}
