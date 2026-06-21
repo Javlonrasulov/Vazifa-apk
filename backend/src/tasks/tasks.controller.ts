@@ -1,0 +1,137 @@
+import {
+  Body,
+  Controller,
+  Get,
+  Param,
+  Patch,
+  Post,
+  Delete,
+  UseGuards,
+  Request,
+  UseInterceptors,
+  UploadedFile,
+} from '@nestjs/common';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
+import { AuthGuard } from '@nestjs/passport';
+import { diskStorage } from 'multer';
+import { extname, join } from 'path';
+import { v4 as uuid } from 'uuid';
+import { TasksService } from './tasks.service';
+import {
+  AddCommentDto,
+  CreateTaskDto,
+  UpdateAssignmentStatusDto,
+  UpdateTaskDto,
+} from './dto/task.dto';
+import { RolesGuard, Roles } from '../common/guards/roles.guard';
+import { NotificationsGuard } from '../common/guards/notifications.guard';
+import { UserRole } from '../common/enums';
+import { User } from '../users/entities/user.entity';
+import { AuditService } from '../audit/audit.service';
+
+const uploadDir = process.env.UPLOAD_DIR || 'uploads';
+
+@ApiTags('tasks')
+@ApiBearerAuth()
+@UseGuards(AuthGuard('jwt'), NotificationsGuard)
+@Controller('tasks')
+export class TasksController {
+  constructor(
+    private tasksService: TasksService,
+    private audit: AuditService,
+  ) {}
+
+  @Get()
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  findAll(@Request() req: { user: User }) {
+    return this.tasksService.findAll(req.user);
+  }
+
+  @Get('dashboard/stats')
+  @Roles(UserRole.DIRECTOR)
+  @UseGuards(RolesGuard)
+  dashboardStats() {
+    return this.tasksService.getDashboardStats();
+  }
+
+  @Get(':id')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  findOne(@Param('id') id: string, @Request() req: { user: User }) {
+    return this.tasksService.findOne(id, req.user);
+  }
+
+  @Post()
+  @Roles(UserRole.DIRECTOR)
+  @UseGuards(RolesGuard)
+  create(@Body() dto: CreateTaskDto, @Request() req: { user: User }) {
+    return this.tasksService.create(dto, req.user);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.DIRECTOR)
+  @UseGuards(RolesGuard)
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateTaskDto,
+    @Request() req: { user: User },
+  ) {
+    return this.tasksService.update(id, dto, req.user);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.DIRECTOR)
+  @UseGuards(RolesGuard)
+  cancel(@Param('id') id: string, @Request() req: { user: User }) {
+    return this.tasksService.cancel(id, req.user);
+  }
+
+  @Patch(':taskId/assignments/:assignmentId/status')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  updateStatus(
+    @Param('taskId') taskId: string,
+    @Param('assignmentId') assignmentId: string,
+    @Body() dto: UpdateAssignmentStatusDto,
+    @Request() req: { user: User },
+  ) {
+    return this.tasksService.updateAssignmentStatus(taskId, assignmentId, dto, req.user);
+  }
+
+  @Post(':id/comments')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  addComment(
+    @Param('id') id: string,
+    @Body() dto: AddCommentDto,
+    @Request() req: { user: User },
+  ) {
+    return this.tasksService.addComment(id, dto, req.user);
+  }
+
+  @Post(':id/attachments')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  @ApiConsumes('multipart/form-data')
+  @UseInterceptors(
+    FileInterceptor('file', {
+      storage: diskStorage({
+        destination: uploadDir,
+        filename: (_req, file, cb) => {
+          cb(null, `${uuid()}${extname(file.originalname)}`);
+        },
+      }),
+      limits: { fileSize: 50 * 1024 * 1024 },
+    }),
+  )
+  upload(
+    @Param('id') id: string,
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: { user: User },
+  ) {
+    if (!file) throw new Error('Fayl topilmadi');
+    return this.tasksService.addAttachment(id, req.user, file);
+  }
+}

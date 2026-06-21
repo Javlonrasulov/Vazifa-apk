@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+
+# Environment & secrets
+.env
+.env.local
+*.pem
+*.key
+
+# Build outputs
+dist/
+build/
+*.tsbuildinfo
+
+# Uploads & runtime data
+uploads/
+
+# Android
+android-app/.gradle/
+android-app/**/build/
+android-app/local.properties
+android-app/.idea/
+android-app/*.iml
+*.apk
+*.aab
+
+# IDE & OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*
