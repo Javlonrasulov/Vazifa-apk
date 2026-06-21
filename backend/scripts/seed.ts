@@ -2,6 +2,12 @@ import 'reflect-metadata';
 import { DataSource } from 'typeorm';
 import * as bcrypt from 'bcrypt';
 import { User } from '../src/users/entities/user.entity';
+import { Task } from '../src/tasks/entities/task.entity';
+import { TaskAssignment } from '../src/tasks/entities/task-assignment.entity';
+import { TaskAttachment } from '../src/tasks/entities/task-attachment.entity';
+import { TaskComment } from '../src/tasks/entities/task-comment.entity';
+import { AuditLog } from '../src/audit/entities/audit-log.entity';
+import { ChatMessage } from '../src/chat/entities/chat-message.entity';
 import { UserRole } from '../src/common/enums';
 
 async function seed() {
@@ -12,7 +18,7 @@ async function seed() {
     username: process.env.DB_USERNAME || 'vazifa',
     password: process.env.DB_PASSWORD || 'vazifa123',
     database: process.env.DB_DATABASE || 'vazifa',
-    entities: [User],
+    entities: [User, Task, TaskAssignment, TaskAttachment, TaskComment, AuditLog, ChatMessage],
     synchronize: true,
   });
 

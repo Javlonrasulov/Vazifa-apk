@@ -10,6 +10,8 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -20,6 +22,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -49,6 +52,7 @@ fun LoginScreen(
     val context = LocalContext.current
     val deviceId = remember { Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) }
     var showLangMenu by remember { mutableStateOf(false) }
+    var showPassword by remember { mutableStateOf(false) }
     val fieldColors = liquidGlassFieldColors()
 
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onSuccess() }
@@ -111,7 +115,16 @@ fun LoginScreen(
                 onValueChange = viewModel::onPasswordChange,
                 label = { Text(localized("password")) },
                 leadingIcon = { Icon(Icons.Default.Lock, null) },
-                visualTransformation = PasswordVisualTransformation(),
+                trailingIcon = {
+                    IconButton(onClick = { showPassword = !showPassword }) {
+                        Icon(
+                            if (showPassword) Icons.Default.VisibilityOff else Icons.Default.Visibility,
+                            contentDescription = localized(if (showPassword) "hide_password" else "show_password"),
+                            tint = LiquidTheme.textMuted,
+                        )
+                    }
+                },
+                visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,

@@ -1,8 +1,5 @@
 import { createContext, useContext, useMemo, useState, ReactNode } from 'react';
-import { ThemeProvider as MuiThemeProvider } from '@mui/material/styles';
-import CssBaseline from '@mui/material/CssBaseline';
 import { ADMIN_LANGS, DEFAULT_LANG, LangAdmin, t as translate } from './translations';
-import { createAppTheme } from '../theme';
 
 interface AppContextValue {
   lang: LangAdmin;
@@ -10,6 +7,7 @@ interface AppContextValue {
   t: (key: string) => string;
   langs: typeof ADMIN_LANGS;
   isDark: boolean;
+  setIsDark: (v: boolean) => void;
   toggleTheme: () => void;
 }
 
@@ -33,20 +31,19 @@ function loadDark(): boolean {
 
 export function AppProvider({ children }: { children: ReactNode }) {
   const [lang, setLangState] = useState<LangAdmin>(loadLang);
-  const [isDark, setIsDark] = useState(loadDark);
+  const [isDark, setIsDarkState] = useState(loadDark);
 
   const setLang = (next: LangAdmin) => {
     localStorage.setItem(LANG_KEY, next);
     setLangState(next);
   };
 
-  const toggleTheme = () => {
-    setIsDark((prev) => {
-      const next = !prev;
-      localStorage.setItem(THEME_KEY, String(next));
-      return next;
-    });
+  const setIsDark = (next: boolean) => {
+    localStorage.setItem(THEME_KEY, String(next));
+    setIsDarkState(next);
   };
+
+  const toggleTheme = () => setIsDark(!isDark);
 
   const value = useMemo(
     () => ({
@@ -55,21 +52,13 @@ export function AppProvider({ children }: { children: ReactNode }) {
       t: (key: string) => translate(lang, key),
       langs: ADMIN_LANGS,
       isDark,
+      setIsDark,
       toggleTheme,
     }),
     [lang, isDark],
   );
 
-  const theme = useMemo(() => createAppTheme(isDark), [isDark]);
-
-  return (
-    <AppContext.Provider value={value}>
-      <MuiThemeProvider theme={theme}>
-        <CssBaseline />
-        {children}
-      </MuiThemeProvider>
-    </AppContext.Provider>
-  );
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 }
 
 export function useAppSettings() {
@@ -77,9 +66,3 @@ export function useAppSettings() {
   if (!ctx) throw new Error('useAppSettings must be used within AppProvider');
   return ctx;
 }
-
-/** @deprecated use useAppSettings */
-export const useLanguage = useAppSettings;
-
-/** @deprecated use AppProvider */
-export const LanguageProvider = AppProvider;
