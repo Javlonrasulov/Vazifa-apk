@@ -29,8 +29,11 @@ export class AuthService {
     }
   }
 
-  async login(login: string, password: string, deviceId: string) {
-    const user = await this.usersService.findByLogin(login);
+  async login(identifier: string, password: string, deviceId: string) {
+    const trimmed = identifier.trim();
+    const user =
+      (await this.usersService.findByLogin(trimmed.toLowerCase())) ??
+      (await this.usersService.findByPhone(trimmed));
     if (!user || !user.isActive) {
       throw new UnauthorizedException('Login yoki parol noto\'g\'ri');
     }

@@ -37,3 +37,7 @@ npm-debug.log*
 
 # JVM heap dumps
 *.hprof
+
+# Temp / build cache
+cy_out.txt
+android-app/.kotlin/

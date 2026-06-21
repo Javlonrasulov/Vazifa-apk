@@ -9,9 +9,14 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.util.UzPhoneFormatter
 import javax.inject.Inject
 
+enum class LoginMode { PHONE, LOGIN }
+
 data class LoginUiState(
+    val mode: LoginMode = LoginMode.PHONE,
+    val phoneDigits: String = "",
     val login: String = "",
     val password: String = "",
     val loading: Boolean = false,
@@ -24,14 +29,51 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
     private val _state = MutableStateFlow(LoginUiState())
     val state = _state.asStateFlow()
 
+    fun setMode(mode: LoginMode) {
+        _state.update {
+            it.copy(
+                mode = mode,
+                phoneDigits = "",
+                login = "",
+                errorKey = null,
+            )
+        }
+    }
+
+    fun onPhoneDigitsChange(v: String) {
+        val digits = v.filter { it.isDigit() }.take(9)
+        _state.update { it.copy(phoneDigits = digits, errorKey = null) }
+    }
+
     fun onLoginChange(v: String) = _state.update { it.copy(login = v, errorKey = null) }
+
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorKey = null) }
 
     fun login(deviceId: String) {
+        val current = _state.value
+        if (current.mode == LoginMode.PHONE && current.phoneDigits.length < 9) {
+            _state.update { it.copy(errorKey = "login_empty") }
+            return
+        }
+        if (current.mode == LoginMode.LOGIN && current.login.isBlank()) {
+            _state.update { it.copy(errorKey = "login_empty") }
+            return
+        }
+        if (current.password.isBlank()) {
+            _state.update { it.copy(errorKey = "login_empty") }
+            return
+        }
+
+        val identifier = if (current.mode == LoginMode.PHONE) {
+            UzPhoneFormatter.formattedForApi(current.phoneDigits)
+        } else {
+            current.login.trim()
+        }
+
         viewModelScope.launch {
             _state.update { it.copy(loading = true, errorKey = null) }
             try {
-                auth.login(_state.value.login.trim(), _state.value.password, deviceId)
+                auth.login(identifier, current.password, deviceId)
                 _state.update { it.copy(loading = false, loggedIn = true) }
             } catch (e: HttpException) {
                 val key = when (e.code()) {

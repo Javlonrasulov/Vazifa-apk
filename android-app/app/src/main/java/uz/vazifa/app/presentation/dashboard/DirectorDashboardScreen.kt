@@ -4,7 +4,6 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -19,8 +18,9 @@ import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
-import uz.vazifa.app.presentation.components.localized
+import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
+import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
@@ -34,22 +34,37 @@ fun DirectorDashboardScreen(
     val state by viewModel.state.collectAsState()
     LaunchedEffect(Unit) { viewModel.load() }
 
-    LiquidBackground(Modifier.fillMaxSize()) {
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-            item {
-                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween, verticalAlignment = Alignment.CenterVertically) {
-                    Text(localized("dash_title"), color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 24.sp)
-                    FloatingActionButton(onClick = onCreateTask, containerColor = VazifaColors.Primary, modifier = Modifier.size(48.dp)) {
-                        Icon(Icons.Default.Add, null, tint = Color.White)
+    VazifaTabScaffold(
+        title = localized("nav_home"),
+        actions = {
+            VazifaHeaderActions(
+                extra = {
+                    GlassHeaderIconButton(
+                        onClick = onCreateTask,
+                        icon = Icons.Default.Add,
+                        tint = LiquidGlass.Blue,
+                        contentDescription = localized("task_create"),
+                    )
+                },
+            )
+        },
+    ) { padding ->
+        LiquidBackground(Modifier.fillMaxSize()) {
+            VazifaScreenBox(padding) {
+                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    item { state.stats?.let { StatsGrid(it) } }
+                    item {
+                        Text(
+                            localized("dash_recent_tasks"),
+                            color = LiquidTheme.text,
+                            fontWeight = FontWeight.SemiBold,
+                            fontSize = 16.sp,
+                        )
+                    }
+                    items(state.tasks.take(5), key = { it.id }) { task ->
+                        TaskRow(task, onClick = { onTaskClick(task.id) })
                     }
                 }
-            }
-            item { state.stats?.let { StatsGrid(it) } }
-            item {
-                Text(localized("dash_recent_tasks"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 16.sp)
-            }
-            items(state.tasks.take(5), key = { it.id }) { task ->
-                TaskRow(task, onClick = { onTaskClick(task.id) })
             }
         }
     }

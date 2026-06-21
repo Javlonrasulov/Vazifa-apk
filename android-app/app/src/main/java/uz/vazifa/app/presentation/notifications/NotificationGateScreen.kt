@@ -14,12 +14,14 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.core.app.NotificationManagerCompat
-import com.google.firebase.messaging.FirebaseMessaging
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.presentation.components.localized
@@ -36,20 +38,41 @@ fun NotificationGateScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     var checking by remember { mutableStateOf(false) }
+    var statusMessage by remember { mutableStateOf<String?>(null) }
+    val msgStillOff = localized("notif_still_off")
+    val msgLoading = localized("com_loading")
+    val msgFcmError = localized("notif_fcm_error")
 
     fun checkAndProceed() {
-        val enabled = NotificationManagerCompat.from(context).areNotificationsEnabled()
-        if (!enabled) return
+        if (checking) return
+        if (!NotificationManagerCompat.from(context).areNotificationsEnabled()) {
+            statusMessage = msgStillOff
+            return
+        }
         checking = true
-        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
-            scope.launch {
-                if (task.isSuccessful) {
-                    runCatching { authRepository.updateFcm(task.result, true) }
-                    onGranted()
-                }
-                checking = false
+        statusMessage = msgLoading
+        scope.launch {
+            val ok = runCatching { authRepository.registerPushToken() }.getOrDefault(false)
+            if (ok) {
+                onGranted()
+            } else {
+                statusMessage = msgFcmError
+            }
+            checking = false
+        }
+    }
+
+    LaunchedEffect(Unit) { checkAndProceed() }
+
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME) {
+                checkAndProceed()
             }
         }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     LiquidBackground(Modifier.fillMaxSize()) {
@@ -73,6 +96,10 @@ fun NotificationGateScreen(
             )
             Spacer(Modifier.height(12.dp))
             Text(localized("notif_desc"), color = LiquidTheme.textMuted, fontSize = 14.sp, textAlign = TextAlign.Center)
+            statusMessage?.let { msg ->
+                Spacer(Modifier.height(12.dp))
+                Text(msg, color = VazifaColors.Danger, fontSize = 13.sp, textAlign = TextAlign.Center)
+            }
             Spacer(Modifier.height(32.dp))
             Button(
                 onClick = {
@@ -109,10 +136,5 @@ fun NotificationGateScreen(
                 else Text(localized("notif_check"))
             }
         }
-    }
-
-    DisposableEffect(Unit) {
-        checkAndProceed()
-        onDispose { }
     }
 }

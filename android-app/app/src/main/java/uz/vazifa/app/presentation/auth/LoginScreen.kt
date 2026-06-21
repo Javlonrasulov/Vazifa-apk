@@ -2,6 +2,8 @@ package uz.vazifa.app.presentation.auth
 
 import android.provider.Settings
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -10,6 +12,7 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.Phone
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
@@ -35,6 +38,7 @@ import uz.vazifa.app.localization.AppLanguage
 import uz.vazifa.app.presentation.components.liquidGlassFieldColors
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.*
+import uz.vazifa.app.util.UzbekPhoneVisualTransformation
 import javax.inject.Inject
 
 @HiltViewModel
@@ -99,13 +103,58 @@ fun LoginScreen(
             Text(localized("app_subtitle"), color = LiquidTheme.textMuted, fontSize = 14.sp)
             Spacer(Modifier.height(32.dp))
 
+            Row(
+                Modifier
+                    .fillMaxWidth()
+                    .clip(RoundedCornerShape(LiquidGlass.RadiusInput))
+                    .border(1.dp, LiquidTheme.textMuted.copy(alpha = 0.35f), RoundedCornerShape(LiquidGlass.RadiusInput)),
+            ) {
+                listOf(LoginMode.PHONE to "login_mode_phone", LoginMode.LOGIN to "login_mode_login").forEach { (mode, labelKey) ->
+                    val selected = state.mode == mode
+                    Box(
+                        Modifier
+                            .weight(1f)
+                            .clickable { viewModel.setMode(mode) }
+                            .background(
+                                if (selected) LiquidGlass.Blue.copy(alpha = 0.18f) else Color.Transparent,
+                            )
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            localized(labelKey),
+                            color = if (selected) LiquidGlass.Blue else LiquidTheme.textMuted,
+                            fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal,
+                            fontSize = 14.sp,
+                        )
+                    }
+                }
+            }
+            Spacer(Modifier.height(16.dp))
+
             OutlinedTextField(
-                value = state.login,
-                onValueChange = viewModel::onLoginChange,
-                label = { Text(localized("login")) },
-                leadingIcon = { Icon(Icons.Default.Person, null) },
+                value = if (state.mode == LoginMode.PHONE) state.phoneDigits else state.login,
+                onValueChange = {
+                    if (state.mode == LoginMode.PHONE) viewModel.onPhoneDigitsChange(it)
+                    else viewModel.onLoginChange(it)
+                },
+                label = { Text(localized(if (state.mode == LoginMode.PHONE) "phone" else "login")) },
+                leadingIcon = {
+                    Icon(
+                        if (state.mode == LoginMode.PHONE) Icons.Default.Phone else Icons.Default.Person,
+                        null,
+                    )
+                },
+                visualTransformation = if (state.mode == LoginMode.PHONE) {
+                    UzbekPhoneVisualTransformation()
+                } else {
+                    VisualTransformation.None
+                },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                keyboardOptions = KeyboardOptions(
+                    keyboardType = if (state.mode == LoginMode.PHONE) KeyboardType.Phone else KeyboardType.Text,
+                ),
                 shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 colors = fieldColors,
             )

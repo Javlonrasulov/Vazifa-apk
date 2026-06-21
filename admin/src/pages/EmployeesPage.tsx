@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { isAxiosError } from 'axios';
 import {
   AlertTriangle,
   Check,
@@ -16,6 +17,7 @@ import {
 } from 'lucide-react';
 import {
   User,
+  apiErrorMessage,
   approveDevice,
   createUser,
   deleteUser,
@@ -26,6 +28,9 @@ import {
 } from '../api';
 import { useAppSettings } from '../i18n/LanguageContext';
 import { INDIGO, useAdminTheme } from '../theme/adminTheme';
+import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave } from '../utils/phone';
+
+const DEFAULT_EMPLOYEE_PASSWORD = '123456';
 
 export default function EmployeesPage() {
   const { t, isDark } = useAppSettings();
@@ -47,11 +52,13 @@ export default function EmployeesPage() {
   const [toast, setToast] = useState('');
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
+  const [showFormPassword, setShowFormPassword] = useState(true);
   const [form, setForm] = useState({
     login: '',
     password: '',
     fullName: '',
     role: 'employee' as 'director' | 'employee',
+    canAssignTasks: false,
     position: '',
     department: '',
     phone: '',
@@ -103,14 +110,16 @@ export default function EmployeesPage() {
   const openCreate = () => {
     setEditUser(null);
     setSaveError('');
+    setShowFormPassword(true);
     setForm({
       login: '',
-      password: '',
+      password: DEFAULT_EMPLOYEE_PASSWORD,
       fullName: '',
       role: 'employee',
+      canAssignTasks: false,
       position: '',
       department: '',
-      phone: '',
+      phone: '+998 ',
     });
     setDialogOpen(true);
   };
@@ -118,14 +127,16 @@ export default function EmployeesPage() {
   const openEdit = (u: User) => {
     setEditUser(u);
     setSaveError('');
+    setShowFormPassword(true);
     setForm({
       login: u.login,
       password: '',
       fullName: u.fullName,
       role: u.role as 'director' | 'employee',
+      canAssignTasks: u.canAssignTasks ?? u.role === 'director',
       position: u.position ?? '',
       department: u.department ?? '',
-      phone: u.phone ?? '',
+      phone: displayPhone(u.phone ?? ''),
     });
     setDialogOpen(true);
   };
@@ -134,31 +145,49 @@ export default function EmployeesPage() {
     setSaving(true);
     setSaveError('');
     try {
+      if (form.password && form.password.length < 6) {
+        setSaveError(t('passwordMinError'));
+        return;
+      }
       if (editUser) {
         await updateUser(editUser.id, {
+          login: form.login.trim(),
+          ...(form.password ? { password: form.password } : {}),
           fullName: form.fullName,
           role: form.role,
+          canAssignTasks: form.canAssignTasks,
           position: form.position || null,
           department: form.department || null,
-          phone: form.phone || null,
+          phone: phoneForSave(form.phone),
         });
         setToast(t('updated'));
       } else {
+        if (!form.login.trim()) {
+          setSaveError(t('loginEmpty'));
+          return;
+        }
         await createUser({
           login: form.login,
-          password: form.password,
+          password: form.password || DEFAULT_EMPLOYEE_PASSWORD,
           fullName: form.fullName,
           role: form.role,
+          canAssignTasks: form.canAssignTasks,
           position: form.position || undefined,
           department: form.department || undefined,
-          phone: form.phone || undefined,
+          phone: phoneForSave(form.phone) || undefined,
         });
         setToast(t('added'));
       }
       setDialogOpen(false);
       load();
-    } catch {
-      setSaveError(t('error'));
+    } catch (err) {
+      if (isAxiosError(err)) {
+        if (err.response?.status === 409) setSaveError(t('loginTaken'));
+        else if (err.response?.status === 401) setSaveError(t('sessionExpired'));
+        else setSaveError(apiErrorMessage(err) ?? t('error'));
+      } else {
+        setSaveError(t('error'));
+      }
     } finally {
       setSaving(false);
     }
@@ -225,6 +254,27 @@ export default function EmployeesPage() {
     display: 'block',
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
+  };
+
+  const segmentedBtn = (active: boolean): React.CSSProperties => ({
+    flex: 1,
+    padding: '9px 12px',
+    borderRadius: 10,
+    border: `1px solid ${active ? INDIGO : border}`,
+    background: active ? (D ? 'rgba(99,102,241,0.15)' : 'rgba(99,102,241,0.08)') : D ? 'rgba(255,255,255,0.02)' : '#fff',
+    color: active ? INDIGO : muted,
+    fontSize: 13,
+    fontWeight: active ? 700 : 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+  });
+
+  const setFormRole = (role: 'director' | 'employee') => {
+    setForm((prev) => ({
+      ...prev,
+      role,
+      canAssignTasks: role === 'director' ? true : false,
+    }));
   };
 
   const renderModal = () =>
@@ -296,27 +346,54 @@ export default function EmployeesPage() {
           )}
 
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {!editUser && (
-              <>
-                <div>
-                  <label style={labelStyle}>{t('login')}</label>
-                  <input
-                    style={inputStyle}
-                    value={form.login}
-                    onChange={(e) => setForm({ ...form, login: e.target.value })}
-                  />
-                </div>
-                <div>
-                  <label style={labelStyle}>{t('password')}</label>
-                  <input
-                    style={inputStyle}
-                    type="password"
-                    value={form.password}
-                    onChange={(e) => setForm({ ...form, password: e.target.value })}
-                  />
-                </div>
-              </>
-            )}
+            <div>
+              <label style={labelStyle}>{t('login')}</label>
+              <input
+                style={inputStyle}
+                value={form.login}
+                onChange={(e) => setForm({ ...form, login: e.target.value })}
+              />
+            </div>
+            <div>
+              <label style={labelStyle}>{t('password')}</label>
+              <div style={{ position: 'relative' }}>
+                <input
+                  style={{ ...inputStyle, paddingRight: 40 }}
+                  type={showFormPassword ? 'text' : 'password'}
+                  value={form.password}
+                  placeholder={editUser ? t('passwordOptionalHint') : t('passwordHint')}
+                  onChange={(e) => setForm({ ...form, password: e.target.value })}
+                />
+                <button
+                  type="button"
+                  title={showFormPassword ? t('hidePassword') : t('showPassword')}
+                  onClick={() => setShowFormPassword((v) => !v)}
+                  style={{
+                    position: 'absolute',
+                    right: 8,
+                    top: '50%',
+                    transform: 'translateY(-50%)',
+                    width: 28,
+                    height: 28,
+                    borderRadius: 8,
+                    border: 'none',
+                    background: 'transparent',
+                    color: muted,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                  }}
+                >
+                  {showFormPassword ? <EyeOff size={15} /> : <Eye size={15} />}
+                </button>
+              </div>
+              {editUser ? (
+                <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>{t('passwordOptionalHint')}</div>
+              ) : (
+                <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>{t('defaultPasswordHint')}</div>
+              )}
+            </div>
             <div>
               <label style={labelStyle}>{t('fullName')}</label>
               <input
@@ -327,14 +404,33 @@ export default function EmployeesPage() {
             </div>
             <div>
               <label style={labelStyle}>{t('role')}</label>
-              <select
-                style={inputStyle}
-                value={form.role}
-                onChange={(e) => setForm({ ...form, role: e.target.value as 'director' | 'employee' })}
-              >
-                <option value="employee">{t('employee')}</option>
-                <option value="director">{t('director')}</option>
-              </select>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button type="button" style={segmentedBtn(form.role === 'employee')} onClick={() => setFormRole('employee')}>
+                  {t('employee')}
+                </button>
+                <button type="button" style={segmentedBtn(form.role === 'director')} onClick={() => setFormRole('director')}>
+                  {t('director')}
+                </button>
+              </div>
+            </div>
+            <div>
+              <label style={labelStyle}>{t('canAssignTasks')}</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  style={segmentedBtn(form.canAssignTasks)}
+                  onClick={() => setForm({ ...form, canAssignTasks: true })}
+                >
+                  {t('yes')}
+                </button>
+                <button
+                  type="button"
+                  style={segmentedBtn(!form.canAssignTasks)}
+                  onClick={() => setForm({ ...form, canAssignTasks: false })}
+                >
+                  {t('no')}
+                </button>
+              </div>
             </div>
             <div>
               <label style={labelStyle}>{t('position')}</label>
@@ -356,8 +452,17 @@ export default function EmployeesPage() {
               <label style={labelStyle}>{t('phone')}</label>
               <input
                 style={inputStyle}
+                type="tel"
+                inputMode="numeric"
+                autoComplete="tel"
+                placeholder={PHONE_PLACEHOLDER}
                 value={form.phone}
-                onChange={(e) => setForm({ ...form, phone: e.target.value })}
+                onFocus={() => {
+                  if (!form.phone.trim()) setForm({ ...form, phone: '+998 ' });
+                }}
+                onChange={(e) => {
+                  setForm({ ...form, phone: formatUzPhone(phoneDigits(e.target.value)) });
+                }}
               />
             </div>
           </div>

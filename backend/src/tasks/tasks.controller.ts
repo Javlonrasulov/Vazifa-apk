@@ -1,6 +1,7 @@
 import {
   Body,
   Controller,
+  ForbiddenException,
   Get,
   Param,
   Patch,
@@ -50,9 +51,10 @@ export class TasksController {
   }
 
   @Get('dashboard/stats')
-  @Roles(UserRole.DIRECTOR)
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
-  dashboardStats() {
+  dashboardStats(@Request() req: { user: User }) {
+    if (!req.user.canAssignTasks) throw new ForbiddenException();
     return this.tasksService.getDashboardStats();
   }
 
@@ -64,14 +66,14 @@ export class TasksController {
   }
 
   @Post()
-  @Roles(UserRole.DIRECTOR)
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
   create(@Body() dto: CreateTaskDto, @Request() req: { user: User }) {
     return this.tasksService.create(dto, req.user);
   }
 
   @Patch(':id')
-  @Roles(UserRole.DIRECTOR)
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
   update(
     @Param('id') id: string,
@@ -82,7 +84,7 @@ export class TasksController {
   }
 
   @Delete(':id')
-  @Roles(UserRole.DIRECTOR)
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
   cancel(@Param('id') id: string, @Request() req: { user: User }) {
     return this.tasksService.cancel(id, req.user);

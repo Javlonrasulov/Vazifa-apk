@@ -28,6 +28,9 @@ export class User {
   @Column({ type: 'enum', enum: UserRole, default: UserRole.EMPLOYEE })
   role: UserRole;
 
+  @Column({ default: false })
+  canAssignTasks: boolean;
+
   @Column({ type: 'varchar', nullable: true })
   position: string | null;
 

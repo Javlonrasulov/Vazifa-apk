@@ -1,8 +1,26 @@
-import axios from 'axios';
+import axios, { isAxiosError } from 'axios';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:3000/api/v1';
 
 export const api = axios.create({ baseURL: API_URL });
+
+let refreshPromise: Promise<string | null> | null = null;
+
+async function refreshAccessToken(): Promise<string | null> {
+  const refreshToken = localStorage.getItem('refreshToken');
+  if (!refreshToken) return null;
+
+  try {
+    const { data } = await axios.post(`${API_URL}/auth/refresh`, { refreshToken });
+    localStorage.setItem('accessToken', data.accessToken);
+    localStorage.setItem('refreshToken', data.refreshToken);
+    return data.accessToken;
+  } catch {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    return null;
+  }
+}
 
 api.interceptors.request.use((config) => {
   const token = localStorage.getItem('accessToken');
@@ -10,11 +28,48 @@ api.interceptors.request.use((config) => {
   return config;
 });
 
+api.interceptors.response.use(
+  (response) => response,
+  async (error) => {
+    const originalRequest = error.config as typeof error.config & { _retry?: boolean };
+    const isAuthRequest =
+      originalRequest?.url?.includes('/auth/admin/login') ||
+      originalRequest?.url?.includes('/auth/refresh');
+
+    if (
+      isAxiosError(error) &&
+      error.response?.status === 401 &&
+      originalRequest &&
+      !originalRequest._retry &&
+      !isAuthRequest
+    ) {
+      originalRequest._retry = true;
+
+      if (!refreshPromise) {
+        refreshPromise = refreshAccessToken().finally(() => {
+          refreshPromise = null;
+        });
+      }
+
+      const newToken = await refreshPromise;
+      if (newToken) {
+        originalRequest.headers.Authorization = `Bearer ${newToken}`;
+        return api(originalRequest);
+      }
+
+      window.location.href = '/login';
+    }
+
+    return Promise.reject(error);
+  },
+);
+
 export interface User {
   id: string;
   login: string;
   fullName: string;
   role: 'admin' | 'director' | 'employee';
+  canAssignTasks: boolean;
   position: string | null;
   department: string | null;
   phone: string | null;
@@ -43,6 +98,7 @@ export async function createUser(body: {
   password: string;
   fullName: string;
   role: 'director' | 'employee';
+  canAssignTasks?: boolean;
   position?: string;
   department?: string;
   phone?: string;
@@ -51,7 +107,10 @@ export async function createUser(body: {
   return data;
 }
 
-export async function updateUser(id: string, body: Partial<User>) {
+export async function updateUser(
+  id: string,
+  body: Partial<User> & { login?: string; password?: string },
+) {
   const { data } = await api.patch(`/users/${id}`, body);
   return data;
 }
@@ -77,4 +136,12 @@ export async function approveDevice(id: string, approve: boolean) {
 export function logout() {
   localStorage.removeItem('accessToken');
   localStorage.removeItem('refreshToken');
+}
+
+export function apiErrorMessage(error: unknown): string | null {
+  if (!isAxiosError(error)) return null;
+  const message = error.response?.data?.message;
+  if (typeof message === 'string') return message;
+  if (Array.isArray(message)) return message.join(', ');
+  return null;
 }

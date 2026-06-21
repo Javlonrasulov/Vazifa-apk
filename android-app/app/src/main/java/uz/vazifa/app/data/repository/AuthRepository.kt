@@ -1,11 +1,18 @@
 package uz.vazifa.app.data.repository
 
 import android.content.Context
+import android.provider.Settings
+import androidx.core.app.NotificationManagerCompat
+import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.edit
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
+import com.google.firebase.messaging.FirebaseMessaging
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
+import kotlin.coroutines.resume
 import uz.vazifa.app.data.remote.ApiClient
 import uz.vazifa.app.data.remote.FcmRequest
 import uz.vazifa.app.data.remote.LoginRequest
@@ -25,6 +32,49 @@ class AuthRepository @Inject constructor(
     private val KEY_ACCESS = stringPreferencesKey("access_token")
     private val KEY_REFRESH = stringPreferencesKey("refresh_token")
     private val KEY_USER = stringPreferencesKey("user_json")
+    private val KEY_NOTIF_REGISTERED = booleanPreferencesKey("notif_registered")
+
+    fun areNotificationsEnabled(): Boolean =
+        NotificationManagerCompat.from(context).areNotificationsEnabled()
+
+    suspend fun isNotifRegistered(): Boolean =
+        context.dataStore.data.first()[KEY_NOTIF_REGISTERED] == true
+
+    private suspend fun setNotifRegistered(registered: Boolean) {
+        context.dataStore.edit {
+            if (registered) it[KEY_NOTIF_REGISTERED] = true else it.remove(KEY_NOTIF_REGISTERED)
+        }
+    }
+
+    private suspend fun fetchFcmToken(): String? = suspendCancellableCoroutine { cont ->
+        FirebaseMessaging.getInstance().token.addOnCompleteListener { task ->
+            if (cont.isActive) cont.resume(if (task.isSuccessful) task.result else null)
+        }
+    }
+
+    private fun fallbackPushToken(): String {
+        val deviceId = Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) ?: "unknown"
+        return "local-$deviceId"
+    }
+
+    /** Bildirishnomalar yoqilgan bo'lsa FCM yoki zaxira token bilan serverni yangilaydi. */
+    suspend fun registerPushToken(): Boolean {
+        if (!areNotificationsEnabled()) return false
+        val token = withTimeoutOrNull(10_000) { fetchFcmToken() } ?: fallbackPushToken()
+        return try {
+            updateFcm(token, true)
+            setNotifRegistered(true)
+            true
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    /** Keyingi ochilishda bildirishnoma ekranini o'tkazib yuborish mumkinmi. */
+    suspend fun shouldSkipNotifGate(): Boolean {
+        if (isNotifRegistered()) return true
+        return areNotificationsEnabled() && registerPushToken()
+    }
 
     suspend fun login(login: String, password: String, deviceId: String): UserDto {
         val res = api.api.login(LoginRequest(login, password, deviceId))
@@ -54,6 +104,7 @@ class AuthRepository @Inject constructor(
             it.remove(KEY_ACCESS)
             it.remove(KEY_REFRESH)
             it.remove(KEY_USER)
+            it.remove(KEY_NOTIF_REGISTERED)
         }
     }
 

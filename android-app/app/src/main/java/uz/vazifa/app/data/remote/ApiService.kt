@@ -14,6 +14,7 @@ data class UserDto(
     val login: String,
     val fullName: String,
     val role: String,
+    val canAssignTasks: Boolean = false,
     val position: String? = null,
     val department: String? = null,
     val notificationsEnabled: Boolean = true,

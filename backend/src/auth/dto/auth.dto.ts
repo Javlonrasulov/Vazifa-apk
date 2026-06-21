@@ -1,4 +1,4 @@
-import { IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums';
 
@@ -44,6 +44,7 @@ export class UpdateFcmDto {
   fcmToken: string;
 
   @ApiProperty()
+  @IsBoolean()
   notificationsEnabled: boolean;
 }
 
@@ -52,10 +53,11 @@ export class CreateUserDto {
   @IsString()
   login: string;
 
-  @ApiProperty()
+  @ApiPropertyOptional({ default: '123456' })
+  @IsOptional()
   @IsString()
   @MinLength(6)
-  password: string;
+  password?: string;
 
   @ApiProperty()
   @IsString()
@@ -79,6 +81,11 @@ export class CreateUserDto {
   @IsOptional()
   @IsString()
   phone?: string;
+
+  @ApiPropertyOptional({ description: 'Boshqalarga vazifa berish huquqi' })
+  @IsOptional()
+  @IsBoolean()
+  canAssignTasks?: boolean;
 }
 
 export class UpdateUserDto {
@@ -86,6 +93,17 @@ export class UpdateUserDto {
   @IsOptional()
   @IsString()
   fullName?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  login?: string;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsString()
+  @MinLength(6)
+  password?: string;
 
   @ApiPropertyOptional({ enum: UserRole })
   @IsOptional()
@@ -110,6 +128,11 @@ export class UpdateUserDto {
   @ApiPropertyOptional()
   @IsOptional()
   isActive?: boolean;
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  canAssignTasks?: boolean;
 }
 
 export class ResetPasswordDto {

@@ -45,6 +45,13 @@ class NavViewModel @Inject constructor(
         }
     }
 
+    fun resolveAfterAuth(onReady: (String) -> Unit) {
+        viewModelScope.launch {
+            val dest = if (auth.shouldSkipNotifGate()) Routes.MAIN else Routes.NOTIFICATION_GATE
+            onReady(dest)
+        }
+    }
+
     fun setUser(user: UserDto) { currentUser = user }
 }
 
@@ -54,7 +61,7 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val user = viewModel.currentUser
-    val isDirector = user?.role == "director"
+    val isDirector = user?.canAssignTasks == true
     val showBottomNav = route == Routes.MAIN
 
     var selectedTab by remember { mutableStateOf(if (isDirector) AppTab.HOME else AppTab.TASKS) }
@@ -68,9 +75,13 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
             composable(Routes.SPLASH) {
                 LaunchedEffect(Unit) {
                     viewModel.checkAuth { ok, u ->
-                        when {
-                            ok && u != null -> navController.navigate(Routes.NOTIFICATION_GATE) { popUpTo(Routes.SPLASH) { inclusive = true } }
-                            else -> navController.navigate(Routes.LOGIN) { popUpTo(Routes.SPLASH) { inclusive = true } }
+                        if (ok && u != null) {
+                            viewModel.resolveAfterAuth { dest ->
+                                selectedTab = if (u.canAssignTasks) AppTab.HOME else AppTab.TASKS
+                                navController.navigate(dest) { popUpTo(Routes.SPLASH) { inclusive = true } }
+                            }
+                        } else {
+                            navController.navigate(Routes.LOGIN) { popUpTo(Routes.SPLASH) { inclusive = true } }
                         }
                     }
                 }
@@ -83,8 +94,13 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
             composable(Routes.LOGIN) {
                 LoginScreen(
                     onSuccess = {
-                        viewModel.checkAuth { _, u -> u?.let { viewModel.setUser(it) } }
-                        navController.navigate(Routes.NOTIFICATION_GATE) { popUpTo(Routes.LOGIN) { inclusive = true } }
+                        viewModel.checkAuth { _, u ->
+                            u?.let { viewModel.setUser(it) }
+                            viewModel.resolveAfterAuth { dest ->
+                                selectedTab = if (viewModel.currentUser?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
+                                navController.navigate(dest) { popUpTo(Routes.LOGIN) { inclusive = true } }
+                            }
+                        }
                     },
                 )
             }
@@ -92,7 +108,7 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
                 NotificationGateScreen(
                     authRepository = viewModel.auth,
                     onGranted = {
-                        selectedTab = if (viewModel.currentUser?.role == "director") AppTab.HOME else AppTab.TASKS
+                        selectedTab = if (viewModel.currentUser?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
                         navController.navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
                     },
                 )

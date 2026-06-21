@@ -12,6 +12,7 @@ import { UserRole } from '../common/enums';
 import { CreateUserDto, UpdateUserDto } from '../auth/dto/auth.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../common/enums';
+import { phonesMatch } from '../common/utils/phone';
 
 @Injectable()
 export class UsersService {
@@ -44,6 +45,14 @@ export class UsersService {
     return this.repo.findOne({ where: { login: login.toLowerCase() } });
   }
 
+  async findByPhone(phone: string) {
+    const users = await this.repo
+      .createQueryBuilder('u')
+      .where('u.phone IS NOT NULL')
+      .getMany();
+    return users.find((u) => phonesMatch(u.phone ?? '', phone)) ?? null;
+  }
+
   async create(dto: CreateUserDto, actorId?: string) {
     const login = dto.login.toLowerCase().trim();
     const exists = await this.findByLogin(login);
@@ -55,9 +64,10 @@ export class UsersService {
 
     const user = this.repo.create({
       login,
-      passwordHash: await bcrypt.hash(dto.password, 10),
+      passwordHash: await bcrypt.hash(dto.password?.trim() || '123456', 10),
       fullName: dto.fullName.trim(),
       role: dto.role,
+      canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
       position: dto.position ?? null,
       department: dto.department ?? null,
       phone: dto.phone ?? null,
@@ -72,8 +82,20 @@ export class UsersService {
 
   async update(id: string, dto: UpdateUserDto, actorId?: string) {
     const user = await this.findById(id);
+    if (dto.login !== undefined) {
+      const login = dto.login.toLowerCase().trim();
+      if (login !== user.login) {
+        const exists = await this.findByLogin(login);
+        if (exists) throw new ConflictException('Login band');
+        user.login = login;
+      }
+    }
+    if (dto.password) {
+      user.passwordHash = await bcrypt.hash(dto.password, 10);
+    }
     if (dto.fullName !== undefined) user.fullName = dto.fullName.trim();
     if (dto.role !== undefined) user.role = dto.role;
+    if (dto.canAssignTasks !== undefined) user.canAssignTasks = dto.canAssignTasks;
     if (dto.position !== undefined) user.position = dto.position;
     if (dto.department !== undefined) user.department = dto.department;
     if (dto.phone !== undefined) user.phone = dto.phone;

@@ -21,6 +21,7 @@ import { TaskStatus, UserRole, AuditAction } from '../common/enums';
 import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { parseTashkent, nowTashkent } from '../common/utils/time';
+import { userCanAssignTasks } from '../common/utils/user-permissions';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -36,8 +37,8 @@ export class TasksService {
   ) {}
 
   async create(dto: CreateTaskDto, creator: User) {
-    if (creator.role !== UserRole.DIRECTOR) {
-      throw new ForbiddenException('Faqat direktor vazifa yaratadi');
+    if (!userCanAssignTasks(creator)) {
+      throw new ForbiddenException('Vazifa berish huquqi yo\'q');
     }
 
     const task = this.taskRepo.create({
@@ -72,7 +73,7 @@ export class TasksService {
   }
 
   async findAll(user: User) {
-    if (user.role === UserRole.DIRECTOR) {
+    if (userCanAssignTasks(user)) {
       return this.taskRepo.find({
         relations: ['assignments', 'assignments.assignee', 'createdBy', 'attachments'],
         order: { createdAt: 'DESC' },
@@ -104,7 +105,7 @@ export class TasksService {
     });
     if (!task) throw new NotFoundException('Vazifa topilmadi');
 
-    if (user.role === UserRole.EMPLOYEE) {
+    if (!userCanAssignTasks(user)) {
       const assigned = task.assignments.some((a) => a.assigneeId === user.id);
       if (!assigned) throw new ForbiddenException('Ruxsat yo\'q');
     }
@@ -112,7 +113,7 @@ export class TasksService {
   }
 
   async update(id: string, dto: UpdateTaskDto, user: User) {
-    if (user.role !== UserRole.DIRECTOR) throw new ForbiddenException();
+    if (!userCanAssignTasks(user)) throw new ForbiddenException();
     const task = await this.findOne(id, user);
     if (dto.title) task.title = dto.title.trim();
     if (dto.description !== undefined) task.description = dto.description;
@@ -142,8 +143,8 @@ export class TasksService {
     if (!assignment) throw new NotFoundException();
 
     const isAssignee = assignment.assigneeId === user.id;
-    const isDirector = user.role === UserRole.DIRECTOR;
-    if (!isAssignee && !isDirector) throw new ForbiddenException();
+    const isTaskManager = userCanAssignTasks(user);
+    if (!isAssignee && !isTaskManager) throw new ForbiddenException();
 
     assignment.status = dto.status;
     if (dto.status === TaskStatus.ACCEPTED) assignment.acceptedAt = nowTashkent();

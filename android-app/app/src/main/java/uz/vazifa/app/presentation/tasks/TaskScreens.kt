@@ -13,9 +13,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.domain.model.TaskStatus
-import uz.vazifa.app.presentation.components.VazifaStackScaffold
-import uz.vazifa.app.presentation.components.liquidGlassFieldColors
-import uz.vazifa.app.presentation.components.localized
+import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.components.statusLabelKey
 import uz.vazifa.app.presentation.dashboard.TaskRow
 import uz.vazifa.app.presentation.theme.GlassCard
@@ -28,13 +26,17 @@ fun TasksScreen(onTaskClick: (String) -> Unit, viewModel: TasksViewModel = hiltV
     val state by viewModel.state.collectAsState()
     LaunchedEffect(Unit) { viewModel.load() }
 
-    LiquidBackground(Modifier.fillMaxSize()) {
-        LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            item {
-                Text(localized("tasks_title"), color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 24.sp)
-            }
-            items(state.tasks, key = { it.id }) { task ->
-                TaskRow(task) { onTaskClick(task.id) }
+    VazifaTabScaffold(
+        title = localized("nav_tasks"),
+        actions = { VazifaHeaderActions() },
+    ) { padding ->
+        LiquidBackground(Modifier.fillMaxSize()) {
+            VazifaScreenBox(padding) {
+                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    items(state.tasks, key = { it.id }) { task ->
+                        TaskRow(task) { onTaskClick(task.id) }
+                    }
+                }
             }
         }
     }

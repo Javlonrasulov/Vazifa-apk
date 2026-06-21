@@ -48,6 +48,7 @@ async function seed() {
         passwordHash: await bcrypt.hash('director123', 10),
         fullName: 'Direktor Namuna',
         role: UserRole.DIRECTOR,
+        canAssignTasks: true,
         department: 'Boshqaruv',
         position: 'Direktor',
       }),
@@ -69,6 +70,8 @@ async function seed() {
     );
     console.log('Employee: xodim1 / xodim123');
   }
+
+  await repo.update({ role: UserRole.DIRECTOR }, { canAssignTasks: true });
 
   await ds.destroy();
   console.log('Seed completed');
