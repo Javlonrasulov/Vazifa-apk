@@ -206,14 +206,21 @@ fun VazifaNavHost(
                         DirectorDashboardScreen(
                             onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                             onCreateTask = { selectedTab = AppTab.CREATE },
+                            onEditTask = { navController.navigate(Routes.editTask(it)) },
                             onSectionClick = { section ->
                                 navController.navigate(Routes.dashSection(section.route))
                             },
                         )
                     } else {
-                        TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
+                        TasksScreen(
+                            onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                            onEditTask = { navController.navigate(Routes.editTask(it)) },
+                        )
                     }
-                    AppTab.TASKS -> TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
+                    AppTab.TASKS -> TasksScreen(
+                        onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                        onEditTask = { navController.navigate(Routes.editTask(it)) },
+                    )
                     AppTab.CREATE -> if (isDirector) {
                         CreateTaskScreen(
                             showBack = false,
@@ -240,6 +247,8 @@ fun VazifaNavHost(
                 DashboardSectionScreen(
                     onBack = { navController.popBackStack() },
                     onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                    onEditTask = { navController.navigate(Routes.editTask(it)) },
+                    canManageTasks = isDirector,
                     onAssignTask = { ids ->
                         preselectedAssigneeIds = ids
                         navController.popBackStack()
@@ -270,10 +279,19 @@ fun VazifaNavHost(
                     onCreated = { navController.popBackStack() },
                 )
             }
+            composable(
+                Routes.EDIT_TASK,
+                arguments = listOf(navArgument("taskId") { type = NavType.StringType }),
+            ) {
+                CreateTaskScreen(
+                    onBack = { navController.popBackStack() },
+                    onCreated = { navController.popBackStack() },
+                )
+            }
             composable(Routes.TASK_DETAIL, arguments = listOf(navArgument("taskId") { type = NavType.StringType })) { entry ->
                 TaskDetailScreen(
                     taskId = entry.arguments?.getString("taskId").orEmpty(),
-                    isDirector = isDirector,
+                    canAssignTasks = isDirector,
                     onBack = { navController.popBackStack() },
                 )
             }

@@ -42,6 +42,11 @@ export class TasksService {
       throw new ForbiddenException('Vazifa berish huquqi yo\'q');
     }
 
+    const assigneeIds = [...new Set(dto.assigneeIds)];
+    if (!assigneeIds.length) {
+      throw new BadRequestException('Kamida bitta xodim tanlang');
+    }
+
     const task = this.taskRepo.create({
       title: dto.title.trim(),
       description: dto.description ?? null,
@@ -53,7 +58,7 @@ export class TasksService {
     });
     const saved = await this.taskRepo.save(task);
 
-    const assignments = dto.assigneeIds.map((assigneeId) =>
+    const assignments = assigneeIds.map((assigneeId) =>
       this.assignRepo.create({ taskId: saved.id, assigneeId, status: TaskStatus.NEW }),
     );
     await this.assignRepo.save(assignments);
@@ -61,7 +66,7 @@ export class TasksService {
     await this.audit.log(creator.id, AuditAction.TASK_CREATED, 'task', saved.id);
 
     const assignees = await Promise.all(
-      dto.assigneeIds.map((id) => this.usersService.findById(id)),
+      assigneeIds.map((id) => this.usersService.findById(id)),
     );
     await this.notifications.sendToMany(
       assignees.filter((a) => a.notificationsEnabled).map((a) => a.fcmToken ?? ''),
@@ -74,21 +79,20 @@ export class TasksService {
   }
 
   async findAll(user: User) {
-    if (userCanAssignTasks(user)) {
-      return this.taskRepo.find({
-        relations: ['assignments', 'assignments.assignee', 'createdBy', 'attachments'],
-        order: { createdAt: 'DESC' },
-      });
-    }
-    return this.taskRepo
+    const qb = this.taskRepo
       .createQueryBuilder('task')
-      .innerJoin('task.assignments', 'a', 'a.assigneeId = :uid', { uid: user.id })
       .leftJoinAndSelect('task.assignments', 'assignments')
       .leftJoinAndSelect('assignments.assignee', 'assignee')
       .leftJoinAndSelect('task.createdBy', 'createdBy')
       .leftJoinAndSelect('task.attachments', 'attachments')
       .orderBy('task.createdAt', 'DESC')
-      .getMany();
+      .distinct(true);
+
+    if (!userCanAssignTasks(user)) {
+      qb.innerJoin('task.assignments', 'mine', 'mine.assigneeId = :uid', { uid: user.id });
+    }
+
+    return qb.getMany();
   }
 
   async findOne(id: string, user: User) {
@@ -131,6 +135,19 @@ export class TasksService {
     return this.update(id, { status: TaskStatus.CANCELLED }, user);
   }
 
+  private statusLabel(status: TaskStatus): string {
+    const labels: Record<TaskStatus, string> = {
+      [TaskStatus.NEW]: 'yangi',
+      [TaskStatus.ACCEPTED]: 'qabul qilindi',
+      [TaskStatus.IN_PROGRESS]: 'jarayonda',
+      [TaskStatus.IN_REVIEW]: 'tekshiruvda',
+      [TaskStatus.COMPLETED]: 'bajarildi',
+      [TaskStatus.REWORK]: 'qayta ishlash',
+      [TaskStatus.CANCELLED]: 'bekor qilindi',
+    };
+    return labels[status] ?? status;
+  }
+
   async updateAssignmentStatus(
     taskId: string,
     assignmentId: string,
@@ -162,14 +179,18 @@ export class TasksService {
 
     if (isAssignee && user.role === UserRole.EMPLOYEE) {
       const director = await this.usersService.findById(assignment.task.createdById);
-      if (director.notificationsEnabled) {
-        const statusLabel =
-          dto.status === TaskStatus.COMPLETED ? 'bajarildi' : dto.status;
+      if (director.notificationsEnabled && director.fcmToken) {
+        const employeeName = assignment.assignee?.fullName ?? 'Xodim';
+        const isCompleted = dto.status === TaskStatus.COMPLETED;
+        const title = isCompleted ? 'Vazifa bajarildi' : 'Vazifa holati yangilandi';
+        const body = isCompleted
+          ? `${employeeName} "${assignment.task.title}" vazifasini bajardi`
+          : `${employeeName}: "${assignment.task.title}" — ${this.statusLabel(dto.status)}`;
         await this.notifications.sendToToken(
-          director.fcmToken ?? '',
-          'Vazifa holati yangilandi',
-          `"${assignment.task.title}" — ${statusLabel}`,
-          { taskId, type: 'task_status' },
+          director.fcmToken,
+          title,
+          body,
+          { taskId, type: 'task_status', status: dto.status },
         );
       }
     }

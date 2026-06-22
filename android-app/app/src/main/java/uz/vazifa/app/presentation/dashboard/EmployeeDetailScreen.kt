@@ -255,7 +255,7 @@ private fun EmployeeTaskRow(item: EmployeeTaskItem, onClick: () -> Unit) {
             onClick = {},
             label = {
                 Text(
-                    localized(statusLabelKey(item.assignment.status)),
+                    localizedStatus(item.assignment.status),
                     fontSize = 10.sp,
                 )
             },

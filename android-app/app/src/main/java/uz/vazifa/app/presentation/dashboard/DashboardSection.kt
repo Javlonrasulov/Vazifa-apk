@@ -156,6 +156,13 @@ class DashboardSectionViewModel @Inject constructor(
     fun clearSelection() {
         _state.update { it.copy(selectedEmployeeIds = emptySet()) }
     }
+
+    fun deleteTask(taskId: String) = viewModelScope.launch {
+        runCatching {
+            repo.cancelTask(taskId)
+            load()
+        }
+    }
 }
 
 @Composable
@@ -164,9 +171,12 @@ fun DashboardSectionScreen(
     onTaskClick: (String) -> Unit,
     onAssignTask: (Set<String>) -> Unit = {},
     onEmployeeClick: (String) -> Unit = {},
+    onEditTask: (String) -> Unit = {},
+    canManageTasks: Boolean = false,
     viewModel: DashboardSectionViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var taskToDelete by remember { mutableStateOf<String?>(null) }
     val section = viewModel.section
     val style = section.style()
     val isEmployees = section == DashboardSection.EMPLOYEES
@@ -178,6 +188,23 @@ fun DashboardSectionScreen(
         state.selectedEmployeeIds.size == state.employees.size
 
     LaunchedEffect(Unit) { viewModel.load() }
+
+    taskToDelete?.let { taskId ->
+        AlertDialog(
+            onDismissRequest = { taskToDelete = null },
+            title = { Text(localized("task_delete")) },
+            text = { Text(localized("task_delete_confirm")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteTask(taskId)
+                    taskToDelete = null
+                }) { Text(localized("task_delete")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { taskToDelete = null }) { Text(localized("com_cancel")) }
+            },
+        )
+    }
 
     VazifaTabScaffold(
         title = localized(section.titleKey()),
@@ -238,7 +265,14 @@ fun DashboardSectionScreen(
                                     item { SectionEmptyCard(style) }
                                 } else {
                                     items(state.tasks, key = { it.id }) { task ->
-                                        TaskRow(task, onClick = { onTaskClick(task.id) })
+                                        val canManage = canManageTasks && task.status != "cancelled"
+                                        TaskRow(
+                                            task = task,
+                                            canManage = canManage,
+                                            onClick = { onTaskClick(task.id) },
+                                            onEdit = if (canManage) ({ onEditTask(task.id) }) else null,
+                                            onDelete = if (canManage) ({ taskToDelete = task.id }) else null,
+                                        )
                                     }
                                 }
                             }

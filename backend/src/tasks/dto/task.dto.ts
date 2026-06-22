@@ -1,4 +1,5 @@
 import {
+  ArrayMinSize,
   IsArray,
   IsDateString,
   IsEnum,
@@ -22,6 +23,7 @@ export class CreateTaskDto {
   priority: TaskPriority;
 
   @IsArray()
+  @ArrayMinSize(1)
   @IsUUID('4', { each: true })
   assigneeIds: string[];
 

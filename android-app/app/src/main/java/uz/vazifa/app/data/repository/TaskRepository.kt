@@ -14,6 +14,7 @@ import uz.vazifa.app.data.remote.TaskAttachmentDto
 import uz.vazifa.app.data.remote.TaskCommentDto
 import uz.vazifa.app.data.remote.TaskDto
 import uz.vazifa.app.data.remote.UpdateStatusRequest
+import uz.vazifa.app.data.remote.UpdateTaskRequest
 import uz.vazifa.app.data.remote.UserDto
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
@@ -32,7 +33,9 @@ class TaskRepository @Inject constructor(
   @ApplicationContext private val context: Context,
 ) {
 
-    suspend fun getTasks(): List<Task> = api.api.getTasks().map { it.toDomain() }
+    suspend fun getTasks(): List<Task> = api.api.getTasks()
+        .map { it.toDomain() }
+        .distinctBy { it.id }
 
     suspend fun getTask(id: String): Task = api.api.getTask(id).toDomain()
 
@@ -51,6 +54,20 @@ class TaskRepository @Inject constructor(
     ): Task = api.api.createTask(
         CreateTaskRequest(title, description, priority, assigneeIds, startAt, deadlineAt),
     ).toDomain()
+
+    suspend fun updateTask(
+        id: String,
+        title: String,
+        description: String?,
+        deadlineAt: String,
+    ): Task = api.api.updateTask(
+        id,
+        UpdateTaskRequest(title = title, description = description, deadlineAt = deadlineAt),
+    ).toDomain()
+
+    suspend fun cancelTask(id: String) {
+        api.api.cancelTask(id)
+    }
 
     suspend fun updateStatus(taskId: String, assignmentId: String, status: String) {
         api.api.updateAssignmentStatus(taskId, assignmentId, UpdateStatusRequest(status))

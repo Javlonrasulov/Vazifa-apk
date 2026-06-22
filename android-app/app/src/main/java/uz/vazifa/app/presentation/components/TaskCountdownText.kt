@@ -36,14 +36,14 @@ fun TaskCountdownText(
 
     val (text, color) = when {
         isFinished || deadline == null -> {
-            deadlineAt.take(16).replace('T', ' ') to LiquidTheme.textMuted
+            TaskDeadlineCountdown.formatDisplay(deadlineAt) to LiquidTheme.textMuted
         }
         else -> {
             val remaining = TaskDeadlineCountdown.remaining(deadline, Instant.ofEpochMilli(nowMillis))
-            val label = formatCountdown(remaining.hours, remaining.minutes, remaining.isOverdue)
+            val label = formatCountdown(remaining.days, remaining.hours, remaining.minutes, remaining.isOverdue)
             val tint = when {
                 remaining.isOverdue -> VazifaColors.Danger
-                remaining.hours < 2 -> VazifaColors.Warning
+                remaining.days == 0L && remaining.hours < 2 -> VazifaColors.Warning
                 else -> LiquidTheme.textMuted
             }
             label to tint
@@ -54,9 +54,15 @@ fun TaskCountdownText(
 }
 
 @Composable
-private fun formatCountdown(hours: Long, minutes: Long, overdue: Boolean): String {
+private fun formatCountdown(days: Long, hours: Long, minutes: Long, overdue: Boolean): String {
     val prefix = localized(if (overdue) "task_time_overdue_prefix" else "task_time_left_prefix")
-    val h = localized("task_time_hour_short")
-    val m = localized("task_time_min_short")
-    return "$prefix: $hours $h $minutes $m"
+    val dayShort = localized("task_time_day_short")
+    val hourShort = localized("task_time_hour_short")
+    val minShort = localized("task_time_min_short")
+    val parts = buildList {
+        if (days > 0) add("$days $dayShort")
+        if (hours > 0 || days > 0) add("$hours $hourShort")
+        add("$minutes $minShort")
+    }
+    return "$prefix ${parts.joinToString(" ")}"
 }

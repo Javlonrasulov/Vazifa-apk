@@ -32,6 +32,13 @@ data class CreateTaskRequest(
     val deadlineAt: String,
 )
 data class UpdateStatusRequest(val status: String)
+data class UpdateTaskRequest(
+    val title: String? = null,
+    val description: String? = null,
+    val priority: String? = null,
+    val startAt: String? = null,
+    val deadlineAt: String? = null,
+)
 data class CommentRequest(val body: String)
 data class DashboardStatsDto(
     val totalEmployees: Int,
@@ -71,6 +78,12 @@ interface ApiService {
 
     @POST("tasks")
     suspend fun createTask(@Body body: CreateTaskRequest): TaskDto
+
+    @PATCH("tasks/{id}")
+    suspend fun updateTask(@Path("id") id: String, @Body body: UpdateTaskRequest): TaskDto
+
+    @DELETE("tasks/{id}")
+    suspend fun cancelTask(@Path("id") id: String): TaskDto
 
     @PATCH("tasks/{taskId}/assignments/{assignmentId}/status")
     suspend fun updateAssignmentStatus(

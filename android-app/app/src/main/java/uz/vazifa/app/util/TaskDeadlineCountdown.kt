@@ -9,8 +9,10 @@ import kotlin.math.abs
 
 object TaskDeadlineCountdown {
     private val zone = ZoneId.of("Asia/Tashkent")
+    private val displayFormatter = DateTimeFormatter.ofPattern("dd-MM-yyyy HH:mm")
 
     data class Remaining(
+        val days: Long,
         val hours: Long,
         val minutes: Long,
         val isOverdue: Boolean,
@@ -31,13 +33,23 @@ object TaskDeadlineCountdown {
         }
     }.getOrNull()
 
+    fun formatDisplay(raw: String): String {
+        val instant = parseDeadline(raw)
+            ?: return raw.take(16).replace('T', ' ')
+        return displayFormatter.withZone(zone).format(instant)
+    }
+
     fun remaining(deadline: Instant, now: Instant = Instant.now()): Remaining {
         val totalMinutes = Duration.between(now, deadline).toMinutes()
         val isOverdue = totalMinutes < 0
         val absMinutes = abs(totalMinutes)
+        val days = absMinutes / (24 * 60)
+        val hours = (absMinutes % (24 * 60)) / 60
+        val minutes = absMinutes % 60
         return Remaining(
-            hours = absMinutes / 60,
-            minutes = absMinutes % 60,
+            days = days,
+            hours = hours,
+            minutes = minutes,
             isOverdue = isOverdue,
         )
     }

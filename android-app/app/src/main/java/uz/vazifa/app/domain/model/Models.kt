@@ -88,6 +88,12 @@ fun Task.hasActiveAssignment(): Boolean =
 fun Task.hasCompletedAssignment(): Boolean =
     assignments.any { it.status == TaskStatus.COMPLETED.key }
 
+fun Task.myAssignment(userId: String?) =
+    userId?.let { uid -> assignments.firstOrNull { it.assigneeId == uid } }
+
+fun Task.isCreator(userId: String?) =
+    userId != null && createdById == userId
+
 fun Task.isOverdue(): Boolean {
     if (!hasActiveAssignment()) return false
     return runCatching {

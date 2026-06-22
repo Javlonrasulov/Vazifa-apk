@@ -1,20 +1,28 @@
 {
   "project_info": {
-    "project_number": "000000000000",
-    "project_id": "vazifa-placeholder",
-    "storage_bucket": "vazifa-placeholder.appspot.com"
+    "project_number": "504069308980",
+    "project_id": "vazifa-f25b9",
+    "storage_bucket": "vazifa-f25b9.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:000000000000:android:0000000000000000000000",
+        "mobilesdk_app_id": "1:504069308980:android:c61bb114678f8ad98f4061",
         "android_client_info": {
           "package_name": "uz.vazifa.app"
         }
       },
       "oauth_client": [],
-      "api_key": [{ "current_key": "placeholder" }],
-      "services": { "appinvite_service": { "other_platform_oauth_client": [] } }
+      "api_key": [
+        {
+          "current_key": "AIzaSyB6qAi5c4SERllgQ6hsa5cXPmrFmiJVllE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
     }
   ],
   "configuration_version": "1"

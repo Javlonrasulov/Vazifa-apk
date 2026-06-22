@@ -25,6 +25,8 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.isCreator
+import uz.vazifa.app.domain.model.myAssignment
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -36,10 +38,12 @@ import uz.vazifa.app.presentation.theme.liquidGlassThemed
 fun DirectorDashboardScreen(
     onTaskClick: (String) -> Unit,
     onCreateTask: () -> Unit,
+    onEditTask: (String) -> Unit = {},
     onSectionClick: (DashboardSection) -> Unit,
     viewModel: DashboardViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    var taskToDelete by remember { mutableStateOf<String?>(null) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner) {
         val observer = LifecycleEventObserver { _, event ->
@@ -47,6 +51,23 @@ fun DirectorDashboardScreen(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    taskToDelete?.let { taskId ->
+        AlertDialog(
+            onDismissRequest = { taskToDelete = null },
+            title = { Text(localized("task_delete")) },
+            text = { Text(localized("task_delete_confirm")) },
+            confirmButton = {
+                TextButton(onClick = {
+                    viewModel.deleteTask(taskId)
+                    taskToDelete = null
+                }) { Text(localized("task_delete")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { taskToDelete = null }) { Text(localized("com_cancel")) }
+            },
+        )
     }
 
     VazifaTabScaffold(
@@ -77,7 +98,15 @@ fun DirectorDashboardScreen(
                         )
                     }
                     items(state.tasks.take(5), key = { it.id }) { task ->
-                        TaskRow(task, onClick = { onTaskClick(task.id) })
+                        val canManage = state.canAssignTasks && task.status != "cancelled"
+                        TaskRow(
+                            task = task,
+                            currentUserId = state.currentUserId,
+                            canManage = canManage,
+                            onClick = { onTaskClick(task.id) },
+                            onEdit = if (canManage) ({ onEditTask(task.id) }) else null,
+                            onDelete = if (canManage) ({ taskToDelete = task.id }) else null,
+                        )
                     }
                 }
             }
@@ -156,9 +185,20 @@ private fun StatCard(
 }
 
 @Composable
-fun TaskRow(task: Task, onClick: () -> Unit) {
-    val status = task.assignments.firstOrNull()?.status
-    val chipLabel = status?.let { localized(statusLabelKey(it)) } ?: task.priority
+fun TaskRow(
+    task: Task,
+    onClick: () -> Unit,
+    currentUserId: String? = null,
+    canManage: Boolean = false,
+    onEdit: (() -> Unit)? = null,
+    onDelete: (() -> Unit)? = null,
+) {
+    val myAssignment = task.myAssignment(currentUserId)
+    val isCreator = task.isCreator(currentUserId)
+    val status = myAssignment?.status?.takeIf { it.isNotBlank() }
+        ?: task.assignments.firstOrNull()?.status?.takeIf { it.isNotBlank() }
+        ?: task.status.takeIf { it.isNotBlank() }
+    val chipLabel = status?.let { localizedStatus(it) } ?: task.priority
     val chipColor = when (status) {
         "completed" -> VazifaColors.Success
         "cancelled" -> VazifaColors.Gray
@@ -169,10 +209,9 @@ fun TaskRow(task: Task, onClick: () -> Unit) {
         Modifier
             .fillMaxWidth()
             .liquidGlassThemed()
-            .clickable(onClick = onClick)
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
         Box(
             Modifier
@@ -182,17 +221,65 @@ fun TaskRow(task: Task, onClick: () -> Unit) {
                     Brush.linearGradient(
                         listOf(LiquidGlass.Blue.copy(alpha = 0.85f), LiquidGlass.Cyan.copy(alpha = 0.85f)),
                     ),
-                ),
+                )
+                .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
             Icon(Icons.Default.Assignment, null, tint = Color.White, modifier = Modifier.size(20.dp))
         }
-        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
+        Column(
+            Modifier
+                .weight(1f)
+                .clickable(onClick = onClick),
+            verticalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
             Text(task.title, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            if (!isCreator && myAssignment != null) {
+                task.createdBy?.let {
+                    Text(
+                        "${localized("task_from")}: ${it.fullName}",
+                        color = LiquidTheme.textMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+            } else if (isCreator && task.assignments.isNotEmpty()) {
+                val names = task.assignments.mapNotNull { it.assignee?.fullName }.joinToString(", ")
+                if (names.isNotBlank()) {
+                    Text(
+                        "${localized("task_assignees")}: $names",
+                        color = LiquidTheme.textMuted,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
             TaskCountdownText(
                 deadlineAt = task.deadlineAt,
                 status = status,
             )
+        }
+        if (canManage) {
+            IconButton(
+                onClick = { onEdit?.invoke() },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.Default.Edit,
+                    contentDescription = localized("task_edit"),
+                    tint = LiquidGlass.Blue,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
+            IconButton(
+                onClick = { onDelete?.invoke() },
+                modifier = Modifier.size(36.dp),
+            ) {
+                Icon(
+                    Icons.Default.Delete,
+                    contentDescription = localized("task_delete"),
+                    tint = VazifaColors.Danger,
+                    modifier = Modifier.size(20.dp),
+                )
+            }
         }
         AssistChip(
             onClick = {},

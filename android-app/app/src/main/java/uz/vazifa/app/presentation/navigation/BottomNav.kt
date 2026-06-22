@@ -168,7 +168,9 @@ object Routes {
     const val DASH_SECTION = "dash/{section}"
     const val EMPLOYEE_DETAIL = "employee/{employeeId}"
     const val CREATE_TASK = "create_task"
+    const val EDIT_TASK = "edit_task/{taskId}"
     fun taskDetail(id: String) = "task/$id"
+    fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
     fun employeeDetail(id: String) = "employee/$id"
 }
