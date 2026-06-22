@@ -1,0 +1,11 @@
+#!/bin/bash
+set -e
+tar xzf /tmp/vazifa-backend.tar.gz -C /opt/vazifa-prod
+rsync -a /opt/vazifa-prod/backend/ /opt/vazifa-dev/backend/ --exclude .env
+for env in prod dev; do
+  cd "/opt/vazifa-${env}/backend"
+  npm ci
+  npm run build
+done
+pm2 restart vazifa-api-prod vazifa-api-dev
+curl -sk https://vazifa.liderplast.uz/api/v1/auth/time
