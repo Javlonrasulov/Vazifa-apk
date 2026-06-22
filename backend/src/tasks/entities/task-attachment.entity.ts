@@ -1,4 +1,6 @@
+import { basename } from 'path';
 import {
+  AfterLoad,
   Column,
   CreateDateColumn,
   Entity,
@@ -42,4 +44,15 @@ export class TaskAttachment {
 
   @CreateDateColumn()
   createdAt: Date;
+
+  url?: string;
+
+  @AfterLoad()
+  setPublicUrl() {
+    const fileName = basename(this.filePath.replace(/\\/g, '/'));
+    const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
+    this.url = base
+      ? `${base}/uploads/${fileName}`
+      : `/uploads/${fileName}`;
+  }
 }

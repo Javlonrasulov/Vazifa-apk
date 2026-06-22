@@ -120,6 +120,12 @@ export class TasksService {
   async update(id: string, dto: UpdateTaskDto, user: User) {
     if (!userCanAssignTasks(user)) throw new ForbiddenException();
     const task = await this.findOne(id, user);
+    const hasCompleted = task.assignments.some(
+      (a) => a.status === TaskStatus.COMPLETED,
+    );
+    if (hasCompleted) {
+      throw new BadRequestException('Bajarilgan vazifani o\'zgartirish mumkin emas');
+    }
     if (dto.title) task.title = dto.title.trim();
     if (dto.description !== undefined) task.description = dto.description;
     if (dto.priority) task.priority = dto.priority;

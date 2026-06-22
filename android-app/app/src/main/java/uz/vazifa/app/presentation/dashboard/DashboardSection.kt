@@ -6,6 +6,7 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
@@ -33,13 +34,17 @@ import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.hasActiveAssignment
 import uz.vazifa.app.domain.model.hasCompletedAssignment
+import uz.vazifa.app.domain.model.canCreatorManage
 import uz.vazifa.app.domain.model.isOverdue
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
+import uz.vazifa.app.util.UzbekTextSearch
 import javax.inject.Inject
 
 enum class DashboardSection(val route: String) {
@@ -94,9 +99,30 @@ fun DashboardSection.style(): SectionStyle = when (this) {
 data class DashboardSectionUiState(
     val loading: Boolean = false,
     val employees: List<User> = emptyList(),
+    val departments: List<String> = emptyList(),
+    val selectedDepartment: String? = null,
+    val searchQuery: String = "",
     val tasks: List<Task> = emptyList(),
     val selectedEmployeeIds: Set<String> = emptySet(),
-)
+) {
+    val filteredEmployees: List<User>
+        get() {
+            var list = employees
+            selectedDepartment?.let { dept ->
+                list = list.filter { it.department == dept }
+            }
+            val q = searchQuery.trim()
+            if (q.isNotBlank()) {
+                list = list.filter { user ->
+                    UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q)
+                }
+            }
+            return list
+        }
+
+    fun departmentCount(department: String): Int =
+        employees.count { it.department == department }
+}
 
 @HiltViewModel
 class DashboardSectionViewModel @Inject constructor(
@@ -119,7 +145,13 @@ class DashboardSectionViewModel @Inject constructor(
                         val employees = repo.getContacts()
                             .filter { it.role == "employee" && it.login != "xodim1" }
                             .sortedBy { it.fullName }
-                        _state.update { it.copy(employees = employees, loading = false) }
+                        val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
+                        val departments = (apiDepartments + employees.mapNotNull { it.department?.takeIf(String::isNotBlank) })
+                            .distinct()
+                            .sorted()
+                        _state.update {
+                            it.copy(employees = employees, departments = departments, loading = false)
+                        }
                     }
                     else -> {
                         val tasks = repo.getTasks().filter { task ->
@@ -147,9 +179,17 @@ class DashboardSectionViewModel @Inject constructor(
         }
     }
 
+    fun onDepartmentSelected(department: String?) {
+        _state.update { it.copy(selectedDepartment = department, selectedEmployeeIds = emptySet()) }
+    }
+
+    fun onSearch(query: String) {
+        _state.update { it.copy(searchQuery = query) }
+    }
+
     fun selectAllEmployees() {
         _state.update { state ->
-            state.copy(selectedEmployeeIds = state.employees.map { it.id }.toSet())
+            state.copy(selectedEmployeeIds = state.filteredEmployees.map { it.id }.toSet())
         }
     }
 
@@ -172,7 +212,7 @@ fun DashboardSectionScreen(
     onAssignTask: (Set<String>) -> Unit = {},
     onEmployeeClick: (String) -> Unit = {},
     onEditTask: (String) -> Unit = {},
-    canManageTasks: Boolean = false,
+    currentUserId: String? = null,
     viewModel: DashboardSectionViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -180,12 +220,14 @@ fun DashboardSectionScreen(
     val section = viewModel.section
     val style = section.style()
     val isEmployees = section == DashboardSection.EMPLOYEES
+    val visibleEmployees = if (isEmployees) state.filteredEmployees else emptyList()
     val count = when {
         isEmployees -> state.employees.size
         else -> state.tasks.size
     }
-    val allSelected = isEmployees && state.employees.isNotEmpty() &&
-        state.selectedEmployeeIds.size == state.employees.size
+    val allSelected = isEmployees && visibleEmployees.isNotEmpty() &&
+        visibleEmployees.all { it.id in state.selectedEmployeeIds }
+    val fieldColors = liquidGlassFieldColors()
 
     LaunchedEffect(Unit) { viewModel.load() }
 
@@ -207,10 +249,22 @@ fun DashboardSectionScreen(
     }
 
     VazifaTabScaffold(
-        title = localized(section.titleKey()),
+        title = if (!isEmployees) localized(section.titleKey()) else null,
+        titleContent = if (isEmployees) {
+            {
+                EmployeeDepartmentTitle(
+                    title = localized(section.titleKey()),
+                    selectedDepartment = state.selectedDepartment,
+                    departments = state.departments,
+                    totalCount = state.employees.size,
+                    departmentCount = state::departmentCount,
+                    onDepartmentSelected = viewModel::onDepartmentSelected,
+                )
+            }
+        } else null,
         onBack = onBack,
         actions = {
-            if (isEmployees && state.employees.isNotEmpty()) {
+            if (isEmployees && visibleEmployees.isNotEmpty()) {
                 TextButton(onClick = {
                     if (allSelected) viewModel.clearSelection() else viewModel.selectAllEmployees()
                 }) {
@@ -247,10 +301,28 @@ fun DashboardSectionScreen(
                                     SectionSummaryCard(section = section, style = style, count = count)
                                 }
                                 if (isEmployees) {
-                                    if (state.employees.isEmpty()) {
+                                    item {
+                                        OutlinedTextField(
+                                            value = state.searchQuery,
+                                            onValueChange = viewModel::onSearch,
+                                            label = { Text(localized("task_search_employee")) },
+                                            modifier = Modifier.fillMaxWidth(),
+                                            shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                                            colors = fieldColors,
+                                            leadingIcon = {
+                                                Icon(
+                                                    Icons.Default.Search,
+                                                    contentDescription = null,
+                                                    tint = LiquidTheme.textMuted,
+                                                )
+                                            },
+                                            singleLine = true,
+                                        )
+                                    }
+                                    if (visibleEmployees.isEmpty()) {
                                         item { SectionEmptyCard(style) }
                                     } else {
-                                        items(state.employees, key = { it.id }) { employee ->
+                                        items(visibleEmployees, key = { it.id }) { employee ->
                                             EmployeeRow(
                                                 user = employee,
                                                 style = style,
@@ -265,7 +337,7 @@ fun DashboardSectionScreen(
                                     item { SectionEmptyCard(style) }
                                 } else {
                                     items(state.tasks, key = { it.id }) { task ->
-                                        val canManage = canManageTasks && task.status != "cancelled"
+                                        val canManage = task.canCreatorManage(currentUserId)
                                         TaskRow(
                                             task = task,
                                             canManage = canManage,
@@ -442,3 +514,68 @@ private fun employeeInitials(name: String): String =
         .filter { it.isNotBlank() }
         .take(2)
         .joinToString("") { it.first().uppercaseChar().toString() }
+
+@Composable
+private fun EmployeeDepartmentTitle(
+    title: String,
+    selectedDepartment: String?,
+    departments: List<String>,
+    totalCount: Int,
+    departmentCount: (String) -> Int,
+    onDepartmentSelected: (String?) -> Unit,
+) {
+    var expanded by remember { mutableStateOf(false) }
+    val filterLabel = selectedDepartment ?: localized("emp_select_all")
+
+    Row(
+        verticalAlignment = Alignment.CenterVertically,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+    ) {
+        Text(title, fontWeight = FontWeight.Bold, color = LiquidTheme.text)
+        Box {
+            TextButton(onClick = { expanded = true }) {
+                Text(
+                    filterLabel,
+                    color = LiquidGlass.Blue,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 14.sp,
+                )
+                Icon(
+                    Icons.Default.ArrowDropDown,
+                    contentDescription = null,
+                    tint = LiquidGlass.Blue,
+                )
+            }
+            LiquidGlassDropdownMenu(
+                expanded = expanded,
+                onDismissRequest = { expanded = false },
+            ) {
+                Text(
+                    localized("emp_department"),
+                    color = LiquidTheme.textMuted,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 12.sp,
+                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
+                )
+                LiquidGlassDropdownItem(
+                    text = "${localized("emp_select_all")} ($totalCount)",
+                    selected = selectedDepartment == null,
+                    onClick = {
+                        onDepartmentSelected(null)
+                        expanded = false
+                    },
+                )
+                departments.forEach { department ->
+                    LiquidGlassDropdownItem(
+                        text = "$department (${departmentCount(department)})",
+                        selected = selectedDepartment == department,
+                        onClick = {
+                            onDepartmentSelected(department)
+                            expanded = false
+                        },
+                    )
+                }
+            }
+        }
+    }
+}

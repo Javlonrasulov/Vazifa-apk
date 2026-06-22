@@ -93,6 +93,8 @@ class TaskRepository @Inject constructor(
 
     suspend fun getContacts(): List<User> = api.api.getContacts().map { it.toUser() }
 
+    suspend fun getDepartments(): List<String> = api.api.getDepartments()
+
     private fun UserDto.toUser() = User(id, login, fullName, role, position, department, phone)
 
     private fun TaskDto.toDomain() = Task(
@@ -111,7 +113,7 @@ class TaskRepository @Inject constructor(
 
     private fun TaskAttachmentDto.toDomain() = TaskAttachment(
         id, fileName, filePath, mimeType, fileSize, uploadedById,
-        MediaUrl.fromFilePath(filePath),
+        MediaUrl.resolve(filePath, url),
     )
 
     private fun TaskCommentDto.toDomain() = TaskComment(

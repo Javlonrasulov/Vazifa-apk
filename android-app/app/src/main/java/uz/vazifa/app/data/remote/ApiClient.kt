@@ -54,6 +54,8 @@ class ApiClient @Inject constructor(
         .readTimeout(30, TimeUnit.SECONDS)
         .build()
 
+    val httpClient: OkHttpClient get() = client
+
     val api: ApiService = Retrofit.Builder()
         .baseUrl(BuildConfig.API_BASE_URL)
         .client(client)

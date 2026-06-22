@@ -104,6 +104,9 @@ interface ApiService {
 
     @GET("users/mobile/contacts")
     suspend fun getContacts(): List<UserDto>
+
+    @GET("users/mobile/departments")
+    suspend fun getDepartments(): List<String>
 }
 
 data class TaskDto(
@@ -136,6 +139,7 @@ data class TaskAttachmentDto(
     val mimeType: String,
     val fileSize: Long,
     val uploadedById: String,
+    val url: String? = null,
 )
 
 data class TaskAssignmentDto(

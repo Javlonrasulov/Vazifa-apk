@@ -6,6 +6,7 @@ import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.CalendarToday
@@ -15,12 +16,16 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.net.Uri
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.TaskAssignment
 import uz.vazifa.app.domain.model.TaskStatus
+import uz.vazifa.app.domain.model.canCreatorManage
+import uz.vazifa.app.domain.model.isCompletedForUser
 import uz.vazifa.app.domain.model.isCreator
 import uz.vazifa.app.domain.model.myAssignment
 import uz.vazifa.app.presentation.components.*
@@ -37,6 +42,7 @@ import java.time.ZoneId
 import java.time.ZoneOffset
 import java.time.format.DateTimeFormatter
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun TasksScreen(
     onTaskClick: (String) -> Unit,
@@ -70,17 +76,55 @@ fun TasksScreen(
     ) { padding ->
         LiquidBackground(Modifier.fillMaxSize()) {
             VazifaScreenBox(padding) {
-                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    items(state.tasks, key = { it.id }) { task ->
-                        val canManage = state.canAssignTasks && task.status != "cancelled"
-                        TaskRow(
-                            task = task,
-                            currentUserId = state.currentUserId,
-                            canManage = canManage,
-                            onClick = { onTaskClick(task.id) },
-                            onEdit = if (canManage) ({ onEditTask(task.id) }) else null,
-                            onDelete = if (canManage) ({ taskToDelete = task.id }) else null,
+                var selectedTab by remember { mutableIntStateOf(0) }
+                val filteredTasks = remember(state.tasks, state.currentUserId, selectedTab) {
+                    state.tasks.filter { task ->
+                        val completed = task.isCompletedForUser(state.currentUserId)
+                        if (selectedTab == 0) !completed else completed
+                    }
+                }
+                Column(Modifier.fillMaxSize()) {
+                    PrimaryTabRow(
+                        selectedTabIndex = selectedTab,
+                        containerColor = androidx.compose.ui.graphics.Color.Transparent,
+                        contentColor = LiquidGlass.Blue,
+                    ) {
+                        Tab(
+                            selected = selectedTab == 0,
+                            onClick = { selectedTab = 0 },
+                            text = { Text(localized("tasks_tab_new")) },
                         )
+                        Tab(
+                            selected = selectedTab == 1,
+                            onClick = { selectedTab = 1 },
+                            text = { Text(localized("tasks_tab_completed")) },
+                        )
+                    }
+                    LazyColumn(
+                        contentPadding = PaddingValues(16.dp),
+                        verticalArrangement = Arrangement.spacedBy(10.dp),
+                    ) {
+                        if (filteredTasks.isEmpty()) {
+                            item {
+                                Text(
+                                    localized("dash_empty"),
+                                    color = LiquidTheme.textMuted,
+                                    modifier = Modifier.padding(vertical = 24.dp),
+                                )
+                            }
+                        } else {
+                            items(filteredTasks, key = { it.id }) { task ->
+                                val canManage = task.canCreatorManage(state.currentUserId)
+                                TaskRow(
+                                    task = task,
+                                    currentUserId = state.currentUserId,
+                                    canManage = canManage,
+                                    onClick = { onTaskClick(task.id) },
+                                    onEdit = if (canManage) ({ onEditTask(task.id) }) else null,
+                                    onDelete = if (canManage) ({ taskToDelete = task.id }) else null,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -109,6 +153,7 @@ fun TaskDetailScreen(
             val showManagerView = canAssignTasks && isCreator
             val showAssigneeView = myAssignment != null
             val isCompleted = myAssignment?.status == TaskStatus.COMPLETED.key
+            val displayStatus = myAssignment?.status ?: task.assignments.firstOrNull()?.status
 
             Column(
                 Modifier
@@ -128,6 +173,33 @@ fun TaskDetailScreen(
                             color = LiquidTheme.textMuted,
                             fontSize = 13.sp,
                         )
+                        if (!task.isCompletedForUser(state.currentUserId)) {
+                            Row(
+                                horizontalArrangement = Arrangement.spacedBy(6.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
+                                Text(
+                                    "${localized("task_time_remaining")}:",
+                                    color = LiquidTheme.textMuted,
+                                    fontSize = 13.sp,
+                                )
+                                TaskCountdownText(
+                                    deadlineAt = task.deadlineAt,
+                                    status = displayStatus,
+                                    fontSize = 13.sp,
+                                    showPrefix = false,
+                                )
+                            }
+                        } else {
+                            CompletedTaskTiming(
+                                task = task,
+                                completedAssignment = if (showManagerView) {
+                                    null
+                                } else {
+                                    myAssignment?.takeIf { it.status == TaskStatus.COMPLETED.key }
+                                },
+                            )
+                        }
                         if (showAssigneeView && !isCreator) {
                             Text(
                                 localized("task_assigned_to_you"),
@@ -151,11 +223,20 @@ fun TaskDetailScreen(
                             Text(localized("task_assignee_status"), color = LiquidTheme.textMuted, fontSize = 13.sp)
                             task.assignments.forEach { a ->
                                 val name = a.assignee?.fullName ?: a.assigneeId
-                                Text(
-                                    "• $name — ${localizedStatus(a.status)}",
-                                    color = LiquidTheme.text,
-                                    fontSize = 13.sp,
-                                )
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        "• $name — ${localizedStatus(a.status)}",
+                                        color = LiquidTheme.text,
+                                        fontSize = 13.sp,
+                                    )
+                                    if (a.status == TaskStatus.COMPLETED.key && !a.completedAt.isNullOrBlank()) {
+                                        Text(
+                                            "  ${localized("task_completed_at")}: ${TaskDeadlineCountdown.formatDisplay(a.completedAt)}",
+                                            color = LiquidTheme.textMuted,
+                                            fontSize = 12.sp,
+                                        )
+                                    }
+                                }
                             }
                         }
                     }
@@ -185,15 +266,6 @@ fun TaskDetailScreen(
                             modifier = Modifier.fillMaxWidth(),
                             colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
                         ) { Text(localized("status_accepted")) }
-                    }
-                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        listOf(TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW).forEach { st ->
-                            FilterChip(
-                                selected = myAssignment.status == st.key,
-                                onClick = { viewModel.updateStatus(task.id, myAssignment.id, st.key) },
-                                label = { Text(localizedStatus(st.key), fontSize = 11.sp) },
-                            )
-                        }
                     }
                     Button(
                         onClick = { showCompleteDialog = true },
@@ -265,6 +337,7 @@ fun CreateTaskScreen(
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
     var createImageUri by remember { mutableStateOf<Uri?>(null) }
+    var showAllSelectedAssignees by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
 
     LaunchedEffect(Unit) {
@@ -276,6 +349,9 @@ fun CreateTaskScreen(
             viewModel.preselectAssignees(ids)
             onPreselectConsumed()
         }
+    }
+    LaunchedEffect(state.selectedIds.size) {
+        if (state.selectedIds.size <= 2) showAllSelectedAssignees = false
     }
     val errorMessage = state.errorKey?.let { localized(it) }
     LaunchedEffect(errorMessage) {
@@ -321,6 +397,7 @@ fun CreateTaskScreen(
                 modifier = Modifier.fillMaxWidth(),
                 shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 colors = fieldColors,
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
             )
             OutlinedTextField(
                 value = state.deadlineDateTime?.format(deadlineDisplayFmt).orEmpty(),
@@ -358,8 +435,28 @@ fun CreateTaskScreen(
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = LiquidTheme.textMuted) },
                     singleLine = true,
                 )
-                state.selectedContacts.forEach { c ->
+                val selectedContacts = state.selectedContacts
+                val visibleSelectedContacts = if (showAllSelectedAssignees || selectedContacts.size <= 2) {
+                    selectedContacts
+                } else {
+                    selectedContacts.take(2)
+                }
+                val hiddenSelectedCount = (selectedContacts.size - 2).coerceAtLeast(0)
+                visibleSelectedContacts.forEach { c ->
                     EmployeeSelectRow(c, state.selectedIds.contains(c.id)) { viewModel.toggleAssignee(c.id) }
+                }
+                if (hiddenSelectedCount > 0) {
+                    TextButton(onClick = { showAllSelectedAssignees = !showAllSelectedAssignees }) {
+                        Text(
+                            if (showAllSelectedAssignees) {
+                                localized("task_show_less_assignees")
+                            } else {
+                                "${localized("task_show_more_assignees")} (+$hiddenSelectedCount)"
+                            },
+                            color = LiquidGlass.BlueLight,
+                            fontSize = 13.sp,
+                        )
+                    }
                 }
                 if (state.assigneeSearch.isNotBlank()) {
                     state.filteredContacts
@@ -447,6 +544,34 @@ fun CreateTaskScreen(
             },
             initialHour = initial?.hour ?: 10,
             initialMinute = initial?.minute ?: 0,
+        )
+    }
+}
+
+@Composable
+private fun CompletedTaskTiming(
+    task: Task,
+    completedAssignment: TaskAssignment?,
+) {
+    val muted = LiquidTheme.textMuted
+    val fontSize = 13.sp
+    Text(
+        "${localized("task_assigned_at")}: ${TaskDeadlineCountdown.formatDisplay(task.startAt)}",
+        color = muted,
+        fontSize = fontSize,
+    )
+    TaskDeadlineCountdown.durationBetween(task.startAt, task.deadlineAt)?.let { duration ->
+        Text(
+            "${localized("task_time_given")}: ${formatDurationParts(duration.days, duration.hours, duration.minutes)}",
+            color = muted,
+            fontSize = fontSize,
+        )
+    }
+    completedAssignment?.completedAt?.takeIf { it.isNotBlank() }?.let { completedAt ->
+        Text(
+            "${localized("task_completed_at")}: ${TaskDeadlineCountdown.formatDisplay(completedAt)}",
+            color = LiquidTheme.text,
+            fontSize = fontSize,
         )
     }
 }

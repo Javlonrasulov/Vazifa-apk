@@ -25,6 +25,7 @@ import androidx.lifecycle.LifecycleEventObserver
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.canCreatorManage
 import uz.vazifa.app.domain.model.isCreator
 import uz.vazifa.app.domain.model.myAssignment
 import uz.vazifa.app.presentation.components.*
@@ -98,7 +99,7 @@ fun DirectorDashboardScreen(
                         )
                     }
                     items(state.tasks.take(5), key = { it.id }) { task ->
-                        val canManage = state.canAssignTasks && task.status != "cancelled"
+                        val canManage = task.canCreatorManage(state.currentUserId)
                         TaskRow(
                             task = task,
                             currentUserId = state.currentUserId,

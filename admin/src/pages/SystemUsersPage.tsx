@@ -56,7 +56,7 @@ export default function SystemUsersPage() {
     setLoading(true);
     try {
       const data = await fetchUsers();
-      setUsers(data.filter((u) => u.role === 'admin' || u.canAccessAdminPanel));
+      setUsers(data.filter((u) => u.role === 'admin'));
     } catch (err) {
       if (isAxiosError(err) && !err.response) {
         setToast(t('networkError'));
@@ -101,7 +101,8 @@ export default function SystemUsersPage() {
       if (err.response?.status === 401) return t('sessionExpired');
       if (err.response?.status === 409) {
         const msg = (apiErrorMessage(err) ?? '').toLowerCase();
-        if (msg.includes('ism')) return t('nameTaken');
+        if (msg.includes('apk')) return t('loginTakenApk');
+        if (msg.includes('ism')) return t('nameTakenAdmin');
         return t('loginTaken');
       }
       if (!err.response) return t('networkError');
@@ -118,7 +119,7 @@ export default function SystemUsersPage() {
       name &&
       users.some((u) => u.id !== excludeId && u.fullName.trim().toLowerCase() === name)
     ) {
-      return t('nameTaken');
+      return t('nameTakenAdmin');
     }
     if (
       !excludeId &&
@@ -184,11 +185,7 @@ export default function SystemUsersPage() {
           adminPermissions: form.permissions,
         });
         setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
-        setToast(
-          created.role !== 'admin' && created.canAccessAdminPanel
-            ? t('adminAccessGranted')
-            : t('added'),
-        );
+        setToast(t('added'));
       }
       resetForm();
       await load();
@@ -204,17 +201,10 @@ export default function SystemUsersPage() {
     setDeleteSaving(true);
     setDeleteError('');
     try {
-      if (deleteTarget.role === 'admin') {
-        await deleteUser(deleteTarget.id);
-      } else {
-        await updateUser(deleteTarget.id, {
-          canAccessAdminPanel: false,
-          adminPermissions: null,
-        });
-      }
+      await deleteUser(deleteTarget.id);
       if (editUser?.id === deleteTarget.id) resetForm();
       setDeleteTarget(null);
-      setToast(deleteTarget.role === 'admin' ? t('deleted') : t('adminAccessRevoked'));
+      setToast(t('deleted'));
       await load();
     } catch (err) {
       setDeleteError(mapSaveError(err));
@@ -453,17 +443,12 @@ export default function SystemUsersPage() {
             </div>
 
             <div>
-              <label style={labelStyle}>{t('loginOrPhone')}</label>
+              <label style={labelStyle}>{t('login')}</label>
               <input
                 style={inputStyle}
                 value={form.login}
                 onChange={(e) => setForm({ ...form, login: e.target.value })}
               />
-              {!editUser && (
-                <div style={{ fontSize: 11, color: muted, marginTop: 6, lineHeight: 1.45 }}>
-                  {t('systemUserExistingHint')}
-                </div>
-              )}
             </div>
 
             <div>

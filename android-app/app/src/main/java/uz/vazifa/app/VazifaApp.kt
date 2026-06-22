@@ -4,7 +4,11 @@ import android.app.Application
 import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
+import coil.ImageLoader
+import coil.ImageLoaderFactory
 import dagger.hilt.android.HiltAndroidApp
+import dagger.hilt.android.EntryPointAccessors
+import uz.vazifa.app.di.ImageLoaderEntryPoint
 import uz.vazifa.app.notifications.VazifaNotificationHelper
 
 object AppForegroundState {
@@ -18,7 +22,7 @@ object AppForegroundState {
 }
 
 @HiltAndroidApp
-class VazifaApp : Application() {
+class VazifaApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
         VazifaNotificationHelper.createChannels(this)
@@ -31,5 +35,10 @@ class VazifaApp : Application() {
                 AppForegroundState.setForeground(false)
             }
         })
+    }
+
+    override fun newImageLoader(): ImageLoader {
+        val entryPoint = EntryPointAccessors.fromApplication(this, ImageLoaderEntryPoint::class.java)
+        return entryPoint.imageLoader()
     }
 }

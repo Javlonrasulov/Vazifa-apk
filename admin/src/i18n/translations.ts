@@ -92,9 +92,8 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     permEmployees: 'Ходимлар (Илова фойдаланувчилари)',
     permSystemUsers: 'Тизим фойдаланувчилари',
     permRequired: 'Камида битта рухсат танланг',
-    adminAccessGranted: 'Мавжуд ходимга админ панел рухсати берилди',
-    adminAccessRevoked: 'Админ панел рухсати олиб ташланди',
-    systemUserExistingHint: 'APKда очилган ходим логинини киритсангиз, янги ҳисоб очилмайди — админ панел рухсати берилади',
+    nameTakenAdmin: 'Бу исм админ панелда аллақачон мавжуд',
+    loginTakenApk: 'Бу логин APK ходимида ишлатилган — админ учун бошқа логин танланг',
   },
   uz: {
     appName: 'Lider Vazifa',
@@ -179,9 +178,8 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     permEmployees: 'Xodimlar (Ilova foydalanuvchilari)',
     permSystemUsers: 'Tizim foydalanuvchilari',
     permRequired: 'Kamida bitta ruxsat tanlang',
-    adminAccessGranted: "Mavjud xodimga admin panel ruxsati berildi",
-    adminAccessRevoked: 'Admin panel ruxsati olib tashlandi',
-    systemUserExistingHint: "APKda ochilgan xodim logini kiritsangiz, yangi hisob ochilmaydi — admin panel ruxsati beriladi",
+    nameTakenAdmin: "Bu ism admin panelda allaqachon mavjud",
+    loginTakenApk: "Bu login APK xodimida ishlatilgan — admin uchun boshqa login tanlang",
   },
   ru: {
     appName: 'Lider Vazifa',
@@ -266,9 +264,8 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     permEmployees: 'Сотрудники (пользователи приложения)',
     permSystemUsers: 'Системные пользователи',
     permRequired: 'Выберите хотя бы одно разрешение',
-    adminAccessGranted: 'Существующему сотруднику предоставлен доступ к админ-панели',
-    adminAccessRevoked: 'Доступ к админ-панели отозван',
-    systemUserExistingHint: 'Если ввести логин сотрудника из APK, новый аккаунт не создаётся — выдаётся доступ к админ-панели',
+    nameTakenAdmin: 'Это имя уже используется в админ-панели',
+    loginTakenApk: 'Этот логин занят пользователем APK — выберите другой для админ-панели',
   },
 };
 

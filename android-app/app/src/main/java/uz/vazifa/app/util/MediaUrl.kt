@@ -5,15 +5,40 @@ import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.net.Uri
 import uz.vazifa.app.BuildConfig
-import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 
 object MediaUrl {
+    fun resolve(filePath: String, serverUrl: String? = null): String {
+        serverUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { url ->
+            if (url.startsWith("http://") || url.startsWith("https://")) return url
+            val base = BuildConfig.API_BASE_URL
+                .removeSuffix("/api/v1/")
+                .removeSuffix("/api/v1")
+                .removeSuffix("/")
+            if (url.startsWith("/")) return "$base$url"
+            return "$base/$url"
+        }
+        return fromFilePath(filePath)
+    }
+
     fun fromFilePath(filePath: String): String {
-        val base = BuildConfig.API_BASE_URL.removeSuffix("/api/v1/").removeSuffix("/")
-        val name = filePath.substringAfterLast('/')
-        return "$base/uploads/$name"
+        val base = BuildConfig.API_BASE_URL
+            .removeSuffix("/api/v1/")
+            .removeSuffix("/api/v1")
+            .removeSuffix("/")
+        val normalized = filePath.replace('\\', '/').trim()
+        if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
+            return normalized
+        }
+        if (normalized.startsWith("/uploads/")) {
+            return "$base$normalized"
+        }
+        if (normalized.startsWith("uploads/")) {
+            return "$base/$normalized"
+        }
+        val fileName = normalized.substringAfterLast('/')
+        return "$base/uploads/$fileName"
     }
 }
 

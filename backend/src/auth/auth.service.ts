@@ -80,11 +80,7 @@ export class AuthService {
 
   async adminLogin(login: string, password: string) {
     const user = await this.usersService.findByLogin(login);
-    const canLogin =
-      user &&
-      user.isActive &&
-      (user.role === UserRole.ADMIN || user.canAccessAdminPanel);
-    if (!canLogin) {
+    if (!user || user.role !== UserRole.ADMIN || !user.isActive) {
       throw new UnauthorizedException('Login yoki parol noto\'g\'ri');
     }
     const valid = await bcrypt.compare(password, user.passwordHash);

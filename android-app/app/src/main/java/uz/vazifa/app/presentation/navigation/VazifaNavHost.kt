@@ -248,7 +248,7 @@ fun VazifaNavHost(
                     onBack = { navController.popBackStack() },
                     onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                     onEditTask = { navController.navigate(Routes.editTask(it)) },
-                    canManageTasks = isDirector,
+                    currentUserId = user?.id,
                     onAssignTask = { ids ->
                         preselectedAssigneeIds = ids
                         navController.popBackStack()

@@ -53,4 +53,14 @@ object TaskDeadlineCountdown {
             isOverdue = isOverdue,
         )
     }
+
+    fun durationBetween(startRaw: String, endRaw: String): Remaining? {
+        val start = parseDeadline(startRaw) ?: return null
+        val end = parseDeadline(endRaw) ?: return null
+        val totalMinutes = Duration.between(start, end).toMinutes().coerceAtLeast(0)
+        val days = totalMinutes / (24 * 60)
+        val hours = (totalMinutes % (24 * 60)) / 60
+        val minutes = totalMinutes % 60
+        return Remaining(days = days, hours = hours, minutes = minutes, isOverdue = false)
+    }
 }

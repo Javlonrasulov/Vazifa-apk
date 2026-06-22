@@ -24,8 +24,9 @@ fun statusLabelKey(status: String): String {
     }
 }
 
-fun roleLabelKey(role: String): String = when (role) {
+fun roleLabelKey(role: String): String = when (role.lowercase()) {
     "director" -> "role_director"
     "employee" -> "role_employee"
-    else -> role
+    "admin" -> "role_director"
+    else -> "role_employee"
 }

@@ -38,6 +38,12 @@ export class UsersController {
     return this.usersService.findEmployeesAndDirectors();
   }
 
+  @Get('mobile/departments')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  getMobileDepartments() {
+    return this.usersService.getFieldOptions('department');
+  }
+
   @Get('options/positions')
   @Roles(UserRole.ADMIN)
   getPositionOptions(@Query('q') q?: string) {

@@ -36,13 +36,19 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const users = await this.repo.find({ select: ['id', 'role', 'position', 'department', 'adminPermissions'] });
+    const users = await this.repo.find({
+      select: ['id', 'role', 'position', 'department', 'adminPermissions', 'canAccessAdminPanel'],
+    });
     for (const user of users) {
       await this.rememberFieldOption('position', user.position);
       await this.rememberFieldOption('department', user.department);
       if (user.role === UserRole.ADMIN && !user.adminPermissions?.length) {
         user.adminPermissions = UsersService.DEFAULT_ADMIN_PERMISSIONS;
-        user.canAccessAdminPanel = true;
+        await this.repo.save(user);
+      }
+      if (user.role !== UserRole.ADMIN && user.canAccessAdminPanel) {
+        user.canAccessAdminPanel = false;
+        user.adminPermissions = null;
         await this.repo.save(user);
       }
     }
@@ -111,10 +117,15 @@ export class UsersService implements OnModuleInit {
     return users.find((u) => phonesMatch(u.phone ?? '', phone)) ?? null;
   }
 
-  async findByFullName(fullName: string, excludeId?: string) {
+  async findByFullName(fullName: string, role: UserRole, excludeId?: string) {
     const qb = this.repo
       .createQueryBuilder('u')
       .where('LOWER(TRIM(u.fullName)) = LOWER(:name)', { name: fullName.trim() });
+    if (role === UserRole.ADMIN) {
+      qb.andWhere('u.role = :role', { role: UserRole.ADMIN });
+    } else {
+      qb.andWhere('u.role IN (:...roles)', { roles: [UserRole.EMPLOYEE, UserRole.DIRECTOR] });
+    }
     if (excludeId) qb.andWhere('u.id != :excludeId', { excludeId });
     return qb.getOne();
   }
@@ -127,8 +138,8 @@ export class UsersService implements OnModuleInit {
     }
   }
 
-  private async assertUniqueFullName(fullName: string, excludeId?: string) {
-    const existing = await this.findByFullName(fullName, excludeId);
+  private async assertUniqueFullName(fullName: string, role: UserRole, excludeId?: string) {
+    const existing = await this.findByFullName(fullName, role, excludeId);
     if (existing) {
       throw new ConflictException('Bu ism allaqachon mavjud');
     }
@@ -146,19 +157,17 @@ export class UsersService implements OnModuleInit {
     const login = dto.login.toLowerCase().trim();
     const exists = await this.findByLogin(login);
     if (exists) {
-      if (dto.role === UserRole.ADMIN) {
-        if (exists.role === UserRole.ADMIN || exists.canAccessAdminPanel) {
-          throw new ConflictException('Login band');
-        }
-        return this.grantAdminPanelAccess(exists, dto, actorId);
+      if (exists.role !== UserRole.ADMIN) {
+        throw new ConflictException('Bu login APK foydalanuvchisida band');
       }
       throw new ConflictException('Login band');
     }
 
-    await this.assertUniqueFullName(dto.fullName);
-    await this.assertUniquePhone(dto.phone);
-
     const isAdmin = dto.role === UserRole.ADMIN;
+    await this.assertUniqueFullName(dto.fullName, dto.role);
+    if (!isAdmin) {
+      await this.assertUniquePhone(dto.phone);
+    }
 
     const user = this.repo.create({
       login,
@@ -169,7 +178,6 @@ export class UsersService implements OnModuleInit {
       position: isAdmin ? null : (dto.position ?? null),
       department: isAdmin ? null : (dto.department ?? null),
       phone: isAdmin ? null : (dto.phone ?? null),
-      canAccessAdminPanel: isAdmin,
       adminPermissions: isAdmin
         ? (dto.adminPermissions?.length
             ? dto.adminPermissions
@@ -182,22 +190,6 @@ export class UsersService implements OnModuleInit {
     await this.audit.log(actorId ?? null, AuditAction.USER_CREATED, 'user', saved.id, {
       login: saved.login,
       role: saved.role,
-    });
-    return this.sanitize(saved);
-  }
-
-  private async grantAdminPanelAccess(user: User, dto: CreateUserDto, actorId?: string) {
-    user.canAccessAdminPanel = true;
-    user.adminPermissions = dto.adminPermissions?.length
-      ? dto.adminPermissions
-      : UsersService.DEFAULT_ADMIN_PERMISSIONS;
-    if (dto.password?.trim()) {
-      user.passwordHash = await bcrypt.hash(dto.password.trim(), 10);
-    }
-    const saved = await this.repo.save(user);
-    await this.audit.log(actorId ?? null, AuditAction.USER_UPDATED, 'user', saved.id, {
-      action: 'admin_panel_access_granted',
-      login: saved.login,
     });
     return this.sanitize(saved);
   }
@@ -216,7 +208,7 @@ export class UsersService implements OnModuleInit {
       user.passwordHash = await bcrypt.hash(dto.password, 10);
     }
     if (dto.fullName !== undefined) {
-      await this.assertUniqueFullName(dto.fullName, id);
+      await this.assertUniqueFullName(dto.fullName, user.role, id);
       user.fullName = dto.fullName.trim();
     }
     if (dto.role !== undefined) {
@@ -246,17 +238,11 @@ export class UsersService implements OnModuleInit {
     }
     if (dto.adminPermissions !== undefined) {
       user.adminPermissions =
-        user.role === UserRole.ADMIN || user.canAccessAdminPanel
+        user.role === UserRole.ADMIN
           ? dto.adminPermissions.length
             ? dto.adminPermissions
             : UsersService.DEFAULT_ADMIN_PERMISSIONS
           : null;
-    }
-    if (dto.canAccessAdminPanel !== undefined) {
-      user.canAccessAdminPanel = dto.canAccessAdminPanel;
-      if (!dto.canAccessAdminPanel) {
-        user.adminPermissions = null;
-      }
     }
     const saved = await this.repo.save(user);
     await this.rememberFieldOption('position', saved.position);

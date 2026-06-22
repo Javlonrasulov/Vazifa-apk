@@ -15,6 +15,7 @@ import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.domain.model.User
+import uz.vazifa.app.domain.model.hasCompletedAssignment
 import uz.vazifa.app.util.TaskDeadlineCountdown
 import uz.vazifa.app.util.UzbekTextSearch
 import java.time.LocalDateTime
@@ -22,6 +23,8 @@ import java.time.ZoneId
 import java.time.ZonedDateTime
 import java.time.format.DateTimeFormatter
 import javax.inject.Inject
+import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 
 @HiltViewModel
 class TasksViewModel @Inject constructor(
@@ -132,6 +135,10 @@ class CreateTaskViewModel @Inject constructor(
             _state.update { it.copy(loading = true) }
             runCatching {
                 val task = repo.getTask(id)
+                if (task.hasCompletedAssignment()) {
+                    _state.update { it.copy(loading = false, errorKey = "task_edit_completed_forbidden") }
+                    return@runCatching
+                }
                 val deadline = TaskDeadlineCountdown.parseDeadline(task.deadlineAt)
                 val deadlineDateTime = deadline?.atZone(zone)?.toLocalDateTime()
                 val deadlineHours = deadlineDateTime?.let { dt ->
@@ -156,12 +163,12 @@ class CreateTaskViewModel @Inject constructor(
     fun onTitle(v: String) = _state.update { it.copy(title = v) }
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
     fun onDeadlineHours(v: String) {
-        val digits = v.filter { it.isDigit() }
+        val filtered = filterDeadlineHoursInput(v)
         _state.update { current ->
-            val hours = digits.toLongOrNull()
+            val hours = parseDeadlineHours(filtered)
             current.copy(
-                deadlineHours = digits,
-                deadlineDateTime = hours?.takeIf { it > 0 }?.let { deadlineFromHours(it) },
+                deadlineHours = filtered,
+                deadlineDateTime = hours?.let { deadlineFromHours(it) },
             )
         }
     }
@@ -172,11 +179,11 @@ class CreateTaskViewModel @Inject constructor(
             } else {
                 val now = nowZoned()
                 var deadline = ZonedDateTime.of(v, zone)
-                if (!deadline.isAfter(now)) deadline = now.plusHours(1)
+                if (!deadline.isAfter(now)) deadline = now.plusMinutes(60)
                 val dt = deadline.toLocalDateTime()
                 current.copy(
                     deadlineDateTime = dt,
-                    deadlineHours = hoursUntil(deadline).toString(),
+                    deadlineHours = hoursUntil(deadline),
                 )
             }
         }
@@ -204,8 +211,9 @@ class CreateTaskViewModel @Inject constructor(
         val deadlineAt = _state.value.deadlineDateTime?.let { dt ->
             ZonedDateTime.of(dt, zone).format(fmt)
         } ?: run {
-            val hours = _state.value.deadlineHours.toLongOrNull()?.coerceAtLeast(1) ?: 48
-            now.plusHours(hours).format(fmt)
+            val hours = parseDeadlineHours(_state.value.deadlineHours) ?: 48.0
+            val minutes = (hours * 60).roundToLong().coerceAtLeast(1)
+            now.plusMinutes(minutes).format(fmt)
         }
         runCatching {
             val task = repo.createTask(
@@ -240,8 +248,9 @@ class CreateTaskViewModel @Inject constructor(
         val deadlineAt = _state.value.deadlineDateTime?.let { dt ->
             ZonedDateTime.of(dt, zone).format(fmt)
         } ?: run {
-            val hours = _state.value.deadlineHours.toLongOrNull()?.coerceAtLeast(1) ?: 48
-            nowZoned().plusHours(hours).format(fmt)
+            val hours = parseDeadlineHours(_state.value.deadlineHours) ?: 48.0
+            val minutes = (hours * 60).roundToLong().coerceAtLeast(1)
+            nowZoned().plusMinutes(minutes).format(fmt)
         }
         runCatching {
             repo.updateTask(
@@ -283,11 +292,42 @@ class CreateTaskViewModel @Inject constructor(
     }
 
     private fun nowZoned(): ZonedDateTime = ZonedDateTime.now(zone)
-    private fun deadlineFromHours(hours: Long): LocalDateTime = nowZoned().plusHours(hours).toLocalDateTime()
-    private fun hoursUntil(deadline: ZonedDateTime): Long {
-        val minutes = java.time.Duration.between(nowZoned(), deadline).toMinutes()
-        return ((minutes + 59) / 60).coerceAtLeast(1)
+    private fun deadlineFromHours(hours: Double): LocalDateTime {
+        val minutes = (hours * 60).roundToLong().coerceAtLeast(1)
+        return nowZoned().plusMinutes(minutes).toLocalDateTime()
     }
+    private fun hoursUntil(deadline: ZonedDateTime): String {
+        val minutes = java.time.Duration.between(nowZoned(), deadline).toMinutes().coerceAtLeast(1)
+        return minutesToHoursString(minutes)
+    }
+}
+
+private fun filterDeadlineHoursInput(v: String): String = buildString {
+    var dotUsed = false
+    for (ch in v) {
+        when {
+            ch.isDigit() -> append(ch)
+            (ch == '.' || ch == ',') && !dotUsed -> {
+                append('.')
+                dotUsed = true
+            }
+        }
+    }
+}
+
+private fun parseDeadlineHours(input: String): Double? {
+    val normalized = input.trim().replace(',', '.')
+    if (normalized.isBlank() || normalized == ".") return null
+    return normalized.toDoubleOrNull()?.takeIf { it > 0 }
+}
+
+private fun minutesToHoursString(minutes: Long): String {
+    val hours = minutes / 60.0
+    val whole = hours.toLong()
+    if (hours == whole.toDouble()) return whole.toString()
+    val tenths = (hours * 10).roundToInt() / 10.0
+    if (tenths == tenths.toLong().toDouble()) return tenths.toLong().toString()
+    return String.format(java.util.Locale.US, "%.1f", tenths)
 }
 
 data class CreateTaskUiState(
@@ -310,10 +350,11 @@ data class CreateTaskUiState(
             else -> title.isNotBlank() && selectedIds.isNotEmpty()
         }
     fun withSyncedDeadline(zone: ZoneId): CreateTaskUiState {
-        val hours = deadlineHours.toLongOrNull()?.coerceAtLeast(1) ?: 48
+        val hours = parseDeadlineHours(deadlineHours) ?: 48.0
+        val minutes = (hours * 60).roundToLong().coerceAtLeast(1)
         return copy(
-            deadlineHours = hours.toString(),
-            deadlineDateTime = ZonedDateTime.now(zone).plusHours(hours).toLocalDateTime(),
+            deadlineHours = minutesToHoursString(minutes),
+            deadlineDateTime = ZonedDateTime.now(zone).plusMinutes(minutes).toLocalDateTime(),
         )
     }
 

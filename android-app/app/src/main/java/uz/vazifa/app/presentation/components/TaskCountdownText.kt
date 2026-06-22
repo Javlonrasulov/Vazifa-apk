@@ -20,6 +20,7 @@ fun TaskCountdownText(
     status: String?,
     modifier: Modifier = Modifier,
     fontSize: androidx.compose.ui.unit.TextUnit = 12.sp,
+    showPrefix: Boolean = true,
 ) {
     val isFinished = status in finishedStatuses
     val deadline = remember(deadlineAt) { TaskDeadlineCountdown.parseDeadline(deadlineAt) }
@@ -40,7 +41,13 @@ fun TaskCountdownText(
         }
         else -> {
             val remaining = TaskDeadlineCountdown.remaining(deadline, Instant.ofEpochMilli(nowMillis))
-            val label = formatCountdown(remaining.days, remaining.hours, remaining.minutes, remaining.isOverdue)
+            val label = formatCountdown(
+                remaining.days,
+                remaining.hours,
+                remaining.minutes,
+                remaining.isOverdue,
+                showPrefix,
+            )
             val tint = when {
                 remaining.isOverdue -> VazifaColors.Danger
                 remaining.days == 0L && remaining.hours < 2 -> VazifaColors.Warning
@@ -54,7 +61,13 @@ fun TaskCountdownText(
 }
 
 @Composable
-private fun formatCountdown(days: Long, hours: Long, minutes: Long, overdue: Boolean): String {
+private fun formatCountdown(
+    days: Long,
+    hours: Long,
+    minutes: Long,
+    overdue: Boolean,
+    showPrefix: Boolean = true,
+): String {
     val prefix = localized(if (overdue) "task_time_overdue_prefix" else "task_time_left_prefix")
     val dayShort = localized("task_time_day_short")
     val hourShort = localized("task_time_hour_short")
@@ -64,5 +77,19 @@ private fun formatCountdown(days: Long, hours: Long, minutes: Long, overdue: Boo
         if (hours > 0 || days > 0) add("$hours $hourShort")
         add("$minutes $minShort")
     }
-    return "$prefix ${parts.joinToString(" ")}"
+    val timeText = parts.joinToString(" ")
+    return if (showPrefix) "$prefix $timeText" else timeText
+}
+
+@Composable
+fun formatDurationParts(days: Long, hours: Long, minutes: Long): String {
+    val dayShort = localized("task_time_day_short")
+    val hourShort = localized("task_time_hour_short")
+    val minShort = localized("task_time_min_short")
+    val parts = buildList {
+        if (days > 0) add("$days $dayShort")
+        if (hours > 0 || days > 0) add("$hours $hourShort")
+        add("$minutes $minShort")
+    }
+    return parts.joinToString(" ")
 }

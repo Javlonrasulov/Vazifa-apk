@@ -94,6 +94,20 @@ fun Task.myAssignment(userId: String?) =
 fun Task.isCreator(userId: String?) =
     userId != null && createdById == userId
 
+fun Task.canCreatorManage(userId: String?): Boolean =
+    isCreator(userId) &&
+        status != TaskStatus.CANCELLED.key &&
+        !hasCompletedAssignment()
+
+fun Task.isCompletedForUser(userId: String?): Boolean {
+    myAssignment(userId)?.let { return it.status == TaskStatus.COMPLETED.key }
+    if (isCreator(userId)) {
+        return assignments.isNotEmpty() &&
+            assignments.all { it.status == TaskStatus.COMPLETED.key || it.status == TaskStatus.CANCELLED.key }
+    }
+    return false
+}
+
 fun Task.isOverdue(): Boolean {
     if (!hasActiveAssignment()) return false
     return runCatching {
