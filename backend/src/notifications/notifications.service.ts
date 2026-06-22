@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 
+export const FCM_CHANNEL_TASKS = 'vazifa_tasks';
+
 @Injectable()
 export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
@@ -17,7 +19,10 @@ export class NotificationsService {
     const privateKey = this.config.get('FIREBASE_PRIVATE_KEY')?.replace(/\\n/g, '\n');
 
     if (!projectId || !clientEmail || !privateKey) {
-      this.logger.warn('Firebase not configured — push notifications disabled');
+      this.logger.error(
+        'DIQQAT: Firebase sozlanmagan — PUSH XABARLAR YUBORILMAYDI. ' +
+          '.env faylga FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY qo\'shing.',
+      );
       return;
     }
 
@@ -26,22 +31,39 @@ export class NotificationsService {
         credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
       });
       this.initialized = true;
+      this.logger.log('Firebase tayyor — push xabarlar yoqildi');
     } catch (e) {
-      this.logger.error('Firebase init failed', e);
+      this.logger.error('Firebase init xatosi', e);
     }
   }
 
+  isReady(): boolean {
+    return this.initialized;
+  }
+
   async sendToToken(token: string, title: string, body: string, data?: Record<string, string>) {
-    if (!this.initialized || !token) {
-      this.logger.debug(`Push (mock): ${title} — ${body}`);
+    if (!this.initialized) {
+      this.logger.warn(`Push yuborilmadi (Firebase sozlanmagan): ${title} — ${body}`);
+      return;
+    }
+    if (!token || token.startsWith('local-')) {
+      this.logger.warn(`Push yuborilmadi (token yaroqsiz): ${title} — ${body}`);
       return;
     }
     try {
+      const payload: Record<string, string> = {
+        title,
+        body,
+        ...(data ?? {}),
+      };
       await admin.messaging().send({
         token,
-        notification: { title, body },
-        data,
-        android: { priority: 'high' },
+        data: payload,
+        android: {
+          priority: 'high',
+          ttl: 3600 * 1000,
+          directBootOk: true,
+        },
       });
     } catch (e) {
       this.logger.error('FCM send failed', e);
@@ -49,7 +71,7 @@ export class NotificationsService {
   }
 
   async sendToMany(tokens: string[], title: string, body: string, data?: Record<string, string>) {
-    const valid = tokens.filter(Boolean);
+    const valid = tokens.filter((t) => t && !t.startsWith('local-'));
     if (!valid.length) return;
     await Promise.all(valid.map((t) => this.sendToToken(t, title, body, data)));
   }

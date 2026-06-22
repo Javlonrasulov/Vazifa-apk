@@ -1,6 +1,5 @@
 import { NestFactory } from '@nestjs/core';
 import { ValidationPipe } from '@nestjs/common';
-import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'path';
 import { existsSync, mkdirSync } from 'fs';
@@ -22,18 +21,9 @@ async function bootstrap() {
 
   app.useStaticAssets(join(process.cwd(), uploadDir), { prefix: '/uploads/' });
 
-  const swagger = new DocumentBuilder()
-    .setTitle('Lider Vazifa API')
-    .setDescription('Lider Vazifa — xodimlar vazifalarini boshqarish tizimi')
-    .setVersion('1.0')
-    .addBearerAuth()
-    .build();
-  SwaggerModule.setup('docs', app, SwaggerModule.createDocument(app, swagger));
-
   const port = process.env.PORT || 3000;
   await app.listen(port);
   console.log(`API: http://localhost:${port}/api/v1`);
-  console.log(`Swagger: http://localhost:${port}/docs`);
 }
 
 bootstrap();

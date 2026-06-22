@@ -1,5 +1,4 @@
 import { Body, Controller, Get, Post, UseGuards, Request } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { AuthService } from './auth.service';
 import {
@@ -11,7 +10,6 @@ import {
 import { serverTimeResponse } from '../common/utils/time';
 import { User } from '../users/entities/user.entity';
 
-@ApiTags('auth')
 @Controller('auth')
 export class AuthController {
   constructor(private authService: AuthService) {}
@@ -36,21 +34,18 @@ export class AuthController {
     return serverTimeResponse();
   }
 
-  @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @Post('change-password')
   changePassword(@Request() req: { user: User }, @Body() dto: ChangePasswordDto) {
     return this.authService.changePassword(req.user.id, dto.currentPassword, dto.newPassword);
   }
 
-  @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @Post('fcm')
   updateFcm(@Request() req: { user: User }, @Body() dto: UpdateFcmDto) {
     return this.authService.updateFcm(req.user.id, dto.fcmToken, dto.notificationsEnabled);
   }
 
-  @ApiBearerAuth()
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
   me(@Request() req: { user: User }) {

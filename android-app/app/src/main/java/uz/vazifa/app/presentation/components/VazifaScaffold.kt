@@ -36,6 +36,7 @@ private val topBarBorder = LiquidGlass.GlassDarkBorder
 fun VazifaTabScaffold(
     title: String? = null,
     titleContent: (@Composable () -> Unit)? = null,
+    onBack: (() -> Unit)? = null,
     actions: @Composable () -> Unit = {},
     snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
@@ -52,6 +53,11 @@ fun VazifaTabScaffold(
                         end = Offset(size.width, size.height),
                         strokeWidth = 1f,
                     )
+                },
+                navigationIcon = {
+                    if (onBack != null) {
+                        VazifaBackButton(onBack = onBack)
+                    }
                 },
                 title = {
                     when {

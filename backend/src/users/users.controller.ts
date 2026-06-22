@@ -10,7 +10,6 @@ import {
   UseGuards,
   Request,
 } from '@nestjs/common';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { UsersService } from './users.service';
 import {
@@ -22,8 +21,6 @@ import {
 import { RolesGuard, Roles } from '../common/guards/roles.guard';
 import { UserRole } from '../common/enums';
 
-@ApiTags('users')
-@ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), RolesGuard)
 @Controller('users')
 export class UsersController {

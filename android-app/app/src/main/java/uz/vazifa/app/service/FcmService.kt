@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.notifications.VazifaNotificationHelper
 import javax.inject.Inject
 
 @AndroidEntryPoint
@@ -16,11 +17,16 @@ class FcmService : FirebaseMessagingService() {
     override fun onNewToken(token: String) {
         super.onNewToken(token)
         CoroutineScope(Dispatchers.IO).launch {
-            runCatching { authRepository.updateFcm(token, true) }
+            runCatching { authRepository.syncFcmTokenIfPossible(token) }
         }
     }
 
     override fun onMessageReceived(message: RemoteMessage) {
-        super.onMessageReceived(message)
+        val data = message.data
+        val title = data["title"] ?: message.notification?.title ?: "Vazifa"
+        val body = data["body"] ?: message.notification?.body ?: ""
+        val taskId = data["taskId"]
+        val type = data["type"]
+        VazifaNotificationHelper.show(applicationContext, title, body, taskId, type)
     }
 }

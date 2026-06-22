@@ -112,7 +112,6 @@ sudo systemctl restart vazifa-api
 |--------|-----|
 | Admin panel | https://vazifa.liderplast.uz |
 | API | https://vazifa.liderplast.uz/api/v1 |
-| Swagger | https://vazifa.liderplast.uz/docs |
 
 **Seed loginlar** (birinchi `npm run seed` dan keyin):
 

@@ -165,6 +165,10 @@ object Routes {
     const val NOTIFICATION_GATE = "notification_gate"
     const val MAIN = "main"
     const val TASK_DETAIL = "task/{taskId}"
+    const val DASH_SECTION = "dash/{section}"
+    const val EMPLOYEE_DETAIL = "employee/{employeeId}"
     const val CREATE_TASK = "create_task"
     fun taskDetail(id: String) = "task/$id"
+    fun dashSection(section: String) = "dash/$section"
+    fun employeeDetail(id: String) = "employee/$id"
 }

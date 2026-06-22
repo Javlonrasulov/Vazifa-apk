@@ -35,6 +35,26 @@ data class TaskAssignment(
     val assigneeId: String,
     val status: String,
     val assignee: User? = null,
+    val completedAt: String? = null,
+    val acceptedAt: String? = null,
+)
+
+data class TaskComment(
+    val id: String,
+    val body: String,
+    val authorId: String,
+    val createdAt: String,
+    val author: User? = null,
+)
+
+data class TaskAttachment(
+    val id: String,
+    val fileName: String,
+    val filePath: String,
+    val mimeType: String,
+    val fileSize: Long,
+    val uploadedById: String,
+    val url: String,
 )
 
 data class Task(
@@ -48,6 +68,8 @@ data class Task(
     val createdById: String,
     val assignments: List<TaskAssignment> = emptyList(),
     val createdBy: User? = null,
+    val attachments: List<TaskAttachment> = emptyList(),
+    val comments: List<TaskComment> = emptyList(),
 )
 
 data class DashboardStats(
@@ -57,3 +79,18 @@ data class DashboardStats(
     val overdueTasks: Int = 0,
     val todayTasks: Int = 0,
 )
+
+private val finishedStatuses = setOf(TaskStatus.COMPLETED.key, TaskStatus.CANCELLED.key)
+
+fun Task.hasActiveAssignment(): Boolean =
+    assignments.any { it.status !in finishedStatuses }
+
+fun Task.hasCompletedAssignment(): Boolean =
+    assignments.any { it.status == TaskStatus.COMPLETED.key }
+
+fun Task.isOverdue(): Boolean {
+    if (!hasActiveAssignment()) return false
+    return runCatching {
+        java.time.Instant.parse(deadlineAt).isBefore(java.time.Instant.now())
+    }.getOrDefault(false)
+}

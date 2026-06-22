@@ -1,5 +1,6 @@
 package uz.vazifa.app.data.remote
 
+import okhttp3.MultipartBody
 import retrofit2.http.*
 
 data class LoginRequest(val login: String, val password: String, val deviceId: String)
@@ -79,7 +80,14 @@ interface ApiService {
     ): TaskAssignmentDto
 
     @POST("tasks/{id}/comments")
-    suspend fun addComment(@Path("id") id: String, @Body body: CommentRequest)
+    suspend fun addComment(@Path("id") id: String, @Body body: CommentRequest): TaskCommentDto
+
+    @Multipart
+    @POST("tasks/{id}/attachments")
+    suspend fun uploadAttachment(
+        @Path("id") id: String,
+        @Part file: MultipartBody.Part,
+    ): TaskAttachmentDto
 
     @GET("users/mobile/contacts")
     suspend fun getContacts(): List<UserDto>
@@ -96,6 +104,25 @@ data class TaskDto(
     val createdById: String,
     val assignments: List<TaskAssignmentDto>? = null,
     val createdBy: UserDto? = null,
+    val attachments: List<TaskAttachmentDto>? = null,
+    val comments: List<TaskCommentDto>? = null,
+)
+
+data class TaskCommentDto(
+    val id: String,
+    val body: String,
+    val authorId: String,
+    val createdAt: String,
+    val author: UserDto? = null,
+)
+
+data class TaskAttachmentDto(
+    val id: String,
+    val fileName: String,
+    val filePath: String,
+    val mimeType: String,
+    val fileSize: Long,
+    val uploadedById: String,
 )
 
 data class TaskAssignmentDto(
@@ -103,4 +130,6 @@ data class TaskAssignmentDto(
     val assigneeId: String,
     val status: String,
     val assignee: UserDto? = null,
+    val completedAt: String? = null,
+    val acceptedAt: String? = null,
 )

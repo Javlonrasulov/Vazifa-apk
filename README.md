@@ -50,8 +50,7 @@ npm run seed
 - Direktor (ilova): `director1` / `director123`
 - Xodim (ilova): `xodim1` / `xodim123`
 
-API: http://localhost:3000/api/v1  
-Swagger: http://localhost:3000/docs
+API: http://localhost:3000/api/v1
 
 ### 3. Admin Panel
 

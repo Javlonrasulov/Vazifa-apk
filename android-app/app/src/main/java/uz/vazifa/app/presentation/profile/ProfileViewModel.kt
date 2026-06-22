@@ -19,7 +19,7 @@ import javax.inject.Inject
 
 data class ProfileUiState(
     val user: UserDto? = null,
-    val themeMode: ThemeMode = ThemeMode.DARK,
+    val themeMode: ThemeMode = ThemeMode.LIGHT,
     val language: AppLanguage = AppLanguage.DEFAULT,
     val showChangePassword: Boolean = false,
     val currentPassword: String = "",

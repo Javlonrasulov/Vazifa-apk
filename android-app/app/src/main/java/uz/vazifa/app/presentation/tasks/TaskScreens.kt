@@ -16,6 +16,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import android.net.Uri
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.presentation.components.*
@@ -53,37 +54,151 @@ fun TasksScreen(onTaskClick: (String) -> Unit, viewModel: TasksViewModel = hiltV
 }
 
 @Composable
-fun TaskDetailScreen(taskId: String, isDirector: Boolean, onBack: () -> Unit, viewModel: TaskDetailViewModel = hiltViewModel()) {
+fun TaskDetailScreen(
+    taskId: String,
+    isDirector: Boolean,
+    onBack: () -> Unit,
+    viewModel: TaskDetailViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
+    var showCompleteDialog by remember { mutableStateOf(false) }
+    var completeComment by remember { mutableStateOf("") }
+    var completeImageUri by remember { mutableStateOf<Uri?>(null) }
+
     LaunchedEffect(taskId) { viewModel.load(taskId) }
 
     VazifaStackScaffold(title = localized("task_detail"), onBack = onBack) { padding ->
         state.task?.let { task ->
-            GlassCard(Modifier.padding(padding).padding(16.dp).fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-                    Text(task.title, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                    Text(task.description ?: "", color = LiquidTheme.textMuted)
-                    Text(
-                        "${localized("task_deadline")}: ${task.deadlineAt.take(16).replace('T', ' ')}",
-                        color = LiquidTheme.textMuted,
-                        fontSize = 13.sp,
-                    )
+            val assignment = task.assignments.firstOrNull { it.assigneeId == state.currentUserId }
+                ?: task.assignments.firstOrNull()
+            val isCompleted = assignment?.status == TaskStatus.COMPLETED.key
 
-                    val assignment = task.assignments.firstOrNull()
-                    if (!isDirector && assignment != null) {
-                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                            listOf(TaskStatus.ACCEPTED, TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW, TaskStatus.COMPLETED).forEach { st ->
-                                FilterChip(
-                                    selected = assignment.status == st.key,
-                                    onClick = { viewModel.updateStatus(task.id, assignment.id, st.key) },
-                                    label = { Text(localized(statusLabelKey(st.key)), fontSize = 11.sp) },
+            Column(
+                Modifier
+                    .padding(padding)
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
+                GlassCard(Modifier.fillMaxWidth()) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                        Text(task.title, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 22.sp)
+                        if (!task.description.isNullOrBlank()) {
+                            Text(task.description, color = LiquidTheme.textMuted)
+                        }
+                        Text(
+                            "${localized("task_deadline")}: ${task.deadlineAt.take(16).replace('T', ' ')}",
+                            color = LiquidTheme.textMuted,
+                            fontSize = 13.sp,
+                        )
+                        if (isDirector) {
+                            task.createdBy?.let {
+                                Text("${localized("task_from")}: ${it.fullName}", color = LiquidTheme.textMuted, fontSize = 13.sp)
+                            }
+                            Text(localized("task_assignee_status"), color = LiquidTheme.textMuted, fontSize = 13.sp)
+                            task.assignments.forEach { a ->
+                                val name = a.assignee?.fullName ?: a.assigneeId
+                                Text(
+                                    "• $name — ${localized(statusLabelKey(a.status))}",
+                                    color = LiquidTheme.text,
+                                    fontSize = 13.sp,
+                                )
+                            }
+                        } else {
+                            assignment?.let { a ->
+                                Text(
+                                    "${localized("task_status")}: ${localized(statusLabelKey(a.status))}",
+                                    color = LiquidTheme.text,
+                                    fontSize = 14.sp,
                                 )
                             }
                         }
                     }
                 }
+
+                if (task.attachments.isNotEmpty()) {
+                    Text(localized("task_photos"), color = LiquidTheme.textMuted, fontSize = 13.sp)
+                    TaskAttachmentGrid(task.attachments.map { it.url })
+                }
+
+                if (task.comments.isNotEmpty()) {
+                    Text(localized("task_comments"), color = LiquidTheme.textMuted, fontSize = 13.sp)
+                    task.comments.forEach { c ->
+                        GlassCard(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(12.dp)) {
+                                Text(c.author?.fullName ?: "", color = LiquidGlass.BlueLight, fontSize = 12.sp)
+                                Text(c.body, color = LiquidTheme.text)
+                            }
+                        }
+                    }
+                }
+
+                if (!isDirector && assignment != null && !isCompleted) {
+                    if (assignment.status == TaskStatus.NEW.key) {
+                        Button(
+                            onClick = { viewModel.updateStatus(task.id, assignment.id, TaskStatus.ACCEPTED.key) },
+                            modifier = Modifier.fillMaxWidth(),
+                            colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
+                        ) { Text(localized("status_accepted")) }
+                    }
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        listOf(TaskStatus.IN_PROGRESS, TaskStatus.IN_REVIEW).forEach { st ->
+                            FilterChip(
+                                selected = assignment.status == st.key,
+                                onClick = { viewModel.updateStatus(task.id, assignment.id, st.key) },
+                                label = { Text(localized(statusLabelKey(st.key)), fontSize = 11.sp) },
+                            )
+                        }
+                    }
+                    Button(
+                        onClick = { showCompleteDialog = true },
+                        enabled = !state.loading,
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
+                        shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                        colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
+                    ) { Text(localized("task_complete_btn")) }
+                }
             }
         }
+    }
+
+    if (showCompleteDialog) {
+        val assignment = state.task?.assignments?.firstOrNull { it.assigneeId == state.currentUserId }
+        AlertDialog(
+            onDismissRequest = { showCompleteDialog = false },
+            title = { Text(localized("task_complete_btn")) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                    OutlinedTextField(
+                        completeComment,
+                        onValueChange = { completeComment = it },
+                        label = { Text(localized("task_complete_comment")) },
+                        modifier = Modifier.fillMaxWidth(),
+                        minLines = 2,
+                    )
+                    OptionalTaskImagePicker(
+                        imageUri = completeImageUri,
+                        onImageSelected = { completeImageUri = it },
+                        label = localized("task_add_photo"),
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(
+                    onClick = {
+                        assignment?.let {
+                            viewModel.completeWithReport(taskId, it.id, completeComment, completeImageUri)
+                        }
+                        showCompleteDialog = false
+                        completeComment = ""
+                        completeImageUri = null
+                    },
+                ) { Text(localized("task_report_submit")) }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCompleteDialog = false }) { Text(localized("com_cancel")) }
+            },
+        )
     }
 }
 
@@ -93,6 +208,8 @@ fun CreateTaskScreen(
     onBack: () -> Unit,
     onCreated: () -> Unit,
     showBack: Boolean = true,
+    preselectedAssigneeIds: Set<String>? = null,
+    onPreselectConsumed: () -> Unit = {},
     viewModel: CreateTaskViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -102,12 +219,20 @@ fun CreateTaskScreen(
     var showDatePicker by remember { mutableStateOf(false) }
     var showTimePicker by remember { mutableStateOf(false) }
     var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
+    var createImageUri by remember { mutableStateOf<Uri?>(null) }
 
     LaunchedEffect(Unit) { viewModel.loadContacts() }
+    LaunchedEffect(preselectedAssigneeIds) {
+        preselectedAssigneeIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+            viewModel.preselectAssignees(ids)
+            onPreselectConsumed()
+        }
+    }
     LaunchedEffect(state.created) {
         if (state.created) {
             onCreated()
             viewModel.resetForm()
+            createImageUri = null
         }
     }
 
@@ -185,8 +310,13 @@ fun CreateTaskScreen(
                     }
                 }
             }
+            OptionalTaskImagePicker(
+                imageUri = createImageUri,
+                onImageSelected = { createImageUri = it },
+                label = localized("task_add_photo"),
+            )
             Button(
-                onClick = viewModel::create,
+                onClick = { viewModel.create(createImageUri) },
                 enabled = !state.loading,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(LiquidGlass.RadiusChip),

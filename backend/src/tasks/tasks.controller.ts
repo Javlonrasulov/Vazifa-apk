@@ -13,7 +13,6 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiTags, ApiConsumes } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { diskStorage } from 'multer';
 import { extname, join } from 'path';
@@ -33,8 +32,6 @@ import { AuditService } from '../audit/audit.service';
 
 const uploadDir = process.env.UPLOAD_DIR || 'uploads';
 
-@ApiTags('tasks')
-@ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), NotificationsGuard)
 @Controller('tasks')
 export class TasksController {
@@ -116,7 +113,6 @@ export class TasksController {
   @Post(':id/attachments')
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
-  @ApiConsumes('multipart/form-data')
   @UseInterceptors(
     FileInterceptor('file', {
       storage: diskStorage({

@@ -22,6 +22,7 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { parseTashkent, nowTashkent } from '../common/utils/time';
 import { userCanAssignTasks } from '../common/utils/user-permissions';
+import { compressImageIfNeeded } from '../common/utils/image';
 import { UsersService } from '../users/users.service';
 
 @Injectable()
@@ -63,7 +64,7 @@ export class TasksService {
       dto.assigneeIds.map((id) => this.usersService.findById(id)),
     );
     await this.notifications.sendToMany(
-      assignees.map((a) => a.fcmToken ?? ''),
+      assignees.filter((a) => a.notificationsEnabled).map((a) => a.fcmToken ?? ''),
       'Yangi vazifa',
       `"${saved.title}" — sizga topshirildi`,
       { taskId: saved.id, type: 'task_new' },
@@ -161,12 +162,16 @@ export class TasksService {
 
     if (isAssignee && user.role === UserRole.EMPLOYEE) {
       const director = await this.usersService.findById(assignment.task.createdById);
-      await this.notifications.sendToToken(
-        director.fcmToken ?? '',
-        'Vazifa holati yangilandi',
-        `"${assignment.task.title}" — ${dto.status}`,
-        { taskId, type: 'task_status' },
-      );
+      if (director.notificationsEnabled) {
+        const statusLabel =
+          dto.status === TaskStatus.COMPLETED ? 'bajarildi' : dto.status;
+        await this.notifications.sendToToken(
+          director.fcmToken ?? '',
+          'Vazifa holati yangilandi',
+          `"${assignment.task.title}" — ${statusLabel}`,
+          { taskId, type: 'task_status' },
+        );
+      }
     }
 
     return assignment;
@@ -190,13 +195,14 @@ export class TasksService {
     file: Express.Multer.File,
   ) {
     await this.findOne(taskId, user);
+    const compressed = await compressImageIfNeeded(file.path, file.mimetype);
     const att = this.attachRepo.create({
       taskId,
       uploadedById: user.id,
-      fileName: file.originalname,
-      filePath: file.path.replace(/\\/g, '/'),
-      mimeType: file.mimetype,
-      fileSize: file.size,
+      fileName: file.originalname.replace(/\.[^.]+$/, '.jpg'),
+      filePath: compressed.filePath,
+      mimeType: compressed.mimeType,
+      fileSize: compressed.fileSize,
     });
     const saved = await this.attachRepo.save(att);
     await this.audit.log(user.id, AuditAction.FILE_UPLOADED, 'task', taskId);

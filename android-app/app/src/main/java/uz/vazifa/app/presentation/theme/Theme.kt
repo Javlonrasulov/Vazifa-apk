@@ -33,7 +33,7 @@ private val LightScheme = lightColorScheme(
 )
 
 @Composable
-fun VazifaTheme(darkTheme: Boolean = true, content: @Composable () -> Unit) {
+fun VazifaTheme(darkTheme: Boolean = false, content: @Composable () -> Unit) {
     CompositionLocalProvider(LocalVazifaDark provides darkTheme) {
         MaterialTheme(
             colorScheme = if (darkTheme) DarkScheme else LightScheme,

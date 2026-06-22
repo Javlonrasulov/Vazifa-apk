@@ -20,7 +20,7 @@ enum class ThemeMode(val code: String) {
     ;
 
     companion object {
-        fun fromCode(code: String?): ThemeMode = entries.firstOrNull { it.code == code } ?: DARK
+        fun fromCode(code: String?): ThemeMode = entries.firstOrNull { it.code == code } ?: LIGHT
     }
 }
 

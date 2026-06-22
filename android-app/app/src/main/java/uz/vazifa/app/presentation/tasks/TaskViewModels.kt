@@ -1,5 +1,6 @@
 package uz.vazifa.app.presentation.tasks
 
+import android.net.Uri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -7,8 +8,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.util.UzbekTextSearch
 import java.time.LocalDateTime
@@ -28,18 +31,53 @@ class TasksViewModel @Inject constructor(private val repo: TaskRepository) : Vie
 data class TasksUiState(val tasks: List<Task> = emptyList())
 
 @HiltViewModel
-class TaskDetailViewModel @Inject constructor(private val repo: TaskRepository) : ViewModel() {
+class TaskDetailViewModel @Inject constructor(
+    private val repo: TaskRepository,
+    private val auth: AuthRepository,
+) : ViewModel() {
     private val _state = MutableStateFlow(TaskDetailUiState())
     val state = _state.asStateFlow()
+
     fun load(id: String) = viewModelScope.launch {
-        runCatching { _state.update { it.copy(task = repo.getTask(id)) } }
+        val userId = auth.currentUser()?.id
+        runCatching {
+            _state.update { it.copy(task = repo.getTask(id), currentUserId = userId, loading = false) }
+        }.onFailure {
+            _state.update { it.copy(loading = false, error = true) }
+        }
     }
+
     fun updateStatus(taskId: String, assignmentId: String, status: String) = viewModelScope.launch {
-        repo.updateStatus(taskId, assignmentId, status)
-        load(taskId)
+        _state.update { it.copy(loading = true) }
+        runCatching {
+            repo.updateStatus(taskId, assignmentId, status)
+            load(taskId)
+        }.onFailure { _state.update { it.copy(loading = false) } }
+    }
+
+    fun completeWithReport(
+        taskId: String,
+        assignmentId: String,
+        comment: String,
+        imageUri: Uri?,
+    ) = viewModelScope.launch {
+        _state.update { it.copy(loading = true) }
+        runCatching {
+            val text = comment.trim()
+            if (text.isNotBlank()) repo.addComment(taskId, text)
+            if (imageUri != null) repo.uploadAttachment(taskId, imageUri)
+            repo.updateStatus(taskId, assignmentId, TaskStatus.COMPLETED.key)
+            load(taskId)
+        }.onFailure { _state.update { it.copy(loading = false) } }
     }
 }
-data class TaskDetailUiState(val task: Task? = null)
+
+data class TaskDetailUiState(
+    val task: Task? = null,
+    val currentUserId: String? = null,
+    val loading: Boolean = false,
+    val error: Boolean = false,
+)
 
 @HiltViewModel
 class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) : ViewModel() {
@@ -76,9 +114,7 @@ class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) 
             } else {
                 val now = nowZoned()
                 var deadline = ZonedDateTime.of(v, zone)
-                if (!deadline.isAfter(now)) {
-                    deadline = now.plusHours(1)
-                }
+                if (!deadline.isAfter(now)) deadline = now.plusHours(1)
                 val dt = deadline.toLocalDateTime()
                 current.copy(
                     deadlineDateTime = dt,
@@ -94,7 +130,7 @@ class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) 
         it.copy(selectedIds = ids)
     }
 
-    fun create() = viewModelScope.launch {
+    fun create(imageUri: Uri?) = viewModelScope.launch {
         _state.update { it.copy(loading = true) }
         val now = nowZoned()
         val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME
@@ -105,7 +141,7 @@ class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) 
             now.plusHours(hours).format(fmt)
         }
         runCatching {
-            repo.createTask(
+            val task = repo.createTask(
                 title = _state.value.title,
                 description = _state.value.description.ifBlank { null },
                 priority = "medium",
@@ -113,8 +149,15 @@ class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) 
                 startAt = now.format(fmt),
                 deadlineAt = deadlineAt,
             )
+            if (imageUri != null) repo.uploadAttachment(task.id, imageUri)
             _state.update { it.copy(loading = false, created = true) }
         }.onFailure { _state.update { it.copy(loading = false) } }
+    }
+
+    fun preselectAssignees(ids: Set<String>) {
+        _state.update {
+            CreateTaskUiState(contacts = it.contacts, selectedIds = ids).withSyncedDeadline(zone)
+        }
     }
 
     fun resetForm() {
@@ -124,15 +167,13 @@ class CreateTaskViewModel @Inject constructor(private val repo: TaskRepository) 
     }
 
     private fun nowZoned(): ZonedDateTime = ZonedDateTime.now(zone)
-
-    private fun deadlineFromHours(hours: Long): LocalDateTime =
-        nowZoned().plusHours(hours).toLocalDateTime()
-
+    private fun deadlineFromHours(hours: Long): LocalDateTime = nowZoned().plusHours(hours).toLocalDateTime()
     private fun hoursUntil(deadline: ZonedDateTime): Long {
         val minutes = java.time.Duration.between(nowZoned(), deadline).toMinutes()
         return ((minutes + 59) / 60).coerceAtLeast(1)
     }
 }
+
 data class CreateTaskUiState(
     val title: String = "",
     val description: String = "",

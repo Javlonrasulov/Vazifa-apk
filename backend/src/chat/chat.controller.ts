@@ -10,7 +10,6 @@ import {
   UploadedFile,
 } from '@nestjs/common';
 import { FileInterceptor } from '@nestjs/platform-express';
-import { ApiBearerAuth, ApiTags } from '@nestjs/swagger';
 import { AuthGuard } from '@nestjs/passport';
 import { diskStorage } from 'multer';
 import { extname } from 'path';
@@ -22,8 +21,6 @@ import { NotificationsGuard } from '../common/guards/notifications.guard';
 import { UserRole } from '../common/enums';
 import { User } from '../users/entities/user.entity';
 
-@ApiTags('chat')
-@ApiBearerAuth()
 @UseGuards(AuthGuard('jwt'), NotificationsGuard, RolesGuard)
 @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
 @Controller('chat')

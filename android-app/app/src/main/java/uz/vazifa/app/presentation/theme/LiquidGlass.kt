@@ -26,7 +26,7 @@ import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
-val LocalVazifaDark = compositionLocalOf { true }
+val LocalVazifaDark = compositionLocalOf { false }
 
 object LiquidGlass {
     val BgDark = Color(0xFF060B18)
