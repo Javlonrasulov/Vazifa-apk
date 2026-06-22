@@ -78,6 +78,8 @@ export interface User {
   pendingDeviceId: string | null;
   notificationsEnabled: boolean;
   isActive: boolean;
+  canAccessAdminPanel: boolean;
+  adminPermissions: string[] | null;
   createdAt: string;
 }
 
@@ -105,11 +107,12 @@ export async function createUser(body: {
   login: string;
   password: string;
   fullName: string;
-  role: 'director' | 'employee';
+  role: 'admin' | 'director' | 'employee';
   canAssignTasks?: boolean;
   position?: string;
   department?: string;
   phone?: string;
+  adminPermissions?: string[];
 }) {
   const { data } = await api.post('/users', body);
   return data;
@@ -117,7 +120,7 @@ export async function createUser(body: {
 
 export async function updateUser(
   id: string,
-  body: Partial<User> & { login?: string; password?: string },
+  body: Partial<User> & { login?: string; password?: string; canAccessAdminPanel?: boolean },
 ) {
   const { data } = await api.patch(`/users/${id}`, body);
   return data;

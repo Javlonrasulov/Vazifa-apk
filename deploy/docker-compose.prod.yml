@@ -1,0 +1,22 @@
+# Faqat PostgreSQL — serverda alohida DB (boshqa loyihalar 5432 ni band qilgan bo'lishi mumkin)
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vazifa-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: vazifa
+      POSTGRES_PASSWORD: ${DB_PASSWORD:-vazifa_prod_change_me}
+      POSTGRES_DB: vazifa
+    ports:
+      - "127.0.0.1:5433:5432"
+    volumes:
+      - vazifa_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U vazifa"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  vazifa_pgdata:

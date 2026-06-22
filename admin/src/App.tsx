@@ -1,6 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import LoginPage from './pages/LoginPage';
 import EmployeesPage from './pages/EmployeesPage';
+import SystemUsersPage from './pages/SystemUsersPage';
 import Layout from './components/Layout';
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
@@ -24,6 +25,7 @@ export default function App() {
         >
           <Route index element={<Navigate to="/employees" replace />} />
           <Route path="employees" element={<EmployeesPage />} />
+          <Route path="system-users" element={<SystemUsersPage />} />
         </Route>
       </Routes>
     </BrowserRouter>

@@ -1,0 +1,17 @@
+[Unit]
+Description=Lider Vazifa API (NestJS)
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+User=www-data
+Group=www-data
+WorkingDirectory=/var/www/vazifa/backend
+EnvironmentFile=/var/www/vazifa/backend/.env
+ExecStart=/usr/bin/node dist/main.js
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target

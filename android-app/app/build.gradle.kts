@@ -23,8 +23,15 @@ android {
         val localProperties = Properties()
         val localFile = rootProject.file("local.properties")
         if (localFile.exists()) localProperties.load(localFile.inputStream())
+        val apiScheme = localProperties.getProperty("api.scheme", "http")
         val apiHost = localProperties.getProperty("api.host", "10.0.2.2")
-        buildConfigField("String", "API_BASE_URL", "\"http://$apiHost:3000/api/v1/\"")
+        val apiPort = localProperties.getProperty("api.port", "3000").trim()
+        val apiBase = if (apiPort.isEmpty()) {
+            "$apiScheme://$apiHost/api/v1/"
+        } else {
+            "$apiScheme://$apiHost:$apiPort/api/v1/"
+        }
+        buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
     }
 
     buildFeatures {

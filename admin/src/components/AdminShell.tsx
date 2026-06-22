@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
-import { ChevronLeft, ClipboardList, LogOut, Menu, Moon, Sun, Users, X } from 'lucide-react';
+import { NavLink, useLocation, useNavigate } from 'react-router-dom';
+import { ChevronLeft, ClipboardList, LogOut, Menu, Moon, Shield, Sun, Users, X } from 'lucide-react';
 import { logout } from '../api';
 import { useAppSettings } from '../i18n/LanguageContext';
 import type { AdminTheme } from '../theme/adminTheme';
@@ -17,6 +17,11 @@ export function AdminSidebar({ theme, collapsed, setCollapsed, open, setOpen }: 
   const { t } = useAppSettings();
   const { D, sidebar, divider, sub } = theme;
 
+  const navItems = [
+    { to: '/employees', icon: Users, label: t('employeesTitle') },
+    { to: '/system-users', icon: Shield, label: t('systemUsersTitle') },
+  ];
+
   const SidebarContent = ({ mobile = false }: { mobile?: boolean }) => (
     <div className="flex flex-col h-full">
       <div className={`flex items-center gap-3 px-4 py-5 ${collapsed && !mobile ? 'justify-center' : ''}`}>
@@ -32,15 +37,27 @@ export function AdminSidebar({ theme, collapsed, setCollapsed, open, setOpen }: 
       </div>
 
       <nav className="flex-1 px-3 space-y-0.5">
-        <button
-          type="button"
-          className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
-            collapsed && !mobile ? 'justify-center px-2' : ''
-          } bg-indigo-600 text-white shadow-lg shadow-indigo-900/40`}
-        >
-          <Users size={17} className="flex-shrink-0" />
-          {(!collapsed || mobile) && <span>{t('employeesTitle')}</span>}
-        </button>
+        {navItems.map(({ to, icon: Icon, label }) => (
+          <NavLink
+            key={to}
+            to={to}
+            onClick={() => mobile && setOpen(false)}
+            className={({ isActive }) =>
+              `w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${
+                collapsed && !mobile ? 'justify-center px-2' : ''
+              } ${
+                isActive
+                  ? 'bg-indigo-600 text-white shadow-lg shadow-indigo-900/40'
+                  : D
+                    ? `${sub} hover:bg-gray-800 hover:text-white`
+                    : `${sub} hover:bg-gray-100 hover:text-gray-900`
+              }`
+            }
+          >
+            <Icon size={17} className="flex-shrink-0" />
+            {(!collapsed || mobile) && <span>{label}</span>}
+          </NavLink>
+        ))}
       </nav>
 
       {!mobile && (
@@ -97,10 +114,17 @@ export function AdminNavbar({
   onMenuClick: () => void;
 }) {
   const navigate = useNavigate();
+  const location = useLocation();
   const { t, lang, setLang, langs, isDark, toggleTheme } = useAppSettings();
   const { D, navbar, sub, text } = theme;
   const [showLang, setShowLang] = useState(false);
   const currentLang = langs.find((l) => l.id === lang)!;
+
+  const pageMeta: Record<string, { title: string; desc: string }> = {
+    '/employees': { title: t('employeesTitle'), desc: t('employeesDesc') },
+    '/system-users': { title: t('systemUsersTitle'), desc: t('systemUsersDesc') },
+  };
+  const currentPage = pageMeta[location.pathname] ?? pageMeta['/employees'];
 
   const handleLogout = () => {
     logout();
@@ -121,8 +145,8 @@ export function AdminNavbar({
         </button>
 
         <div className="flex-1 min-w-0">
-          <h1 className={`font-bold text-lg truncate ${text}`}>{t('employeesTitle')}</h1>
-          <p className={`text-sm ${sub} truncate`}>{t('employeesDesc')}</p>
+          <h1 className={`font-bold text-lg truncate ${text}`}>{currentPage.title}</h1>
+          <p className={`text-sm ${sub} truncate`}>{currentPage.desc}</p>
         </div>
 
         <div className="flex items-center gap-2">

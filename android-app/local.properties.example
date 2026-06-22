@@ -1,1 +1,9 @@
+# Emulator
+api.scheme=http
 api.host=10.0.2.2
+api.port=3000
+
+# Production server (APK yig'ishda)
+# api.scheme=https
+# api.host=vazifa.liderplast.uz
+# api.port=

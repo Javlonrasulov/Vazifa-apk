@@ -58,6 +58,12 @@ export class User {
   @Column({ default: true })
   isActive: boolean;
 
+  @Column({ default: false })
+  canAccessAdminPanel: boolean;
+
+  @Column({ type: 'simple-json', nullable: true })
+  adminPermissions: string[] | null;
+
   @CreateDateColumn()
   createdAt: Date;
 

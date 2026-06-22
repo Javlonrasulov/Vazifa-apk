@@ -24,6 +24,8 @@ import { AuditLog } from '../audit/entities/audit-log.entity';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
+  static readonly DEFAULT_ADMIN_PERMISSIONS = ['employees', 'system_users'];
+
   constructor(
     @InjectRepository(User)
     private repo: Repository<User>,
@@ -34,10 +36,15 @@ export class UsersService implements OnModuleInit {
   ) {}
 
   async onModuleInit() {
-    const users = await this.repo.find({ select: ['position', 'department'] });
+    const users = await this.repo.find({ select: ['id', 'role', 'position', 'department', 'adminPermissions'] });
     for (const user of users) {
       await this.rememberFieldOption('position', user.position);
       await this.rememberFieldOption('department', user.department);
+      if (user.role === UserRole.ADMIN && !user.adminPermissions?.length) {
+        user.adminPermissions = UsersService.DEFAULT_ADMIN_PERMISSIONS;
+        user.canAccessAdminPanel = true;
+        await this.repo.save(user);
+      }
     }
   }
 
@@ -127,17 +134,31 @@ export class UsersService implements OnModuleInit {
     }
   }
 
+  private async countActiveAdmins(excludeId?: string) {
+    const admins = await this.repo.find({
+      where: { role: UserRole.ADMIN, isActive: true },
+      select: ['id'],
+    });
+    return excludeId ? admins.filter((a) => a.id !== excludeId).length : admins.length;
+  }
+
   async create(dto: CreateUserDto, actorId?: string) {
     const login = dto.login.toLowerCase().trim();
     const exists = await this.findByLogin(login);
-    if (exists) throw new ConflictException('Login band');
+    if (exists) {
+      if (dto.role === UserRole.ADMIN) {
+        if (exists.role === UserRole.ADMIN || exists.canAccessAdminPanel) {
+          throw new ConflictException('Login band');
+        }
+        return this.grantAdminPanelAccess(exists, dto, actorId);
+      }
+      throw new ConflictException('Login band');
+    }
 
     await this.assertUniqueFullName(dto.fullName);
     await this.assertUniquePhone(dto.phone);
 
-    if (dto.role === UserRole.ADMIN) {
-      throw new BadRequestException('Admin faqat seed orqali yaratiladi');
-    }
+    const isAdmin = dto.role === UserRole.ADMIN;
 
     const user = this.repo.create({
       login,
@@ -145,9 +166,15 @@ export class UsersService implements OnModuleInit {
       fullName: dto.fullName.trim(),
       role: dto.role,
       canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
-      position: dto.position ?? null,
-      department: dto.department ?? null,
-      phone: dto.phone ?? null,
+      position: isAdmin ? null : (dto.position ?? null),
+      department: isAdmin ? null : (dto.department ?? null),
+      phone: isAdmin ? null : (dto.phone ?? null),
+      canAccessAdminPanel: isAdmin,
+      adminPermissions: isAdmin
+        ? (dto.adminPermissions?.length
+            ? dto.adminPermissions
+            : UsersService.DEFAULT_ADMIN_PERMISSIONS)
+        : null,
     });
     const saved = await this.repo.save(user);
     await this.rememberFieldOption('position', saved.position);
@@ -155,6 +182,22 @@ export class UsersService implements OnModuleInit {
     await this.audit.log(actorId ?? null, AuditAction.USER_CREATED, 'user', saved.id, {
       login: saved.login,
       role: saved.role,
+    });
+    return this.sanitize(saved);
+  }
+
+  private async grantAdminPanelAccess(user: User, dto: CreateUserDto, actorId?: string) {
+    user.canAccessAdminPanel = true;
+    user.adminPermissions = dto.adminPermissions?.length
+      ? dto.adminPermissions
+      : UsersService.DEFAULT_ADMIN_PERMISSIONS;
+    if (dto.password?.trim()) {
+      user.passwordHash = await bcrypt.hash(dto.password.trim(), 10);
+    }
+    const saved = await this.repo.save(user);
+    await this.audit.log(actorId ?? null, AuditAction.USER_UPDATED, 'user', saved.id, {
+      action: 'admin_panel_access_granted',
+      login: saved.login,
     });
     return this.sanitize(saved);
   }
@@ -176,7 +219,15 @@ export class UsersService implements OnModuleInit {
       await this.assertUniqueFullName(dto.fullName, id);
       user.fullName = dto.fullName.trim();
     }
-    if (dto.role !== undefined) user.role = dto.role;
+    if (dto.role !== undefined) {
+      if (user.role === UserRole.ADMIN && dto.role !== UserRole.ADMIN) {
+        const adminCount = await this.countActiveAdmins(id);
+        if (adminCount === 0) {
+          throw new BadRequestException('Oxirgi admin roli o\'zgartirilmaydi');
+        }
+      }
+      user.role = dto.role;
+    }
     if (dto.canAssignTasks !== undefined) user.canAssignTasks = dto.canAssignTasks;
     if (dto.position !== undefined) user.position = dto.position;
     if (dto.department !== undefined) user.department = dto.department;
@@ -184,7 +235,29 @@ export class UsersService implements OnModuleInit {
       await this.assertUniquePhone(dto.phone, id);
       user.phone = dto.phone;
     }
-    if (dto.isActive !== undefined) user.isActive = dto.isActive;
+    if (dto.isActive !== undefined) {
+      if (user.role === UserRole.ADMIN && !dto.isActive) {
+        const adminCount = await this.countActiveAdmins(id);
+        if (adminCount === 0) {
+          throw new BadRequestException('Oxirgi admin o\'chirilmaydi');
+        }
+      }
+      user.isActive = dto.isActive;
+    }
+    if (dto.adminPermissions !== undefined) {
+      user.adminPermissions =
+        user.role === UserRole.ADMIN || user.canAccessAdminPanel
+          ? dto.adminPermissions.length
+            ? dto.adminPermissions
+            : UsersService.DEFAULT_ADMIN_PERMISSIONS
+          : null;
+    }
+    if (dto.canAccessAdminPanel !== undefined) {
+      user.canAccessAdminPanel = dto.canAccessAdminPanel;
+      if (!dto.canAccessAdminPanel) {
+        user.adminPermissions = null;
+      }
+    }
     const saved = await this.repo.save(user);
     await this.rememberFieldOption('position', saved.position);
     await this.rememberFieldOption('department', saved.department);
@@ -205,7 +278,10 @@ export class UsersService implements OnModuleInit {
   async delete(id: string, actorId?: string) {
     const user = await this.findById(id);
     if (user.role === UserRole.ADMIN) {
-      throw new BadRequestException('Admin o\'chirilmaydi');
+      const adminCount = await this.countActiveAdmins();
+      if (adminCount <= 1) {
+        throw new BadRequestException('Oxirgi admin o\'chirilmaydi');
+      }
     }
 
     await this.dataSource.transaction(async (manager) => {

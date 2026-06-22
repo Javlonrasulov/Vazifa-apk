@@ -1,4 +1,4 @@
-import { IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { UserRole } from '../../common/enums';
 
@@ -86,6 +86,12 @@ export class CreateUserDto {
   @IsOptional()
   @IsBoolean()
   canAssignTasks?: boolean;
+
+  @ApiPropertyOptional({ description: 'Admin panel sahifalariga ruxsatlar', type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  adminPermissions?: string[];
 }
 
 export class UpdateUserDto {
@@ -133,6 +139,17 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   canAssignTasks?: boolean;
+
+  @ApiPropertyOptional({ type: [String] })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  adminPermissions?: string[];
+
+  @ApiPropertyOptional()
+  @IsOptional()
+  @IsBoolean()
+  canAccessAdminPanel?: boolean;
 }
 
 export class ResetPasswordDto {
