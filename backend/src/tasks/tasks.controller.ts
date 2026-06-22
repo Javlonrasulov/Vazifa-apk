@@ -3,19 +3,22 @@ import {
   Controller,
   ForbiddenException,
   Get,
+  NotFoundException,
   Param,
   Patch,
   Post,
   Delete,
+  StreamableFile,
   UseGuards,
   Request,
   UseInterceptors,
   UploadedFile,
 } from '@nestjs/common';
+import { createReadStream, existsSync } from 'fs';
 import { FileInterceptor } from '@nestjs/platform-express';
 import { AuthGuard } from '@nestjs/passport';
 import { diskStorage } from 'multer';
-import { extname, join } from 'path';
+import { extname, isAbsolute, join } from 'path';
 import { v4 as uuid } from 'uuid';
 import { TasksService } from './tasks.service';
 import {
@@ -53,6 +56,23 @@ export class TasksController {
   dashboardStats(@Request() req: { user: User }) {
     if (!req.user.canAssignTasks) throw new ForbiddenException();
     return this.tasksService.getDashboardStats();
+  }
+
+  @Get('attachments/:attachmentId/file')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  async downloadAttachment(
+    @Param('attachmentId') attachmentId: string,
+    @Request() req: { user: User },
+  ) {
+    const att = await this.tasksService.getAttachmentFile(attachmentId, req.user);
+    const storedPath = att.filePath.replace(/\\/g, '/');
+    const fullPath = isAbsolute(storedPath) ? storedPath : join(process.cwd(), storedPath);
+    if (!existsSync(fullPath)) throw new NotFoundException('Fayl topilmadi');
+    return new StreamableFile(createReadStream(fullPath), {
+      type: att.mimeType,
+      disposition: `inline; filename="${att.fileName.replace(/"/g, '')}"`,
+    });
   }
 
   @Get(':id')

@@ -113,7 +113,7 @@ class TaskRepository @Inject constructor(
 
     private fun TaskAttachmentDto.toDomain() = TaskAttachment(
         id, fileName, filePath, mimeType, fileSize, uploadedById,
-        MediaUrl.resolve(filePath, url),
+        MediaUrl.attachmentApiUrl(id),
     )
 
     private fun TaskCommentDto.toDomain() = TaskComment(

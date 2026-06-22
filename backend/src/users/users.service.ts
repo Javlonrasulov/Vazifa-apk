@@ -83,6 +83,20 @@ export class UsersService implements OnModuleInit {
     return rows.map((r) => r.name);
   }
 
+  async getMobileDepartmentOptions(): Promise<string[]> {
+    const users = await this.repo.find({
+      where: { role: UserRole.EMPLOYEE, isActive: true },
+      select: ['department'],
+    });
+    return [
+      ...new Set(
+        users
+          .map((u) => u.department?.trim())
+          .filter((d): d is string => !!d),
+      ),
+    ].sort((a, b) => a.localeCompare(b, 'uz'));
+  }
+
   async findAll() {
     const users = await this.repo.find({ order: { createdAt: 'DESC' } });
     return users.map((u) => this.sanitize(u));

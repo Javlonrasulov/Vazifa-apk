@@ -9,36 +9,34 @@ import java.io.File
 import java.io.FileOutputStream
 
 object MediaUrl {
+    fun attachmentApiUrl(attachmentId: String): String {
+        val base = BuildConfig.API_BASE_URL.removeSuffix("/")
+        return "$base/tasks/attachments/$attachmentId/file"
+    }
+
     fun resolve(filePath: String, serverUrl: String? = null): String {
-        serverUrl?.trim()?.takeIf { it.isNotEmpty() }?.let { url ->
-            if (url.startsWith("http://") || url.startsWith("https://")) return url
-            val base = BuildConfig.API_BASE_URL
-                .removeSuffix("/api/v1/")
-                .removeSuffix("/api/v1")
-                .removeSuffix("/")
-            if (url.startsWith("/")) return "$base$url"
-            return "$base/$url"
-        }
+        extractUploadPath(serverUrl)?.let { return "${apiOrigin()}$it" }
         return fromFilePath(filePath)
     }
 
     fun fromFilePath(filePath: String): String {
-        val base = BuildConfig.API_BASE_URL
-            .removeSuffix("/api/v1/")
-            .removeSuffix("/api/v1")
-            .removeSuffix("/")
-        val normalized = filePath.replace('\\', '/').trim()
-        if (normalized.startsWith("http://") || normalized.startsWith("https://")) {
-            return normalized
-        }
-        if (normalized.startsWith("/uploads/")) {
-            return "$base$normalized"
-        }
-        if (normalized.startsWith("uploads/")) {
-            return "$base/$normalized"
-        }
-        val fileName = normalized.substringAfterLast('/')
-        return "$base/uploads/$fileName"
+        extractUploadPath(filePath)?.let { return "${apiOrigin()}$it" }
+        val fileName = filePath.replace('\\', '/').substringAfterLast('/')
+        return "${apiOrigin()}/uploads/$fileName"
+    }
+
+    private fun apiOrigin(): String = BuildConfig.API_BASE_URL
+        .removeSuffix("/api/v1/")
+        .removeSuffix("/api/v1")
+        .removeSuffix("/")
+
+    private fun extractUploadPath(raw: String?): String? {
+        if (raw.isNullOrBlank()) return null
+        val normalized = raw.replace('\\', '/').trim()
+        val idx = normalized.indexOf("/uploads/")
+        if (idx >= 0) return normalized.substring(idx)
+        if (normalized.startsWith("uploads/")) return "/$normalized"
+        return null
     }
 }
 

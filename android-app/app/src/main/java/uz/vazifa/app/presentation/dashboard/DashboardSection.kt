@@ -146,11 +146,8 @@ class DashboardSectionViewModel @Inject constructor(
                             .filter { it.role == "employee" && it.login != "xodim1" }
                             .sortedBy { it.fullName }
                         val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
-                        val departments = (apiDepartments + employees.mapNotNull { it.department?.takeIf(String::isNotBlank) })
-                            .distinct()
-                            .sorted()
                         _state.update {
-                            it.copy(employees = employees, departments = departments, loading = false)
+                            it.copy(employees = employees, departments = apiDepartments, loading = false)
                         }
                     }
                     else -> {
@@ -220,11 +217,8 @@ class EmployeesTabViewModel @Inject constructor(
                     .filter { it.role == "employee" && it.login != "xodim1" }
                     .sortedBy { it.fullName }
                 val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
-                val departments = (apiDepartments + employees.mapNotNull { it.department?.takeIf(String::isNotBlank) })
-                    .distinct()
-                    .sorted()
                 _state.update {
-                    it.copy(employees = employees, departments = departments, loading = false)
+                    it.copy(employees = employees, departments = apiDepartments, loading = false)
                 }
             }.onFailure {
                 _state.update { it.copy(loading = false) }
@@ -707,7 +701,7 @@ private fun EmployeeDepartmentTitle(
     onDepartmentSelected: (String?) -> Unit,
 ) {
     var expanded by remember { mutableStateOf(false) }
-    val filterLabel = selectedDepartment ?: localized("emp_select_all")
+    val filterLabel = selectedDepartment ?: localized("emp_all_departments")
 
     Row(
         verticalAlignment = Alignment.CenterVertically,
@@ -740,7 +734,7 @@ private fun EmployeeDepartmentTitle(
                     modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
                 )
                 LiquidGlassDropdownItem(
-                    text = "${localized("emp_select_all")} ($totalCount)",
+                    text = "${localized("emp_all_departments")} ($totalCount)",
                     selected = selectedDepartment == null,
                     onClick = {
                         onDepartmentSelected(null)

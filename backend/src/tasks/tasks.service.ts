@@ -236,7 +236,14 @@ export class TasksService {
     });
     const saved = await this.attachRepo.save(att);
     await this.audit.log(user.id, AuditAction.FILE_UPLOADED, 'task', taskId);
-    return saved;
+    return this.attachRepo.findOne({ where: { id: saved.id } });
+  }
+
+  async getAttachmentFile(attachmentId: string, user: User) {
+    const att = await this.attachRepo.findOne({ where: { id: attachmentId } });
+    if (!att) throw new NotFoundException('Fayl topilmadi');
+    await this.findOne(att.taskId, user);
+    return att;
   }
 
   async getOverdueAssignments() {

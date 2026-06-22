@@ -31,6 +31,8 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -74,7 +76,9 @@ fun VazifaBottomNav(
     val isDark = LiquidTheme.isDark
     val inactiveTint = if (isDark) LiquidTheme.textMuted else LiquidGlass.TextDarkMuted
 
-    Box(modifier.fillMaxWidth().height(BottomNavHeight).padding(horizontal = 20.dp, vertical = 8.dp)) {
+    val compact = tabs.size >= 5
+
+    Box(modifier.fillMaxWidth().height(BottomNavHeight).padding(horizontal = 10.dp, vertical = 8.dp)) {
         Box(
             Modifier
                 .fillMaxWidth()
@@ -106,8 +110,8 @@ fun VazifaBottomNav(
                             Modifier.liquidGlassThemed(radius = LiquidGlass.RadiusChip)
                         },
                     )
-                    .padding(horizontal = 4.dp),
-                horizontalArrangement = Arrangement.SpaceAround,
+                    .padding(horizontal = 2.dp),
+                horizontalArrangement = Arrangement.SpaceEvenly,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 tabs.forEach { (tab, icon, label) ->
@@ -116,6 +120,7 @@ fun VazifaBottomNav(
                         label = label,
                         active = selected == tab,
                         inactiveTint = inactiveTint,
+                        compact = compact,
                         onClick = { onSelect(tab) },
                         modifier = Modifier.weight(1f),
                     )
@@ -131,9 +136,17 @@ private fun BottomNavItem(
     label: String,
     active: Boolean,
     inactiveTint: Color,
+    compact: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
+    val displayLabel = if (compact && label.contains(' ')) {
+        label.replace(' ', '\n')
+    } else {
+        label
+    }
+    val labelSize = if (compact) 8.5.sp else 10.sp
+    val labelLineHeight = if (compact) 10.sp else 12.sp
     val interactionSource = remember { MutableInteractionSource() }
     val pressed by interactionSource.collectIsPressedAsState()
 
@@ -182,10 +195,10 @@ private fun BottomNavItem(
                 indication = ripple(bounded = false, radius = 28.dp),
                 onClick = onClick,
             )
-            .padding(vertical = 4.dp),
+            .padding(vertical = 2.dp, horizontal = 1.dp),
     ) {
         Box(
-            Modifier.size(36.dp),
+            Modifier.size(if (compact) 32.dp else 36.dp),
             contentAlignment = Alignment.Center,
         ) {
             if (glowAlpha > 0.01f) {
@@ -228,15 +241,20 @@ private fun BottomNavItem(
                     .size(20.dp),
             )
         }
-        Spacer(Modifier.height(2.dp))
+        Spacer(Modifier.height(1.dp))
         Text(
-            label,
-            fontSize = 10.sp,
-            lineHeight = 12.sp,
-            maxLines = 1,
+            displayLabel,
+            fontSize = labelSize,
+            lineHeight = labelLineHeight,
+            maxLines = 2,
+            softWrap = true,
+            textAlign = TextAlign.Center,
+            overflow = TextOverflow.Clip,
             color = labelColor,
             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-            modifier = Modifier.alpha(labelAlpha),
+            modifier = Modifier
+                .fillMaxWidth()
+                .alpha(labelAlpha),
         )
     }
 }

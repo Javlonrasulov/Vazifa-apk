@@ -50,9 +50,6 @@ export class TaskAttachment {
   @AfterLoad()
   setPublicUrl() {
     const fileName = basename(this.filePath.replace(/\\/g, '/'));
-    const base = (process.env.PUBLIC_API_URL || '').replace(/\/$/, '');
-    this.url = base
-      ? `${base}/uploads/${fileName}`
-      : `/uploads/${fileName}`;
+    this.url = `/uploads/${fileName}`;
   }
 }
