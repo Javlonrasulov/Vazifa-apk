@@ -10,6 +10,10 @@ import androidx.datastore.preferences.preferencesDataStore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
 import dagger.hilt.android.qualifiers.ApplicationContext
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.flow.first
@@ -37,6 +41,7 @@ class AuthRepository @Inject constructor(
 ) {
     private val gson = Gson()
     private val refreshMutex = Mutex()
+    private val bgScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     private val KEY_ACCESS = stringPreferencesKey("access_token")
     private val KEY_REFRESH = stringPreferencesKey("refresh_token")
@@ -120,13 +125,23 @@ class AuthRepository @Inject constructor(
         runCatching { updateFcm(resolved, true) }
     }
 
-    /** Bildirishnomalar yoqilgan va internet orqali token yangilangan bo'lsa asosiy ekranga kirish mumkin. */
+    /** Tokenni fonda ro'yxatdan o'tkazadi — ilovaga kirishni kechiktirmaydi. */
+    fun registerPushTokenAsync() {
+        bgScope.launch { runCatching { registerPushToken() } }
+    }
+
+    /**
+     * Bildirishnomalar yoqilgan bo'lsa asosiy ekranga kirishga ruxsat beradi.
+     * Token (push) fonda ro'yxatdan o'tkaziladi — internet yoki Firebase
+     * vaqtincha tayyor bo'lmasa ham foydalanuvchi ilovaga kira oladi.
+     */
     suspend fun shouldSkipNotifGate(): Boolean {
         if (!areNotificationsEnabled()) {
             setNotifRegistered(false)
             return false
         }
-        return registerPushToken()
+        registerPushTokenAsync()
+        return true
     }
 
     suspend fun login(login: String, password: String, deviceId: String): UserDto {

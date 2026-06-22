@@ -49,17 +49,9 @@ fun NotificationGateScreen(
             statusMessage = msgStillOff
             return
         }
-        checking = true
-        statusMessage = msgLoading
-        scope.launch {
-            val ok = runCatching { authRepository.registerPushToken() }.getOrDefault(false)
-            if (ok) {
-                onGranted()
-            } else {
-                statusMessage = msgFcmError
-            }
-            checking = false
-        }
+        // Bildirishnoma yoqilgan — darhol kiramiz, token fonda ro'yxatdan o'tadi.
+        authRepository.registerPushTokenAsync()
+        onGranted()
     }
 
     LaunchedEffect(Unit) { checkAndProceed() }
