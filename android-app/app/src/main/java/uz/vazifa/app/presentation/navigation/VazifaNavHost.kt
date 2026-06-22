@@ -27,6 +27,7 @@ import uz.vazifa.app.presentation.auth.LoginScreen
 import uz.vazifa.app.presentation.dashboard.DirectorDashboardScreen
 import uz.vazifa.app.presentation.dashboard.DashboardSection
 import uz.vazifa.app.presentation.dashboard.DashboardSectionScreen
+import uz.vazifa.app.presentation.dashboard.EmployeesTabScreen
 import uz.vazifa.app.presentation.dashboard.EmployeeDetailScreen
 import uz.vazifa.app.presentation.notifications.NotificationGateScreen
 import uz.vazifa.app.presentation.profile.ProfileScreen
@@ -208,7 +209,24 @@ fun VazifaNavHost(
                             onCreateTask = { selectedTab = AppTab.CREATE },
                             onEditTask = { navController.navigate(Routes.editTask(it)) },
                             onSectionClick = { section ->
-                                navController.navigate(Routes.dashSection(section.route))
+                                when (section) {
+                                    DashboardSection.EMPLOYEES -> selectedTab = AppTab.EMPLOYEES
+                                    else -> navController.navigate(Routes.dashSection(section.route))
+                                }
+                            },
+                        )
+                    } else {
+                        TasksScreen(
+                            onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                            onEditTask = { navController.navigate(Routes.editTask(it)) },
+                        )
+                    }
+                    AppTab.EMPLOYEES -> if (isDirector) {
+                        EmployeesTabScreen(
+                            onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
+                            onAssignTask = { ids ->
+                                preselectedAssigneeIds = ids
+                                selectedTab = AppTab.CREATE
                             },
                         )
                     } else {

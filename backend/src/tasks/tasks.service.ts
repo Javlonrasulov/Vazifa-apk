@@ -24,6 +24,11 @@ import { parseTashkent, nowTashkent } from '../common/utils/time';
 import { userCanAssignTasks } from '../common/utils/user-permissions';
 import { compressImageIfNeeded } from '../common/utils/image';
 import { UsersService } from '../users/users.service';
+import {
+  newTaskText,
+  taskCompletedText,
+  taskStatusText,
+} from '../notifications/push-i18n';
 
 @Injectable()
 export class TasksService {
@@ -68,11 +73,18 @@ export class TasksService {
     const assignees = await Promise.all(
       assigneeIds.map((id) => this.usersService.findById(id)),
     );
-    await this.notifications.sendToMany(
-      assignees.filter((a) => a.notificationsEnabled).map((a) => a.fcmToken ?? ''),
-      'Yangi vazifa',
-      `"${saved.title}" — sizga topshirildi`,
-      { taskId: saved.id, type: 'task_new' },
+    await Promise.all(
+      assignees
+        .filter((a) => a.notificationsEnabled && a.fcmToken)
+        .map((a) => {
+          const text = newTaskText(saved.title, a.language);
+          return this.notifications.sendToToken(
+            a.fcmToken as string,
+            text.title,
+            text.body,
+            { taskId: saved.id, type: 'task_new' },
+          );
+        }),
     );
 
     return this.findOne(saved.id, creator);
@@ -141,19 +153,6 @@ export class TasksService {
     return this.update(id, { status: TaskStatus.CANCELLED }, user);
   }
 
-  private statusLabel(status: TaskStatus): string {
-    const labels: Record<TaskStatus, string> = {
-      [TaskStatus.NEW]: 'yangi',
-      [TaskStatus.ACCEPTED]: 'qabul qilindi',
-      [TaskStatus.IN_PROGRESS]: 'jarayonda',
-      [TaskStatus.IN_REVIEW]: 'tekshiruvda',
-      [TaskStatus.COMPLETED]: 'bajarildi',
-      [TaskStatus.REWORK]: 'qayta ishlash',
-      [TaskStatus.CANCELLED]: 'bekor qilindi',
-    };
-    return labels[status] ?? status;
-  }
-
   async updateAssignmentStatus(
     taskId: string,
     assignmentId: string,
@@ -187,15 +186,19 @@ export class TasksService {
       const director = await this.usersService.findById(assignment.task.createdById);
       if (director.notificationsEnabled && director.fcmToken) {
         const employeeName = assignment.assignee?.fullName ?? 'Xodim';
-        const isCompleted = dto.status === TaskStatus.COMPLETED;
-        const title = isCompleted ? 'Vazifa bajarildi' : 'Vazifa holati yangilandi';
-        const body = isCompleted
-          ? `${employeeName} "${assignment.task.title}" vazifasini bajardi`
-          : `${employeeName}: "${assignment.task.title}" — ${this.statusLabel(dto.status)}`;
+        const text =
+          dto.status === TaskStatus.COMPLETED
+            ? taskCompletedText(employeeName, assignment.task.title, director.language)
+            : taskStatusText(
+                employeeName,
+                assignment.task.title,
+                dto.status,
+                director.language,
+              );
         await this.notifications.sendToToken(
           director.fcmToken,
-          title,
-          body,
+          text.title,
+          text.body,
           { taskId, type: 'task_status', status: dto.status },
         );
       }

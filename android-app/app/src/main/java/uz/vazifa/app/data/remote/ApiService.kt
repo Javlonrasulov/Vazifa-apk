@@ -21,7 +21,11 @@ data class UserDto(
     val phone: String? = null,
     val notificationsEnabled: Boolean = true,
 )
-data class FcmRequest(val fcmToken: String, val notificationsEnabled: Boolean)
+data class FcmRequest(
+    val fcmToken: String,
+    val notificationsEnabled: Boolean,
+    val language: String? = null,
+)
 data class ChangePasswordRequest(val currentPassword: String, val newPassword: String)
 data class CreateTaskRequest(
     val title: String,

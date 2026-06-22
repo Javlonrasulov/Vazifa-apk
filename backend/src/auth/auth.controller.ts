@@ -43,7 +43,12 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Post('fcm')
   updateFcm(@Request() req: { user: User }, @Body() dto: UpdateFcmDto) {
-    return this.authService.updateFcm(req.user.id, dto.fcmToken, dto.notificationsEnabled);
+    return this.authService.updateFcm(
+      req.user.id,
+      dto.fcmToken,
+      dto.notificationsEnabled,
+      dto.language,
+    );
   }
 
   @UseGuards(AuthGuard('jwt'))

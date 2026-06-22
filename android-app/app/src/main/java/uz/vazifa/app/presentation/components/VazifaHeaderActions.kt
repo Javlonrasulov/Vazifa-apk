@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AppSettingsRepository
+import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.ThemeMode
 import uz.vazifa.app.localization.AppLanguage
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -43,12 +44,16 @@ import javax.inject.Inject
 @HiltViewModel
 class HeaderSettingsViewModel @Inject constructor(
     private val settings: AppSettingsRepository,
+    private val auth: AuthRepository,
 ) : ViewModel() {
     val themeMode = settings.themeMode.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), ThemeMode.LIGHT)
     val language = settings.language.stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), AppLanguage.DEFAULT)
 
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch { settings.setThemeMode(mode) }
-    fun setLanguage(language: AppLanguage) = viewModelScope.launch { settings.setLanguage(language) }
+    fun setLanguage(language: AppLanguage) = viewModelScope.launch {
+        settings.setLanguage(language)
+        auth.syncLanguageAsync()
+    }
 }
 
 @Composable

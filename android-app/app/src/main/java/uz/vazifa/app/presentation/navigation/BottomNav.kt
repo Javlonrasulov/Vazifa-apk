@@ -1,22 +1,29 @@
 package uz.vazifa.app.presentation.navigation
 
+import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.Icon
+import androidx.compose.material3.ripple
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.draw.scale
@@ -32,10 +39,11 @@ import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
 
-val BottomNavHeight = 84.dp
+val BottomNavHeight = 96.dp
 
 enum class AppTab(val route: String) {
     HOME("home"),
+    EMPLOYEES("employees"),
     TASKS("tasks"),
     CREATE("create"),
     PROFILE("profile"),
@@ -51,6 +59,7 @@ fun VazifaBottomNav(
     val tabs = if (isDirector) {
         listOf(
             Triple(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")),
+            Triple(AppTab.EMPLOYEES, Icons.Default.People, localized("nav_employees")),
             Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
             Triple(AppTab.CREATE, Icons.Default.Add, localized("task_create")),
             Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
@@ -65,11 +74,11 @@ fun VazifaBottomNav(
     val isDark = LiquidTheme.isDark
     val inactiveTint = if (isDark) LiquidTheme.textMuted else LiquidGlass.TextDarkMuted
 
-    Box(modifier.fillMaxWidth().height(BottomNavHeight).padding(horizontal = 20.dp, vertical = 10.dp)) {
+    Box(modifier.fillMaxWidth().height(BottomNavHeight).padding(horizontal = 20.dp, vertical = 8.dp)) {
         Box(
             Modifier
                 .fillMaxWidth()
-                .height(64.dp)
+                .height(72.dp)
                 .drawBehind {
                     if (isDark) {
                         drawCircle(
@@ -102,60 +111,133 @@ fun VazifaBottomNav(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 tabs.forEach { (tab, icon, label) ->
-                    val active = selected == tab
-                    val scale by animateFloatAsState(
-                        targetValue = if (active) 1.12f else 1f,
-                        animationSpec = spring(stiffness = Spring.StiffnessMedium, dampingRatio = Spring.DampingRatioMediumBouncy),
-                        label = "navScale",
+                    BottomNavItem(
+                        icon = icon,
+                        label = label,
+                        active = selected == tab,
+                        inactiveTint = inactiveTint,
+                        onClick = { onSelect(tab) },
+                        modifier = Modifier.weight(1f),
                     )
-                    Column(
-                        horizontalAlignment = Alignment.CenterHorizontally,
-                        modifier = Modifier
-                            .weight(1f)
-                            .clip(RoundedCornerShape(50.dp))
-                            .clickable { onSelect(tab) }
-                            .padding(vertical = 6.dp),
-                    ) {
-                        Box(contentAlignment = Alignment.Center) {
-                            if (active) {
-                                Box(
-                                    Modifier
-                                        .size(38.dp)
-                                        .scale(scale)
-                                        .clip(CircleShape)
-                                        .background(
-                                            Brush.linearGradient(
-                                                listOf(LiquidGlass.Blue, LiquidGlass.Cyan),
-                                            ),
-                                        )
-                                        .drawBehind {
-                                            drawCircle(
-                                                brush = Brush.radialGradient(
-                                                    listOf(LiquidGlass.Blue.copy(0.45f), Color.Transparent),
-                                                    radius = size.maxDimension,
-                                                ),
-                                                radius = size.maxDimension * 1.4f,
-                                            )
-                                        },
-                                )
-                            }
-                            Icon(
-                                icon,
-                                contentDescription = label,
-                                tint = if (active) Color.White else inactiveTint,
-                                modifier = Modifier.scale(if (active) 1f else scale).size(20.dp),
-                            )
-                        }
-                        Text(
-                            label,
-                            fontSize = 9.sp,
-                            color = if (active) LiquidGlass.BlueLight else inactiveTint,
-                            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
-                        )
-                    }
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun BottomNavItem(
+    icon: ImageVector,
+    label: String,
+    active: Boolean,
+    inactiveTint: Color,
+    onClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressed by interactionSource.collectIsPressedAsState()
+
+    val indicatorScale by animateFloatAsState(
+        targetValue = if (active) 1f else 0f,
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMediumLow,
+        ),
+        label = "indicatorScale",
+    )
+    val iconScale by animateFloatAsState(
+        targetValue = when {
+            pressed -> 0.88f
+            active -> 1.06f
+            else -> 1f
+        },
+        animationSpec = spring(
+            dampingRatio = Spring.DampingRatioMediumBouncy,
+            stiffness = Spring.StiffnessMedium,
+        ),
+        label = "iconScale",
+    )
+    val glowAlpha by animateFloatAsState(
+        targetValue = if (active) 0.55f else 0f,
+        animationSpec = tween(durationMillis = 320),
+        label = "glowAlpha",
+    )
+    val labelColor by animateColorAsState(
+        targetValue = if (active) LiquidGlass.Blue else inactiveTint,
+        animationSpec = tween(durationMillis = 280),
+        label = "labelColor",
+    )
+    val labelAlpha by animateFloatAsState(
+        targetValue = if (active) 1f else 0.78f,
+        animationSpec = tween(durationMillis = 280),
+        label = "labelAlpha",
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = modifier
+            .clip(RoundedCornerShape(50.dp))
+            .clickable(
+                interactionSource = interactionSource,
+                indication = ripple(bounded = false, radius = 28.dp),
+                onClick = onClick,
+            )
+            .padding(vertical = 4.dp),
+    ) {
+        Box(
+            Modifier.size(36.dp),
+            contentAlignment = Alignment.Center,
+        ) {
+            if (glowAlpha > 0.01f) {
+                Box(
+                    Modifier
+                        .size(40.dp)
+                        .scale(indicatorScale)
+                        .alpha(glowAlpha)
+                        .drawBehind {
+                            drawCircle(
+                                brush = Brush.radialGradient(
+                                    listOf(LiquidGlass.Blue.copy(alpha = 0.35f), Color.Transparent),
+                                    radius = size.minDimension * 0.55f,
+                                ),
+                                radius = size.minDimension * 0.55f,
+                            )
+                        },
+                )
+            }
+            if (indicatorScale > 0.01f) {
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .scale(indicatorScale)
+                        .alpha(indicatorScale)
+                        .clip(CircleShape)
+                        .background(
+                            Brush.linearGradient(
+                                listOf(LiquidGlass.Blue, LiquidGlass.Cyan),
+                            ),
+                        ),
+                )
+            }
+            Icon(
+                icon,
+                contentDescription = label,
+                tint = if (active) Color.White else inactiveTint,
+                modifier = Modifier
+                    .scale(iconScale)
+                    .size(20.dp),
+            )
+        }
+        Spacer(Modifier.height(2.dp))
+        Text(
+            label,
+            fontSize = 10.sp,
+            lineHeight = 12.sp,
+            maxLines = 1,
+            color = labelColor,
+            fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
+            modifier = Modifier.alpha(labelAlpha),
+        )
     }
 }
 

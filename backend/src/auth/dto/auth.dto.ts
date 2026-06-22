@@ -37,6 +37,10 @@ export class UpdateFcmDto {
 
   @IsBoolean()
   notificationsEnabled: boolean;
+
+  @IsOptional()
+  @IsString()
+  language?: string;
 }
 
 export class CreateUserDto {

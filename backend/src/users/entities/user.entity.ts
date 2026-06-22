@@ -55,6 +55,9 @@ export class User {
   @Column({ default: true })
   notificationsEnabled: boolean;
 
+  @Column({ type: 'varchar', default: 'uz_kril' })
+  language: string;
+
   @Column({ default: true })
   isActive: boolean;
 

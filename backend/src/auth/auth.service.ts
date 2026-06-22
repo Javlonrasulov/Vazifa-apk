@@ -113,10 +113,16 @@ export class AuthService {
     return { success: true };
   }
 
-  async updateFcm(userId: string, fcmToken: string, enabled: boolean) {
+  async updateFcm(
+    userId: string,
+    fcmToken: string,
+    enabled: boolean,
+    language?: string,
+  ) {
     const user = await this.usersService.findById(userId);
     user.fcmToken = fcmToken;
     user.notificationsEnabled = enabled;
+    if (language) user.language = language;
     await this.usersService.saveUser(user);
     return this.usersService.sanitize(user);
   }

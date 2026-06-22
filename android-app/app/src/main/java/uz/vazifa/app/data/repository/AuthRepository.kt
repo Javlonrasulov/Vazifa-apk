@@ -38,6 +38,7 @@ class AuthRepository @Inject constructor(
     @ApplicationContext private val context: Context,
     private val api: ApiClient,
     private val tokenStore: TokenStore,
+    private val appSettings: AppSettingsRepository,
 ) {
     private val gson = Gson()
     private val refreshMutex = Mutex()
@@ -216,7 +217,13 @@ class AuthRepository @Inject constructor(
     }
 
     suspend fun updateFcm(token: String, enabled: Boolean) {
-        api.api.updateFcm(FcmRequest(token, enabled))
+        val lang = appSettings.language.first().code
+        api.api.updateFcm(FcmRequest(token, enabled, lang))
+    }
+
+    /** Til o'zgarganda serverga yangi tilni yuboradi (push xabarlar tili uchun). */
+    fun syncLanguageAsync() {
+        bgScope.launch { runCatching { syncFcmTokenIfPossible() } }
     }
 
     suspend fun changePassword(currentPassword: String, newPassword: String) {

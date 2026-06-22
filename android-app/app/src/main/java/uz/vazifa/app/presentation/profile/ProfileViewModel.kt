@@ -51,6 +51,7 @@ class ProfileViewModel @Inject constructor(
     fun setLanguage(language: AppLanguage) = viewModelScope.launch {
         settings.setLanguage(language)
         _state.update { it.copy(language = language) }
+        auth.syncLanguageAsync()
     }
 
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch {

@@ -3,6 +3,11 @@ import { Cron, CronExpression } from '@nestjs/schedule';
 import { TasksService } from '../tasks/tasks.service';
 import { NotificationsService } from './notifications.service';
 import { hoursUntil, nowTashkent } from '../common/utils/time';
+import {
+  deadlineWarningText,
+  hourlyReminderText,
+  overdueText,
+} from './push-i18n';
 
 @Injectable()
 export class RemindersService {
@@ -32,10 +37,11 @@ export class RemindersService {
       const key = `${a.id}-${Math.round(h)}`;
       if ([24, 12, 6, 1].some((t) => Math.abs(h - t) < 0.5) && !this.sentDeadlines.has(key)) {
         this.sentDeadlines.add(key);
+        const text = deadlineWarningText(a.task.title, Math.round(h), a.assignee.language);
         await this.notifications.sendToToken(
           a.assignee.fcmToken,
-          'Vazifa muddati yaqinlashmoqda',
-          `"${a.task.title}" — ${Math.round(h)} soat qoldi`,
+          text.title,
+          text.body,
           { taskId: a.taskId, type: 'deadline_warning' },
         );
         sent++;
@@ -43,10 +49,11 @@ export class RemindersService {
 
       // Muddati o'tmagan faol vazifa uchun har soatlik eslatma.
       if (h > 0) {
+        const text = hourlyReminderText(a.task.title, a.assignee.language);
         await this.notifications.sendToToken(
           a.assignee.fcmToken,
-          'Vazifa eslatmasi',
-          `"${a.task.title}" hali bajarilmagan`,
+          text.title,
+          text.body,
           { taskId: a.taskId, type: 'hourly_reminder' },
         );
         sent++;
@@ -65,10 +72,11 @@ export class RemindersService {
     let sent = 0;
     for (const a of overdue) {
       if (!a.assignee?.fcmToken || !a.assignee.notificationsEnabled) continue;
+      const text = overdueText(a.task.title, a.assignee.language);
       await this.notifications.sendToToken(
         a.assignee.fcmToken,
-        'Muddat o\'tdi!',
-        `"${a.task.title}" — kechikmoqda`,
+        text.title,
+        text.body,
         { taskId: a.taskId, type: 'overdue' },
       );
       sent++;
