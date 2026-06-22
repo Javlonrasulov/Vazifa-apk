@@ -8,6 +8,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import retrofit2.HttpException
 import uz.vazifa.app.data.remote.ApiClient
 import uz.vazifa.app.data.remote.UserDto
 import uz.vazifa.app.data.repository.AppSettingsRepository
@@ -20,6 +21,13 @@ data class ProfileUiState(
     val user: UserDto? = null,
     val themeMode: ThemeMode = ThemeMode.DARK,
     val language: AppLanguage = AppLanguage.DEFAULT,
+    val showChangePassword: Boolean = false,
+    val currentPassword: String = "",
+    val newPassword: String = "",
+    val confirmPassword: String = "",
+    val changingPassword: Boolean = false,
+    val changePasswordErrorKey: String? = null,
+    val changePasswordSuccess: Boolean = false,
 )
 
 @HiltViewModel
@@ -48,6 +56,73 @@ class ProfileViewModel @Inject constructor(
     fun setThemeMode(mode: ThemeMode) = viewModelScope.launch {
         settings.setThemeMode(mode)
         _state.update { it.copy(themeMode = mode) }
+    }
+
+    fun toggleChangePassword() {
+        _state.update {
+            it.copy(
+                showChangePassword = !it.showChangePassword,
+                currentPassword = "",
+                newPassword = "",
+                confirmPassword = "",
+                changePasswordErrorKey = null,
+                changePasswordSuccess = false,
+            )
+        }
+    }
+
+    fun onCurrentPasswordChange(value: String) {
+        _state.update { it.copy(currentPassword = value, changePasswordErrorKey = null, changePasswordSuccess = false) }
+    }
+
+    fun onNewPasswordChange(value: String) {
+        _state.update { it.copy(newPassword = value, changePasswordErrorKey = null, changePasswordSuccess = false) }
+    }
+
+    fun onConfirmPasswordChange(value: String) {
+        _state.update { it.copy(confirmPassword = value, changePasswordErrorKey = null, changePasswordSuccess = false) }
+    }
+
+    fun changePassword() {
+        val current = _state.value
+        if (current.currentPassword.isBlank() || current.newPassword.isBlank() || current.confirmPassword.isBlank()) {
+            _state.update { it.copy(changePasswordErrorKey = "profile_password_empty") }
+            return
+        }
+        if (current.newPassword.length < 6) {
+            _state.update { it.copy(changePasswordErrorKey = "profile_password_min_length") }
+            return
+        }
+        if (current.newPassword != current.confirmPassword) {
+            _state.update { it.copy(changePasswordErrorKey = "profile_password_mismatch") }
+            return
+        }
+
+        viewModelScope.launch {
+            _state.update { it.copy(changingPassword = true, changePasswordErrorKey = null, changePasswordSuccess = false) }
+            try {
+                auth.changePassword(current.currentPassword, current.newPassword)
+                _state.update {
+                    it.copy(
+                        changingPassword = false,
+                        showChangePassword = false,
+                        currentPassword = "",
+                        newPassword = "",
+                        confirmPassword = "",
+                        changePasswordSuccess = true,
+                    )
+                }
+            } catch (e: HttpException) {
+                val key = if (e.code() == 401) "profile_wrong_current_password" else "login_network_error"
+                _state.update { it.copy(changingPassword = false, changePasswordErrorKey = key) }
+            } catch (_: Exception) {
+                _state.update { it.copy(changingPassword = false, changePasswordErrorKey = "login_network_error") }
+            }
+        }
+    }
+
+    fun clearChangePasswordSuccess() {
+        _state.update { it.copy(changePasswordSuccess = false) }
     }
 
     fun logout(onDone: () -> Unit) = viewModelScope.launch {

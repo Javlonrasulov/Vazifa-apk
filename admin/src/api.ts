@@ -93,6 +93,14 @@ export async function fetchUsers() {
   return data;
 }
 
+export async function fetchFieldOptions(type: 'position' | 'department', q?: string) {
+  const path = type === 'position' ? 'positions' : 'departments';
+  const { data } = await api.get<string[]>(`/users/options/${path}`, {
+    params: q?.trim() ? { q: q.trim() } : undefined,
+  });
+  return data;
+}
+
 export async function createUser(body: {
   login: string;
   password: string;

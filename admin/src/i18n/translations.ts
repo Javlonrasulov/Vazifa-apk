@@ -79,6 +79,9 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     error: 'Хатолик юз берди',
     sessionExpired: 'Сессия тугади, қайта киринг',
     loginTaken: 'Бу login band',
+    nameTaken: 'Бу ism allaqachon mavjud',
+    phoneTaken: 'Бу telefon allaqachon mavjud',
+    networkError: 'Server bilan aloqa yo\'q. Backend ishlayaptimi?',
   },
   uz: {
     appName: 'Lider Vazifa',
@@ -150,6 +153,9 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     error: 'Xatolik yuz berdi',
     sessionExpired: 'Sessiya tugadi, qayta kiring',
     loginTaken: 'Bu login band',
+    nameTaken: "Bu ism allaqachon mavjud",
+    phoneTaken: "Bu telefon allaqachon mavjud",
+    networkError: "Server bilan aloqa yo'q. Backend ishlayaptimi?",
   },
   ru: {
     appName: 'Lider Vazifa',
@@ -221,6 +227,9 @@ export const T: Record<LangAdmin, Record<string, string>> = {
     error: 'Произошла ошибка',
     sessionExpired: 'Сессия истекла, войдите снова',
     loginTaken: 'Этот логин занят',
+    nameTaken: 'Это имя уже существует',
+    phoneTaken: 'Этот телефон уже используется',
+    networkError: 'Нет связи с сервером. Запущен ли backend?',
   },
 };
 

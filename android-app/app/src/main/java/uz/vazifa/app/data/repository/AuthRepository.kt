@@ -14,6 +14,7 @@ import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withTimeoutOrNull
 import kotlin.coroutines.resume
 import uz.vazifa.app.data.remote.ApiClient
+import uz.vazifa.app.data.remote.ChangePasswordRequest
 import uz.vazifa.app.data.remote.FcmRequest
 import uz.vazifa.app.data.remote.LoginRequest
 import uz.vazifa.app.data.remote.TokenStore
@@ -110,5 +111,9 @@ class AuthRepository @Inject constructor(
 
     suspend fun updateFcm(token: String, enabled: Boolean) {
         api.api.updateFcm(FcmRequest(token, enabled))
+    }
+
+    suspend fun changePassword(currentPassword: String, newPassword: String) {
+        api.api.changePassword(ChangePasswordRequest(currentPassword, newPassword))
     }
 }

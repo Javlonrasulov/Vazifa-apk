@@ -1,7 +1,7 @@
 package uz.vazifa.app.util
 
 object UzPhoneFormatter {
-    private const val PREFIX = "+998 "
+    const val PREFIX = "+998 "
 
     /** Milliy qism (998 dan keyingi 9 ta raqam), +998 prefiksini alohida olib tashlaydi. */
     fun extractNationalDigits(raw: String): String {

@@ -6,6 +6,7 @@ import {
   Param,
   Patch,
   Post,
+  Query,
   UseGuards,
   Request,
 } from '@nestjs/common';
@@ -38,6 +39,18 @@ export class UsersController {
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   findContacts() {
     return this.usersService.findEmployeesAndDirectors();
+  }
+
+  @Get('options/positions')
+  @Roles(UserRole.ADMIN)
+  getPositionOptions(@Query('q') q?: string) {
+    return this.usersService.getFieldOptions('position', q);
+  }
+
+  @Get('options/departments')
+  @Roles(UserRole.ADMIN)
+  getDepartmentOptions(@Query('q') q?: string) {
+    return this.usersService.getFieldOptions('department', q);
   }
 
   @Post()

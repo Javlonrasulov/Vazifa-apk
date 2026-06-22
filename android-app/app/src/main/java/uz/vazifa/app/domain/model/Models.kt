@@ -26,6 +26,7 @@ data class User(
     val role: String,
     val position: String? = null,
     val department: String? = null,
+    val phone: String? = null,
     val notificationsEnabled: Boolean = true,
 )
 

@@ -7,8 +7,9 @@ import androidx.compose.ui.text.input.VisualTransformation
 
 class UzbekPhoneVisualTransformation : VisualTransformation {
     override fun filter(text: AnnotatedString): TransformedText {
-        val formatted = UzPhoneFormatter.format(text.text)
-        val mapping = PhoneOffsetMapping(text.text.length, formatted)
+        val digits = text.text
+        val formatted = UzPhoneFormatter.format(digits)
+        val mapping = PhoneOffsetMapping(digits.length, formatted)
         return TransformedText(AnnotatedString(formatted), mapping)
     }
 }
@@ -17,26 +18,31 @@ private class PhoneOffsetMapping(
     private val digitCount: Int,
     private val formatted: String,
 ) : OffsetMapping {
-    override fun originalToTransformed(offset: Int): Int =
-        formattedOffsetForDigitIndex(offset.coerceIn(0, digitCount))
 
-    override fun transformedToOriginal(offset: Int): Int =
-        digitIndexForFormattedOffset(offset.coerceIn(0, formatted.length))
-}
+    /** Milliy raqamlar "+998 " dan keyin boshlanadi. */
+    private val nationalStart = UzPhoneFormatter.PREFIX.length
 
-/** +998 XX XXX XX XX — raqam indeksidan formatdagi pozitsiya. */
-internal fun formattedOffsetForDigitIndex(index: Int): Int = when {
-    index <= 0 -> 5 // "+998 "
-    index <= 2 -> 5 + index
-    index <= 5 -> 8 + (index - 2)
-    index <= 7 -> 13 + (index - 5)
-    else -> 16 + (index - 7)
-}
+    override fun originalToTransformed(offset: Int): Int {
+        val o = offset.coerceIn(0, digitCount)
+        if (o == 0) return nationalStart.coerceAtMost(formatted.length)
+        var seen = 0
+        var i = nationalStart
+        while (i < formatted.length && seen < o) {
+            if (formatted[i].isDigit()) seen++
+            i++
+        }
+        return i.coerceIn(0, formatted.length)
+    }
 
-internal fun digitIndexForFormattedOffset(offset: Int): Int = when {
-    offset <= 5 -> 0
-    offset <= 7 -> offset - 5
-    offset <= 11 -> 2 + (offset - 8)
-    offset <= 14 -> 5 + (offset - 13)
-    else -> 7 + (offset - 16)
+    override fun transformedToOriginal(offset: Int): Int {
+        val t = offset.coerceIn(0, formatted.length)
+        if (t <= nationalStart) return 0
+        var seen = 0
+        var i = nationalStart
+        while (i < t && i < formatted.length) {
+            if (formatted[i].isDigit()) seen++
+            i++
+        }
+        return seen.coerceIn(0, digitCount)
+    }
 }

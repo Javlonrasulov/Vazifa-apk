@@ -3,6 +3,7 @@ package uz.vazifa.app.presentation.navigation
 import androidx.compose.animation.core.Spring
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
+import androidx.compose.foundation.border
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
@@ -36,6 +37,7 @@ val BottomNavHeight = 84.dp
 enum class AppTab(val route: String) {
     HOME("home"),
     TASKS("tasks"),
+    CREATE("create"),
     PROFILE("profile"),
 }
 
@@ -50,6 +52,7 @@ fun VazifaBottomNav(
         listOf(
             Triple(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")),
             Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
+            Triple(AppTab.CREATE, Icons.Default.Add, localized("task_create")),
             Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
         )
     } else {
@@ -60,6 +63,7 @@ fun VazifaBottomNav(
     }
 
     val isDark = LiquidTheme.isDark
+    val inactiveTint = if (isDark) LiquidTheme.textMuted else LiquidGlass.TextDarkMuted
 
     Box(modifier.fillMaxWidth().height(BottomNavHeight).padding(horizontal = 20.dp, vertical = 10.dp)) {
         Box(
@@ -67,21 +71,32 @@ fun VazifaBottomNav(
                 .fillMaxWidth()
                 .height(64.dp)
                 .drawBehind {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(LiquidGlass.Blue.copy(alpha = if (isDark) 0.22f else 0.10f), Color.Transparent),
-                            center = Offset(size.width * 0.5f, size.height),
+                    if (isDark) {
+                        drawCircle(
+                            brush = Brush.radialGradient(
+                                listOf(LiquidGlass.Blue.copy(alpha = 0.22f), Color.Transparent),
+                                center = Offset(size.width * 0.5f, size.height),
+                                radius = size.width * 0.55f,
+                            ),
                             radius = size.width * 0.55f,
-                        ),
-                        radius = size.width * 0.55f,
-                        center = Offset(size.width * 0.5f, size.height),
-                    )
+                            center = Offset(size.width * 0.5f, size.height),
+                        )
+                    }
                 },
         ) {
             Row(
                 Modifier
                     .fillMaxSize()
-                    .liquidGlassThemed(radius = 50.dp)
+                    .then(
+                        if (isDark) {
+                            Modifier
+                                .clip(RoundedCornerShape(LiquidGlass.RadiusChip))
+                                .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
+                                .border(1.dp, LiquidGlass.GlassDarkBorder, RoundedCornerShape(LiquidGlass.RadiusChip))
+                        } else {
+                            Modifier.liquidGlassThemed(radius = LiquidGlass.RadiusChip)
+                        },
+                    )
                     .padding(horizontal = 4.dp),
                 horizontalArrangement = Arrangement.SpaceAround,
                 verticalAlignment = Alignment.CenterVertically,
@@ -127,14 +142,14 @@ fun VazifaBottomNav(
                             Icon(
                                 icon,
                                 contentDescription = label,
-                                tint = if (active) Color.White else LiquidTheme.textMuted,
+                                tint = if (active) Color.White else inactiveTint,
                                 modifier = Modifier.scale(if (active) 1f else scale).size(20.dp),
                             )
                         }
                         Text(
                             label,
                             fontSize = 9.sp,
-                            color = if (active) LiquidGlass.BlueLight else LiquidTheme.textMuted,
+                            color = if (active) LiquidGlass.BlueLight else inactiveTint,
                             fontWeight = if (active) FontWeight.SemiBold else FontWeight.Normal,
                         )
                     }

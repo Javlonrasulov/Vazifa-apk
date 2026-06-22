@@ -38,14 +38,14 @@ class TaskRepository @Inject constructor(private val api: ApiClient) {
     }
 
     suspend fun getContacts(): List<User> = api.api.getContacts().map {
-        User(it.id, it.login, it.fullName, it.role, it.position, it.department)
+        User(it.id, it.login, it.fullName, it.role, it.position, it.department, it.phone)
     }
 
     private fun TaskDto.toDomain() = Task(
         id, title, description, priority, status, startAt, deadlineAt, createdById,
         assignments?.map { TaskAssignment(it.id, it.assigneeId, it.status, it.assignee?.let { u ->
-            User(u.id, u.login, u.fullName, u.role, u.position, u.department)
+            User(u.id, u.login, u.fullName, u.role, u.position, u.department, u.phone)
         }) } ?: emptyList(),
-        createdBy?.let { User(it.id, it.login, it.fullName, it.role, it.position, it.department) },
+        createdBy?.let { User(it.id, it.login, it.fullName, it.role, it.position, it.department, it.phone) },
     )
 }

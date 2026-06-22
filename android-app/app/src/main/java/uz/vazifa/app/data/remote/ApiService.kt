@@ -17,6 +17,7 @@ data class UserDto(
     val canAssignTasks: Boolean = false,
     val position: String? = null,
     val department: String? = null,
+    val phone: String? = null,
     val notificationsEnabled: Boolean = true,
 )
 data class FcmRequest(val fcmToken: String, val notificationsEnabled: Boolean)

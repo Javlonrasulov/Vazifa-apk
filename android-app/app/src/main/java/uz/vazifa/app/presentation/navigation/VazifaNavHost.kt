@@ -1,8 +1,10 @@
 package uz.vazifa.app.presentation.navigation
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -66,7 +68,11 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
 
     var selectedTab by remember { mutableStateOf(if (isDirector) AppTab.HOME else AppTab.TASKS) }
 
-    Box(Modifier.fillMaxSize()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(MaterialTheme.colorScheme.background),
+    ) {
         NavHost(
             navController,
             startDestination = Routes.SPLASH,
@@ -118,12 +124,23 @@ fun VazifaNavHost(viewModel: NavViewModel = hiltViewModel()) {
                     AppTab.HOME -> if (isDirector) {
                         DirectorDashboardScreen(
                             onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
-                            onCreateTask = { navController.navigate(Routes.CREATE_TASK) },
+                            onCreateTask = { selectedTab = AppTab.CREATE },
                         )
                     } else {
                         TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
                     }
                     AppTab.TASKS -> TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
+                    AppTab.CREATE -> if (isDirector) {
+                        CreateTaskScreen(
+                            showBack = false,
+                            onBack = { selectedTab = AppTab.HOME },
+                            onCreated = {
+                                selectedTab = AppTab.TASKS
+                            },
+                        )
+                    } else {
+                        TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
+                    }
                     AppTab.PROFILE -> ProfileScreen(
                         onLogout = { navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } } },
                     )

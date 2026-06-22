@@ -41,7 +41,7 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
     }
 
     fun onPhoneDigitsChange(v: String) {
-        val digits = v.filter { it.isDigit() }.take(9)
+        val digits = UzPhoneFormatter.extractNationalDigits(v)
         _state.update { it.copy(phoneDigits = digits, errorKey = null) }
     }
 

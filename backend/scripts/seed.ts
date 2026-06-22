@@ -57,18 +57,9 @@ async function seed() {
   }
 
   const employee = await repo.findOne({ where: { login: 'xodim1' } });
-  if (!employee) {
-    await repo.save(
-      repo.create({
-        login: 'xodim1',
-        passwordHash: await bcrypt.hash('xodim123', 10),
-        fullName: 'Xodim Namuna',
-        role: UserRole.EMPLOYEE,
-        department: 'Sotuv',
-        position: 'Menejer',
-      }),
-    );
-    console.log('Employee: xodim1 / xodim123');
+  if (employee) {
+    await repo.delete({ login: 'xodim1' });
+    console.log('Namuna xodim (xodim1) olib tashlandi');
   }
 
   await repo.update({ role: UserRole.DIRECTOR }, { canAssignTasks: true });

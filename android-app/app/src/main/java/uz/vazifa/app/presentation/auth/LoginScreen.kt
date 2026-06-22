@@ -58,6 +58,7 @@ fun LoginScreen(
     var showLangMenu by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     val fieldColors = liquidGlassFieldColors()
+    val phoneTransformation = remember { UzbekPhoneVisualTransformation() }
 
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onSuccess() }
 
@@ -146,7 +147,7 @@ fun LoginScreen(
                     )
                 },
                 visualTransformation = if (state.mode == LoginMode.PHONE) {
-                    UzbekPhoneVisualTransformation()
+                    phoneTransformation
                 } else {
                     VisualTransformation.None
                 },

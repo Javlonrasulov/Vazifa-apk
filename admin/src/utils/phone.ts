@@ -30,4 +30,10 @@ export function phoneForSave(formatted: string): string | null {
   return formatUzPhone(digits);
 }
 
+export function phonesSame(a: string, b: string): boolean {
+  const da = phoneDigits(a);
+  const db = phoneDigits(b);
+  return da.length === 9 && da === db;
+}
+
 export const PHONE_PLACEHOLDER = '+998 88 888 88 88';

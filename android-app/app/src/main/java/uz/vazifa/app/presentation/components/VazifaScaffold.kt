@@ -37,10 +37,12 @@ fun VazifaTabScaffold(
     title: String? = null,
     titleContent: (@Composable () -> Unit)? = null,
     actions: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         containerColor = LiquidTheme.bg,
+        snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
                 modifier = Modifier.drawBehind {

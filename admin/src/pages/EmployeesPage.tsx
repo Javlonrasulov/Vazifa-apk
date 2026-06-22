@@ -3,7 +3,6 @@ import { isAxiosError } from 'axios';
 import {
   AlertTriangle,
   Check,
-  CheckCircle,
   Edit2,
   Eye,
   EyeOff,
@@ -11,24 +10,22 @@ import {
   Lock,
   Plus,
   Search,
-  Smartphone,
   Trash2,
   X,
 } from 'lucide-react';
 import {
   User,
   apiErrorMessage,
-  approveDevice,
   createUser,
   deleteUser,
+  fetchFieldOptions,
   fetchUsers,
-  resetDevice,
   resetPassword,
   updateUser,
 } from '../api';
 import { useAppSettings } from '../i18n/LanguageContext';
 import { INDIGO, useAdminTheme } from '../theme/adminTheme';
-import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave } from '../utils/phone';
+import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave, phonesSame } from '../utils/phone';
 
 const DEFAULT_EMPLOYEE_PASSWORD = '123456';
 
@@ -43,6 +40,8 @@ export default function EmployeesPage() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
+  const [deleteError, setDeleteError] = useState('');
+  const [deleteSaving, setDeleteSaving] = useState(false);
   const [passwordTarget, setPasswordTarget] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -53,6 +52,8 @@ export default function EmployeesPage() {
   const [saving, setSaving] = useState(false);
   const [saveError, setSaveError] = useState('');
   const [showFormPassword, setShowFormPassword] = useState(true);
+  const [positionOptions, setPositionOptions] = useState<string[]>([]);
+  const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [form, setForm] = useState({
     login: '',
     password: '',
@@ -70,19 +71,75 @@ export default function EmployeesPage() {
     return t('admin');
   };
 
+  const loadFieldOptions = useCallback(async (positionQ?: string, departmentQ?: string) => {
+    const [positions, departments] = await Promise.all([
+      fetchFieldOptions('position', positionQ),
+      fetchFieldOptions('department', departmentQ),
+    ]);
+    setPositionOptions(positions);
+    setDepartmentOptions(departments);
+  }, []);
+
   const load = useCallback(async () => {
     setLoading(true);
     try {
       const data = await fetchUsers();
       setUsers(data.filter((u) => u.role !== 'admin'));
+    } catch (err) {
+      if (isAxiosError(err) && !err.response) {
+        setToast(t('networkError'));
+      }
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [t]);
+
+  const mapSaveError = (err: unknown): string => {
+    if (isAxiosError(err)) {
+      if (err.response?.status === 401) return t('sessionExpired');
+      if (err.response?.status === 409) {
+        const msg = (apiErrorMessage(err) ?? '').toLowerCase();
+        if (msg.includes('telefon')) return t('phoneTaken');
+        if (msg.includes('ism')) return t('nameTaken');
+        return t('loginTaken');
+      }
+      if (!err.response) return t('networkError');
+      return apiErrorMessage(err) ?? t('error');
+    }
+    return t('error');
+  };
+
+  const findDuplicateError = (excludeId?: string): string | null => {
+    const name = form.fullName.trim().toLowerCase();
+    const phone = phoneForSave(form.phone);
+    const login = form.login.trim().toLowerCase();
+
+    if (
+      name &&
+      users.some((u) => u.id !== excludeId && u.fullName.trim().toLowerCase() === name)
+    ) {
+      return t('nameTaken');
+    }
+    if (
+      phone &&
+      users.some((u) => u.id !== excludeId && u.phone && phonesSame(u.phone, phone))
+    ) {
+      return t('phoneTaken');
+    }
+    if (
+      !excludeId &&
+      login &&
+      users.some((u) => u.login.toLowerCase() === login)
+    ) {
+      return t('loginTaken');
+    }
+    return null;
+  };
 
   useEffect(() => {
     load();
-  }, [load]);
+    loadFieldOptions();
+  }, [load, loadFieldOptions]);
 
   useEffect(() => {
     if (!toast) return;
@@ -122,6 +179,7 @@ export default function EmployeesPage() {
       phone: '+998 ',
     });
     setDialogOpen(true);
+    void loadFieldOptions();
   };
 
   const openEdit = (u: User) => {
@@ -139,6 +197,7 @@ export default function EmployeesPage() {
       phone: displayPhone(u.phone ?? ''),
     });
     setDialogOpen(true);
+    void loadFieldOptions(u.position ?? '', u.department ?? '');
   };
 
   const handleSave = async () => {
@@ -149,56 +208,77 @@ export default function EmployeesPage() {
         setSaveError(t('passwordMinError'));
         return;
       }
+      if (!form.fullName.trim()) {
+        setSaveError(t('loginEmpty'));
+        return;
+      }
+
+      const duplicateError = findDuplicateError(editUser?.id);
+      if (duplicateError) {
+        setSaveError(duplicateError);
+        return;
+      }
+
       if (editUser) {
-        await updateUser(editUser.id, {
+        const updated = await updateUser(editUser.id, {
           login: form.login.trim(),
           ...(form.password ? { password: form.password } : {}),
-          fullName: form.fullName,
+          fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
           position: form.position || null,
           department: form.department || null,
           phone: phoneForSave(form.phone),
         });
+        setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
         setToast(t('updated'));
       } else {
         if (!form.login.trim()) {
           setSaveError(t('loginEmpty'));
           return;
         }
-        await createUser({
+        const created = await createUser({
           login: form.login,
           password: form.password || DEFAULT_EMPLOYEE_PASSWORD,
-          fullName: form.fullName,
+          fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
           position: form.position || undefined,
           department: form.department || undefined,
           phone: phoneForSave(form.phone) || undefined,
         });
+        setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
+        setSearch('');
         setToast(t('added'));
       }
       setDialogOpen(false);
-      load();
+      await load();
+      await loadFieldOptions();
     } catch (err) {
-      if (isAxiosError(err)) {
-        if (err.response?.status === 409) setSaveError(t('loginTaken'));
-        else if (err.response?.status === 401) setSaveError(t('sessionExpired'));
-        else setSaveError(apiErrorMessage(err) ?? t('error'));
-      } else {
-        setSaveError(t('error'));
-      }
+      setSaveError(mapSaveError(err));
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async () => {
-    if (!deleteTarget) return;
-    await deleteUser(deleteTarget.id);
-    setDeleteTarget(null);
-    setToast(t('deleted'));
-    load();
+    if (!deleteTarget || deleteSaving) return;
+    setDeleteSaving(true);
+    setDeleteError('');
+    try {
+      await deleteUser(deleteTarget.id);
+      setDeleteTarget(null);
+      setToast(t('deleted'));
+      load();
+    } catch (err) {
+      if (isAxiosError(err) && err.response?.status === 401) {
+        setDeleteError(t('sessionExpired'));
+      } else {
+        setDeleteError(apiErrorMessage(err) ?? t('error'));
+      }
+    } finally {
+      setDeleteSaving(false);
+    }
   };
 
   const openPasswordModal = (u: User) => {
@@ -436,17 +516,37 @@ export default function EmployeesPage() {
               <label style={labelStyle}>{t('position')}</label>
               <input
                 style={inputStyle}
+                list="position-options"
                 value={form.position}
-                onChange={(e) => setForm({ ...form, position: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, position: e.target.value });
+                  void loadFieldOptions(e.target.value, form.department);
+                }}
+                onFocus={() => void loadFieldOptions(form.position, form.department)}
               />
+              <datalist id="position-options">
+                {positionOptions.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label style={labelStyle}>{t('department')}</label>
               <input
                 style={inputStyle}
+                list="department-options"
                 value={form.department}
-                onChange={(e) => setForm({ ...form, department: e.target.value })}
+                onChange={(e) => {
+                  setForm({ ...form, department: e.target.value });
+                  void loadFieldOptions(form.position, e.target.value);
+                }}
+                onFocus={() => void loadFieldOptions(form.position, form.department)}
               />
+              <datalist id="department-options">
+                {departmentOptions.map((item) => (
+                  <option key={item} value={item} />
+                ))}
+              </datalist>
             </div>
             <div>
               <label style={labelStyle}>{t('phone')}</label>
@@ -713,7 +813,10 @@ export default function EmployeesPage() {
           justifyContent: 'center',
           backdropFilter: 'blur(4px)',
         }}
-        onClick={() => setDeleteTarget(null)}
+        onClick={() => {
+          setDeleteTarget(null);
+          setDeleteError('');
+        }}
       >
         <div
           style={{
@@ -744,13 +847,31 @@ export default function EmployeesPage() {
             <AlertTriangle size={22} color="#ef4444" />
           </div>
           <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 8 }}>{t('deleteTitle')}</div>
-          <div style={{ fontSize: 13, color: muted, marginBottom: 24, lineHeight: 1.5 }}>
+          <div style={{ fontSize: 13, color: muted, marginBottom: deleteError ? 14 : 24, lineHeight: 1.5 }}>
             <strong style={{ color: txt }}>{deleteTarget.fullName}</strong> — {t('deleteWarn')}
           </div>
+          {deleteError && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: D ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
+                border: `1px solid ${D ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.2)'}`,
+                color: '#ef4444',
+                fontSize: 12,
+              }}
+            >
+              {deleteError}
+            </div>
+          )}
           <div style={{ display: 'flex', gap: 10 }}>
             <button
               type="button"
-              onClick={() => setDeleteTarget(null)}
+              onClick={() => {
+                setDeleteTarget(null);
+                setDeleteError('');
+              }}
               style={{
                 flex: 1,
                 padding: 10,
@@ -768,20 +889,21 @@ export default function EmployeesPage() {
             <button
               type="button"
               onClick={handleDelete}
+              disabled={deleteSaving}
               style={{
                 flex: 1,
                 padding: 10,
                 borderRadius: 11,
                 border: 'none',
-                background: '#ef4444',
+                background: deleteSaving ? (D ? '#374151' : '#d1d5db') : '#ef4444',
                 color: '#fff',
                 fontSize: 13,
                 fontWeight: 700,
-                cursor: 'pointer',
-                boxShadow: '0 4px 14px rgba(239,68,68,0.35)',
+                cursor: deleteSaving ? 'not-allowed' : 'pointer',
+                boxShadow: deleteSaving ? 'none' : '0 4px 14px rgba(239,68,68,0.35)',
               }}
             >
-              {t('deleteBtn')}
+              {deleteSaving ? t('loginLoading') : t('deleteBtn')}
             </button>
           </div>
         </div>
@@ -879,7 +1001,7 @@ export default function EmployeesPage() {
           }}
         >
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 720 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
               <thead>
                 <tr
                   style={{
@@ -887,7 +1009,7 @@ export default function EmployeesPage() {
                     borderBottom: `1px solid ${border}`,
                   }}
                 >
-                  {[t('name'), t('login'), t('role'), t('department'), t('device'), t('actions')].map((label) => (
+                  {[t('name'), t('login'), t('role'), t('department'), t('actions')].map((label) => (
                     <th
                       key={label}
                       style={{
@@ -971,60 +1093,6 @@ export default function EmployeesPage() {
                     </td>
                     <td style={{ padding: '9px 14px', fontSize: 13, color: muted }}>{u.department ?? '—'}</td>
                     <td style={{ padding: '9px 14px' }}>
-                      {u.pendingDeviceId ? (
-                        <div style={{ display: 'flex', gap: 4 }}>
-                          <button
-                            type="button"
-                            title={t('deviceApprove')}
-                            onClick={() => approveDevice(u.id, true).then(() => {
-                              setToast(t('deviceApproved'));
-                              load();
-                            })}
-                            style={actionBtn(D, '#10b981')}
-                          >
-                            <CheckCircle size={14} />
-                          </button>
-                          <button
-                            type="button"
-                            title={t('deviceReject')}
-                            onClick={() => approveDevice(u.id, false).then(() => {
-                              setToast(t('deviceRejected'));
-                              load();
-                            })}
-                            style={actionBtn(D, '#ef4444')}
-                          >
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ) : u.deviceId ? (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: D ? 'rgba(16,185,129,0.15)' : 'rgba(16,185,129,0.1)',
-                            color: '#10b981',
-                          }}
-                        >
-                          {t('deviceLinked')}
-                        </span>
-                      ) : (
-                        <span
-                          style={{
-                            fontSize: 11,
-                            fontWeight: 600,
-                            padding: '3px 8px',
-                            borderRadius: 6,
-                            background: D ? 'rgba(255,255,255,0.07)' : '#f3f4f6',
-                            color: muted,
-                          }}
-                        >
-                          {t('deviceNone')}
-                        </span>
-                      )}
-                    </td>
-                    <td style={{ padding: '9px 14px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button type="button" title={t('edit')} onClick={() => openEdit(u)} style={actionBtn(D, INDIGO)}>
                           <Edit2 size={14} />
@@ -1039,19 +1107,11 @@ export default function EmployeesPage() {
                         </button>
                         <button
                           type="button"
-                          title={t('resetDevice')}
-                          onClick={() => resetDevice(u.id).then(() => {
-                            setToast(t('deviceReset'));
-                            load();
-                          })}
-                          style={actionBtn(D, '#3b82f6')}
-                        >
-                          <Smartphone size={14} />
-                        </button>
-                        <button
-                          type="button"
                           title={t('delete')}
-                          onClick={() => setDeleteTarget(u)}
+                          onClick={() => {
+                            setDeleteError('');
+                            setDeleteTarget(u);
+                          }}
                           style={actionBtn(D, '#ef4444')}
                         >
                           <Trash2 size={14} />

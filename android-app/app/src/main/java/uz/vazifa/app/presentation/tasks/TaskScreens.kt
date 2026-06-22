@@ -4,7 +4,12 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.CalendarToday
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
@@ -20,6 +25,11 @@ import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
+import java.time.Instant
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.ZoneOffset
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun TasksScreen(onTaskClick: (String) -> Unit, viewModel: TasksViewModel = hiltViewModel()) {
@@ -77,16 +87,36 @@ fun TaskDetailScreen(taskId: String, isDirector: Boolean, onBack: () -> Unit, vi
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun CreateTaskScreen(onBack: () -> Unit, onCreated: () -> Unit, viewModel: CreateTaskViewModel = hiltViewModel()) {
+fun CreateTaskScreen(
+    onBack: () -> Unit,
+    onCreated: () -> Unit,
+    showBack: Boolean = true,
+    viewModel: CreateTaskViewModel = hiltViewModel(),
+) {
     val state by viewModel.state.collectAsState()
     val fieldColors = liquidGlassFieldColors()
-    LaunchedEffect(Unit) { viewModel.loadContacts() }
-    LaunchedEffect(state.created) { if (state.created) onCreated() }
+    val zone = ZoneId.of("Asia/Tashkent")
+    val deadlineDisplayFmt = remember { DateTimeFormatter.ofPattern("dd.MM.yyyy HH:mm") }
+    var showDatePicker by remember { mutableStateOf(false) }
+    var showTimePicker by remember { mutableStateOf(false) }
+    var pendingDateMillis by remember { mutableStateOf<Long?>(null) }
 
-    VazifaStackScaffold(title = localized("task_create"), onBack = onBack) { padding ->
+    LaunchedEffect(Unit) { viewModel.loadContacts() }
+    LaunchedEffect(state.created) {
+        if (state.created) {
+            onCreated()
+            viewModel.resetForm()
+        }
+    }
+
+    val formContent: @Composable (PaddingValues) -> Unit = { padding ->
         Column(
-            Modifier.padding(padding).padding(16.dp),
+            Modifier
+                .padding(padding)
+                .padding(16.dp)
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             OutlinedTextField(
@@ -111,12 +141,47 @@ fun CreateTaskScreen(onBack: () -> Unit, onCreated: () -> Unit, viewModel: Creat
                 shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 colors = fieldColors,
             )
+            OutlinedTextField(
+                value = state.deadlineDateTime?.format(deadlineDisplayFmt).orEmpty(),
+                onValueChange = {},
+                readOnly = true,
+                label = { Text(localized("task_deadline_datetime")) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .clickable { showDatePicker = true },
+                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                colors = fieldColors,
+                trailingIcon = {
+                    IconButton(onClick = { showDatePicker = true }) {
+                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = LiquidGlass.Blue)
+                    }
+                },
+            )
             Text(localized("task_assignees"), color = LiquidTheme.textMuted, fontSize = 13.sp)
-            state.contacts.forEach { c ->
+            OutlinedTextField(
+                state.assigneeSearch, viewModel::onAssigneeSearch,
+                label = { Text(localized("task_search_employee")) },
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                colors = fieldColors,
+                leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = LiquidTheme.textMuted) },
+                singleLine = true,
+            )
+            val visibleContacts = if (state.assigneeSearch.isNotBlank()) {
+                state.filteredContacts
+            } else {
+                state.selectedContacts
+            }
+            visibleContacts.forEach { c ->
                 GlassCard(Modifier.fillMaxWidth().clickable { viewModel.toggleAssignee(c.id) }) {
                     Row(Modifier.padding(12.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
                         Checkbox(state.selectedIds.contains(c.id), onCheckedChange = { viewModel.toggleAssignee(c.id) })
-                        Text(c.fullName, color = LiquidTheme.text)
+                        Column(Modifier.weight(1f)) {
+                            Text(c.fullName, color = LiquidTheme.text)
+                            c.phone?.takeIf { it.isNotBlank() }?.let { phone ->
+                                Text(phone, color = LiquidTheme.textMuted, fontSize = 12.sp)
+                            }
+                        }
                     }
                 }
             }
@@ -130,5 +195,51 @@ fun CreateTaskScreen(onBack: () -> Unit, onCreated: () -> Unit, viewModel: Creat
                 Text(localized("task_create_btn"))
             }
         }
+    }
+
+    if (showBack) {
+        VazifaStackScaffold(title = localized("task_create"), onBack = onBack, content = formContent)
+    } else {
+        VazifaTabScaffold(
+            title = localized("task_create"),
+            actions = { VazifaHeaderActions() },
+            content = formContent,
+        )
+    }
+
+    if (showDatePicker) {
+        VazifaDatePickerDialog(
+            onDismissRequest = { showDatePicker = false },
+            onConfirm = { millis ->
+                pendingDateMillis = millis
+                showDatePicker = false
+                showTimePicker = true
+            },
+            initialDateMillis = state.deadlineDateTime
+                ?.atZone(zone)
+                ?.toInstant()
+                ?.toEpochMilli(),
+            zoneId = zone,
+        )
+    }
+
+    if (showTimePicker) {
+        val initial = state.deadlineDateTime
+        VazifaTimePickerDialog(
+            onDismissRequest = { showTimePicker = false },
+            onConfirm = { hour, minute ->
+                val dateMillis = pendingDateMillis
+                    ?: state.deadlineDateTime?.atZone(zone)?.toInstant()?.toEpochMilli()
+                if (dateMillis != null) {
+                    val date = Instant.ofEpochMilli(dateMillis).atZone(ZoneOffset.UTC).toLocalDate()
+                    viewModel.onDeadlineDateTime(
+                        LocalDateTime.of(date.year, date.monthValue, date.dayOfMonth, hour, minute),
+                    )
+                }
+                showTimePicker = false
+            },
+            initialHour = initial?.hour ?: 10,
+            initialMinute = initial?.minute ?: 0,
+        )
     }
 }
