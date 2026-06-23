@@ -458,7 +458,7 @@ export default function SystemUsersPage() {
                   style={{ ...inputStyle, paddingRight: 40 }}
                   type={showPassword ? 'text' : 'password'}
                   value={form.password}
-                  placeholder={editUser ? t('passwordOptionalHint') : t('passwordHint')}
+                  placeholder={editUser ? undefined : t('passwordHint')}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                 />
                 <button

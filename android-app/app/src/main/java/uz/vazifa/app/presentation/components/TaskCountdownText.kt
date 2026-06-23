@@ -82,14 +82,17 @@ private fun formatCountdown(
 }
 
 @Composable
-fun formatDurationParts(days: Long, hours: Long, minutes: Long): String {
-    val dayShort = localized("task_time_day_short")
-    val hourShort = localized("task_time_hour_short")
-    val minShort = localized("task_time_min_short")
+fun formatTaskDuration(days: Long, hours: Long, minutes: Long): String {
+    val dayUnit = localized("task_duration_day")
+    val hourUnit = localized("task_duration_hour")
+    val minUnit = localized("task_duration_minute")
     val parts = buildList {
-        if (days > 0) add("$days $dayShort")
-        if (hours > 0 || days > 0) add("$hours $hourShort")
-        add("$minutes $minShort")
+        if (days > 0) add("$days $dayUnit")
+        if (hours > 0) add("$hours $hourUnit")
+        if (minutes > 0 || isEmpty()) add("$minutes $minUnit")
     }
     return parts.joinToString(" ")
 }
+
+@Composable
+fun formatDurationParts(days: Long, hours: Long, minutes: Long): String = formatTaskDuration(days, hours, minutes)

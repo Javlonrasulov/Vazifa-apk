@@ -441,7 +441,7 @@ export default function EmployeesPage() {
                   style={{ ...inputStyle, paddingRight: 40 }}
                   type={showFormPassword ? 'text' : 'password'}
                   value={form.password}
-                  placeholder={editUser ? t('passwordOptionalHint') : t('passwordHint')}
+                  placeholder={editUser ? undefined : t('passwordHint')}
                   onChange={(e) => setForm({ ...form, password: e.target.value })}
                 />
                 <button

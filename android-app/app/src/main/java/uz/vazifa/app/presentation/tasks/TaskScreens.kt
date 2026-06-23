@@ -561,11 +561,14 @@ private fun CompletedTaskTiming(
         fontSize = fontSize,
     )
     TaskDeadlineCountdown.durationBetween(task.startAt, task.deadlineAt)?.let { duration ->
-        Text(
-            "${localized("task_time_given")}: ${formatDurationParts(duration.days, duration.hours, duration.minutes)}",
-            color = muted,
-            fontSize = fontSize,
-        )
+        val totalMinutes = duration.days * 24 * 60 + duration.hours * 60 + duration.minutes
+        if (totalMinutes > 0) {
+            Text(
+                "${localized("task_time_given")}: ${formatTaskDuration(duration.days, duration.hours, duration.minutes)}",
+                color = muted,
+                fontSize = fontSize,
+            )
+        }
     }
     completedAssignment?.completedAt?.takeIf { it.isNotBlank() }?.let { completedAt ->
         Text(

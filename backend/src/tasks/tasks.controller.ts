@@ -55,7 +55,7 @@ export class TasksController {
   @UseGuards(RolesGuard)
   dashboardStats(@Request() req: { user: User }) {
     if (!req.user.canAssignTasks) throw new ForbiddenException();
-    return this.tasksService.getDashboardStats();
+    return this.tasksService.getDashboardStats(req.user);
   }
 
   @Get('attachments/:attachmentId/file')

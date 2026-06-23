@@ -102,9 +102,22 @@ export class TasksService {
 
     if (!userCanAssignTasks(user)) {
       qb.innerJoin('task.assignments', 'mine', 'mine.assigneeId = :uid', { uid: user.id });
+    } else {
+      qb.andWhere('task.createdById = :creatorId', { creatorId: user.id });
     }
 
     return qb.getMany();
+  }
+
+  private assertCanAccessTask(task: Task, user: User): void {
+    if (!userCanAssignTasks(user)) {
+      const assigned = task.assignments?.some((a) => a.assigneeId === user.id);
+      if (!assigned) throw new ForbiddenException('Ruxsat yo\'q');
+      return;
+    }
+    if (task.createdById !== user.id) {
+      throw new ForbiddenException('Ruxsat yo\'q');
+    }
   }
 
   async findOne(id: string, user: User) {
@@ -122,10 +135,7 @@ export class TasksService {
     });
     if (!task) throw new NotFoundException('Vazifa topilmadi');
 
-    if (!userCanAssignTasks(user)) {
-      const assigned = task.assignments.some((a) => a.assigneeId === user.id);
-      if (!assigned) throw new ForbiddenException('Ruxsat yo\'q');
-    }
+    this.assertCanAccessTask(task, user);
     return task;
   }
 
@@ -168,6 +178,9 @@ export class TasksService {
     const isAssignee = assignment.assigneeId === user.id;
     const isTaskManager = userCanAssignTasks(user);
     if (!isAssignee && !isTaskManager) throw new ForbiddenException();
+    if (isTaskManager && assignment.task.createdById !== user.id) {
+      throw new ForbiddenException('Ruxsat yo\'q');
+    }
 
     assignment.status = dto.status;
     if (dto.status === TaskStatus.ACCEPTED) assignment.acceptedAt = nowTashkent();
@@ -267,24 +280,47 @@ export class TasksService {
     });
   }
 
-  async getDashboardStats() {
+  async getDashboardStats(user: User) {
     const now = nowTashkent();
     const startOfDay = new Date(now);
     startOfDay.setHours(0, 0, 0, 0);
+    const ownedOnly = userCanAssignTasks(user);
+
+    const assignmentQb = () => {
+      const qb = this.assignRepo.createQueryBuilder('a');
+      if (ownedOnly) {
+        qb.innerJoin('a.task', 't', 't.createdById = :uid', { uid: user.id });
+      }
+      return qb;
+    };
 
     const [totalEmployees, activeTasks, completedTasks, overdueTasks, todayTasks] =
       await Promise.all([
         this.usersService.findEmployeesAndDirectors().then(
           (u) => u.filter((x) => x.role === UserRole.EMPLOYEE).length,
         ),
-        this.assignRepo.count({
-          where: { status: Not(In([TaskStatus.COMPLETED, TaskStatus.CANCELLED])) },
-        }),
-        this.assignRepo.count({ where: { status: TaskStatus.COMPLETED } }),
-        this.getOverdueAssignments().then((a) => a.length),
-        this.taskRepo
-          .createQueryBuilder('t')
-          .where('t.deadlineAt >= :start', { start: startOfDay })
+        assignmentQb()
+          .where('a.status NOT IN (:...statuses)', {
+            statuses: [TaskStatus.COMPLETED, TaskStatus.CANCELLED],
+          })
+          .getCount(),
+        assignmentQb()
+          .where('a.status = :status', { status: TaskStatus.COMPLETED })
+          .getCount(),
+        this.getOverdueAssignments()
+          .then((items) =>
+            ownedOnly
+              ? items.filter((a) => a.task.createdById === user.id)
+              : items,
+          )
+          .then((a) => a.length),
+        (ownedOnly
+          ? this.taskRepo
+              .createQueryBuilder('t')
+              .where('t.createdById = :uid', { uid: user.id })
+          : this.taskRepo.createQueryBuilder('t')
+        )
+          .andWhere('t.deadlineAt >= :start', { start: startOfDay })
           .andWhere('t.deadlineAt <= :end', { end: now })
           .getCount(),
       ]);
