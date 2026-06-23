@@ -226,13 +226,6 @@ export default function LoginPage() {
                 t('loginBtn')
               )}
             </button>
-
-            <div className="text-center pt-1">
-              <p className={`text-xs ${theme.sub}`}>
-                {t('demo')}:{' '}
-                <span className={`font-mono ${D ? 'text-gray-300' : 'text-gray-600'}`}>admin / admin123</span>
-              </p>
-            </div>
           </form>
 
           <p className={`text-center text-xs ${theme.sub} mt-6`}>{t('footer')}</p>
