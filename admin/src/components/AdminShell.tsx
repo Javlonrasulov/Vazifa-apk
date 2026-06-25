@@ -122,6 +122,7 @@ export function AdminNavbar({
 
   const pageMeta: Record<string, { title: string; desc: string }> = {
     '/employees': { title: t('employeesTitle'), desc: t('employeesDesc') },
+    '/employees/departments': { title: t('departmentsTitle'), desc: t('departmentsDesc') },
     '/system-users': { title: t('systemUsersTitle'), desc: t('systemUsersDesc') },
   };
   const currentPage = pageMeta[location.pathname] ?? pageMeta['/employees'];

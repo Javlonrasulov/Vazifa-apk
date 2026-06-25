@@ -77,7 +77,14 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
                 _state.update { it.copy(loading = false, loggedIn = true) }
             } catch (e: HttpException) {
                 val key = when (e.code()) {
-                    403 -> "login_device_pending"
+                    403 -> {
+                        val code = e.response()?.errorBody()?.string()
+                            ?.let { body -> Regex(""""code"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.getOrNull(1) }
+                        when (code) {
+                            "DEVICE_LIMIT_REACHED" -> "login_device_limit"
+                            else -> "login_device_pending"
+                        }
+                    }
                     else -> "login_error"
                 }
                 _state.update { it.copy(loading = false, errorKey = key) }

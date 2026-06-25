@@ -50,6 +50,13 @@ export class TasksController {
     return this.tasksService.findAll(req.user);
   }
 
+  @Get('department')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  findDepartmentTasks(@Request() req: { user: User }) {
+    return this.tasksService.findDepartmentTasks(req.user);
+  }
+
   @Get('dashboard/stats')
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)

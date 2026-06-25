@@ -18,8 +18,11 @@ data class UserDto(
     val canAssignTasks: Boolean = false,
     val position: String? = null,
     val department: String? = null,
+    val visibleDepartments: List<String>? = null,
     val phone: String? = null,
     val notificationsEnabled: Boolean = true,
+    val isOnline: Boolean = false,
+    val lastSeenAt: String? = null,
 )
 data class FcmRequest(
     val fcmToken: String,
@@ -65,6 +68,9 @@ interface ApiService {
     @POST("auth/fcm")
     suspend fun updateFcm(@Body body: FcmRequest): UserDto
 
+    @POST("auth/presence")
+    suspend fun sendPresence(): UserDto
+
     @POST("auth/change-password")
     suspend fun changePassword(@Body body: ChangePasswordRequest)
 
@@ -73,6 +79,9 @@ interface ApiService {
 
     @GET("tasks")
     suspend fun getTasks(): List<TaskDto>
+
+    @GET("tasks/department")
+    suspend fun getDepartmentTasks(): List<TaskDto>
 
     @GET("tasks/{id}")
     suspend fun getTask(@Path("id") id: String): TaskDto

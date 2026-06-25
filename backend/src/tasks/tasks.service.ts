@@ -5,7 +5,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { Repository, In, Not } from 'typeorm';
+import { Repository, In, Not, Brackets } from 'typeorm';
 import { Task } from './entities/task.entity';
 import { TaskAssignment } from './entities/task-assignment.entity';
 import { TaskAttachment } from './entities/task-attachment.entity';
@@ -22,7 +22,10 @@ import { AuditService } from '../audit/audit.service';
 import { NotificationsService } from '../notifications/notifications.service';
 import { parseTashkent, nowTashkent } from '../common/utils/time';
 import { userCanAssignTasks } from '../common/utils/user-permissions';
+import { canViewTaskViaDepartment, normalizeDepartmentName, userHasDepartmentVisibility } from '../common/utils/department-visibility';
 import { compressImageIfNeeded } from '../common/utils/image';
+
+const IMAGE_MIMES = new Set(['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif']);
 import { UsersService } from '../users/users.service';
 import {
   newTaskText,
@@ -103,21 +106,51 @@ export class TasksService {
     if (!userCanAssignTasks(user)) {
       qb.innerJoin('task.assignments', 'mine', 'mine.assigneeId = :uid', { uid: user.id });
     } else {
-      qb.andWhere('task.createdById = :creatorId', { creatorId: user.id });
+      qb.andWhere(
+        new Brackets((where) => {
+          where
+            .where('task.createdById = :uid', { uid: user.id })
+            .orWhere('assignments.assigneeId = :uid', { uid: user.id });
+        }),
+      );
     }
 
     return qb.getMany();
   }
 
+  async findDepartmentTasks(user: User) {
+    if (!userHasDepartmentVisibility(user)) return [];
+
+    const depts = (user.visibleDepartments ?? [])
+      .map((d) => normalizeDepartmentName(d))
+      .filter(Boolean);
+    if (!depts.length) return [];
+
+    const qb = this.taskRepo
+      .createQueryBuilder('task')
+      .leftJoinAndSelect('task.assignments', 'assignments')
+      .leftJoinAndSelect('assignments.assignee', 'assignee')
+      .leftJoinAndSelect('task.createdBy', 'createdBy')
+      .leftJoinAndSelect('task.attachments', 'attachments')
+      .orderBy('task.createdAt', 'DESC')
+      .distinct(true);
+
+    qb.andWhere(
+      new Brackets((sub) => {
+        sub.where('LOWER(TRIM(createdBy.department)) IN (:...depts)', { depts });
+        sub.orWhere('LOWER(TRIM(assignee.department)) IN (:...depts)', { depts });
+      }),
+    );
+
+    return qb.getMany();
+  }
+
   private assertCanAccessTask(task: Task, user: User): void {
-    if (!userCanAssignTasks(user)) {
-      const assigned = task.assignments?.some((a) => a.assigneeId === user.id);
-      if (!assigned) throw new ForbiddenException('Ruxsat yo\'q');
-      return;
-    }
-    if (task.createdById !== user.id) {
-      throw new ForbiddenException('Ruxsat yo\'q');
-    }
+    const isAssignee = task.assignments?.some((a) => a.assigneeId === user.id);
+    if (isAssignee) return;
+    if (userCanAssignTasks(user) && task.createdById === user.id) return;
+    if (canViewTaskViaDepartment(user, task)) return;
+    throw new ForbiddenException('Ruxsat yo\'q');
   }
 
   async findOne(id: string, user: User) {
@@ -195,21 +228,21 @@ export class TasksService {
           : AuditAction.TASK_UPDATED;
     await this.audit.log(user.id, action, 'task', taskId, { status: dto.status });
 
-    if (isAssignee && user.role === UserRole.EMPLOYEE) {
-      const director = await this.usersService.findById(assignment.task.createdById);
-      if (director.notificationsEnabled && director.fcmToken) {
-        const employeeName = assignment.assignee?.fullName ?? 'Xodim';
+    if (isAssignee) {
+      const creator = await this.usersService.findById(assignment.task.createdById);
+      if (creator.notificationsEnabled && creator.fcmToken) {
+        const assigneeName = assignment.assignee?.fullName ?? 'Xodim';
         const text =
           dto.status === TaskStatus.COMPLETED
-            ? taskCompletedText(employeeName, assignment.task.title, director.language)
+            ? taskCompletedText(assigneeName, assignment.task.title, creator.language)
             : taskStatusText(
-                employeeName,
+                assigneeName,
                 assignment.task.title,
                 dto.status,
-                director.language,
+                creator.language,
               );
         await this.notifications.sendToToken(
-          director.fcmToken,
+          creator.fcmToken,
           text.title,
           text.body,
           { taskId, type: 'task_status', status: dto.status },
@@ -239,10 +272,13 @@ export class TasksService {
   ) {
     await this.findOne(taskId, user);
     const compressed = await compressImageIfNeeded(file.path, file.mimetype);
+    const isImage = IMAGE_MIMES.has(compressed.mimeType);
     const att = this.attachRepo.create({
       taskId,
       uploadedById: user.id,
-      fileName: file.originalname.replace(/\.[^.]+$/, '.jpg'),
+      fileName: isImage
+        ? (file.originalname || 'photo').replace(/\.[^.]+$/, '.jpg')
+        : (file.originalname || 'file'),
       filePath: compressed.filePath,
       mimeType: compressed.mimeType,
       fileSize: compressed.fileSize,

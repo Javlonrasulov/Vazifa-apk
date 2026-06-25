@@ -6,10 +6,12 @@ import {
   Edit2,
   Eye,
   EyeOff,
+  Layers,
   Loader,
   Lock,
   Plus,
   Search,
+  Smartphone,
   Trash2,
   X,
 } from 'lucide-react';
@@ -18,16 +20,31 @@ import {
   apiErrorMessage,
   createUser,
   deleteUser,
+  fetchDepartments,
   fetchFieldOptions,
   fetchUsers,
+  resetDevice,
   resetPassword,
   updateUser,
 } from '../api';
 import { useAppSettings } from '../i18n/LanguageContext';
 import { INDIGO, useAdminTheme } from '../theme/adminTheme';
 import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave, phonesSame } from '../utils/phone';
+import { formatDeviceId, formatDeviceTime, getUserDevices } from '../utils/devices';
 
 const DEFAULT_EMPLOYEE_PASSWORD = '123456';
+
+const emptyEmployeeForm = () => ({
+  login: '',
+  password: DEFAULT_EMPLOYEE_PASSWORD,
+  fullName: '',
+  role: 'employee' as 'director' | 'employee',
+  canAssignTasks: false,
+  position: '',
+  department: '',
+  visibleDepartments: [] as string[],
+  phone: '+998 ',
+});
 
 export default function EmployeesPage() {
   const { t, isDark } = useAppSettings();
@@ -42,6 +59,9 @@ export default function EmployeesPage() {
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
   const [deleteError, setDeleteError] = useState('');
   const [deleteSaving, setDeleteSaving] = useState(false);
+  const [deviceResetTarget, setDeviceResetTarget] = useState<User | null>(null);
+  const [deviceResetSaving, setDeviceResetSaving] = useState(false);
+  const [deviceResetError, setDeviceResetError] = useState('');
   const [passwordTarget, setPasswordTarget] = useState<User | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [showNewPassword, setShowNewPassword] = useState(false);
@@ -54,21 +74,85 @@ export default function EmployeesPage() {
   const [showFormPassword, setShowFormPassword] = useState(true);
   const [positionOptions, setPositionOptions] = useState<string[]>([]);
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
-  const [form, setForm] = useState({
-    login: '',
-    password: '',
-    fullName: '',
-    role: 'employee' as 'director' | 'employee',
-    canAssignTasks: false,
-    position: '',
-    department: '',
-    phone: '',
-  });
+  const [allDepartments, setAllDepartments] = useState<{ id: string; name: string }[]>([]);
+  const [form, setForm] = useState(emptyEmployeeForm);
+
+  const closeEmployeeDialog = () => {
+    setDialogOpen(false);
+    setEditUser(null);
+    setSaveError('');
+    setForm(emptyEmployeeForm());
+  };
 
   const roleLabel = (role: string) => {
     if (role === 'director') return t('director');
     if (role === 'employee') return t('employee');
     return t('admin');
+  };
+
+  const loadAllDepartments = useCallback(async () => {
+    try {
+      const items = await fetchDepartments();
+      setAllDepartments(items.map((d) => ({ id: d.id, name: d.name })));
+    } catch {
+      setAllDepartments([]);
+    }
+  }, []);
+
+  const toggleVisibleDepartment = (name: string) => {
+    setForm((prev) => ({
+      ...prev,
+      visibleDepartments: prev.visibleDepartments.includes(name)
+        ? prev.visibleDepartments.filter((d) => d !== name)
+        : [...prev.visibleDepartments, name],
+    }));
+  };
+
+  const selectAllVisibleDepartments = () => {
+    setForm((prev) => ({
+      ...prev,
+      visibleDepartments: allDepartments.map((d) => d.name),
+    }));
+  };
+
+  const clearVisibleDepartments = () => {
+    setForm((prev) => ({ ...prev, visibleDepartments: [] }));
+  };
+
+  const deptChipBtn = (active: boolean): React.CSSProperties => ({
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 8,
+    width: '100%',
+    padding: '10px 12px',
+    borderRadius: 12,
+    border: `1px solid ${active ? INDIGO : border}`,
+    background: active
+      ? D
+        ? 'linear-gradient(135deg, rgba(99,102,241,0.22), rgba(99,102,241,0.08))'
+        : 'linear-gradient(135deg, rgba(99,102,241,0.12), rgba(99,102,241,0.04))'
+      : D
+        ? 'rgba(255,255,255,0.03)'
+        : '#fff',
+    color: active ? INDIGO : txt,
+    fontSize: 13,
+    fontWeight: active ? 700 : 500,
+    cursor: 'pointer',
+    transition: 'all 0.15s',
+    boxShadow: active ? (D ? '0 4px 14px rgba(99,102,241,0.2)' : '0 4px 14px rgba(99,102,241,0.12)') : 'none',
+    textAlign: 'left',
+  });
+
+  const miniActionBtn: React.CSSProperties = {
+    padding: '5px 10px',
+    borderRadius: 8,
+    border: `1px solid ${border}`,
+    background: D ? 'rgba(255,255,255,0.04)' : '#fff',
+    color: muted,
+    fontSize: 11,
+    fontWeight: 600,
+    cursor: 'pointer',
   };
 
   const loadFieldOptions = useCallback(async (positionQ?: string, departmentQ?: string) => {
@@ -153,33 +237,58 @@ export default function EmployeesPage() {
     return () => clearTimeout(id);
   }, [passwordTarget]);
 
+  const hasDeptTaskAccess = (u: User) =>
+    Array.isArray(u.visibleDepartments) && u.visibleDepartments.length > 0;
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
-    if (!q) return users;
-    return users.filter(
-      (u) =>
-        u.fullName.toLowerCase().includes(q) ||
-        u.login.toLowerCase().includes(q) ||
-        (u.department ?? '').toLowerCase().includes(q),
-    );
+    let list = users;
+    if (q) {
+      list = users.filter(
+        (u) =>
+          u.fullName.toLowerCase().includes(q) ||
+          u.login.toLowerCase().includes(q) ||
+          (u.department ?? '').toLowerCase().includes(q) ||
+          (u.visibleDepartments ?? []).some((d) => d.toLowerCase().includes(q)),
+      );
+    }
+    return [...list].sort((a, b) => {
+      const aRank = hasDeptTaskAccess(a) ? 1 : 0;
+      const bRank = hasDeptTaskAccess(b) ? 1 : 0;
+      if (aRank !== bRank) return bRank - aRank;
+      return a.fullName.localeCompare(b.fullName, 'uz');
+    });
   }, [users, search]);
+
+  const openDeviceResetModal = (u: User) => {
+    setDeviceResetError('');
+    setDeviceResetTarget(u);
+  };
+
+  const handleConfirmDeviceReset = async () => {
+    if (!deviceResetTarget || deviceResetSaving) return;
+    setDeviceResetSaving(true);
+    setDeviceResetError('');
+    try {
+      const updated = await resetDevice(deviceResetTarget.id);
+      setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      setDeviceResetTarget(null);
+      setToast(t('deviceReset'));
+    } catch {
+      setDeviceResetError(t('error'));
+    } finally {
+      setDeviceResetSaving(false);
+    }
+  };
 
   const openCreate = () => {
     setEditUser(null);
     setSaveError('');
     setShowFormPassword(true);
-    setForm({
-      login: '',
-      password: DEFAULT_EMPLOYEE_PASSWORD,
-      fullName: '',
-      role: 'employee',
-      canAssignTasks: false,
-      position: '',
-      department: '',
-      phone: '+998 ',
-    });
+    setForm(emptyEmployeeForm());
     setDialogOpen(true);
     void loadFieldOptions();
+    void loadAllDepartments();
   };
 
   const openEdit = (u: User) => {
@@ -187,6 +296,7 @@ export default function EmployeesPage() {
     setSaveError('');
     setShowFormPassword(true);
     setForm({
+      ...emptyEmployeeForm(),
       login: u.login,
       password: '',
       fullName: u.fullName,
@@ -194,10 +304,12 @@ export default function EmployeesPage() {
       canAssignTasks: u.canAssignTasks ?? u.role === 'director',
       position: u.position ?? '',
       department: u.department ?? '',
+      visibleDepartments: [...(u.visibleDepartments ?? [])],
       phone: displayPhone(u.phone ?? ''),
     });
     setDialogOpen(true);
     void loadFieldOptions(u.position ?? '', u.department ?? '');
+    void loadAllDepartments();
   };
 
   const handleSave = async () => {
@@ -228,6 +340,7 @@ export default function EmployeesPage() {
           canAssignTasks: form.canAssignTasks,
           position: form.position || null,
           department: form.department || null,
+          visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : null,
           phone: phoneForSave(form.phone),
         });
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
@@ -245,13 +358,14 @@ export default function EmployeesPage() {
           canAssignTasks: form.canAssignTasks,
           position: form.position || undefined,
           department: form.department || undefined,
+          visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : undefined,
           phone: phoneForSave(form.phone) || undefined,
         });
         setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         setSearch('');
         setToast(t('added'));
       }
-      setDialogOpen(false);
+      closeEmployeeDialog();
       await load();
       await loadFieldOptions();
     } catch (err) {
@@ -370,7 +484,7 @@ export default function EmployeesPage() {
           justifyContent: 'center',
           backdropFilter: 'blur(4px)',
         }}
-        onClick={() => setDialogOpen(false)}
+        onClick={closeEmployeeDialog}
       >
         <div
           style={{
@@ -391,7 +505,7 @@ export default function EmployeesPage() {
             </span>
             <button
               type="button"
-              onClick={() => setDialogOpen(false)}
+              onClick={closeEmployeeDialog}
               style={{
                 width: 32,
                 height: 32,
@@ -549,6 +663,159 @@ export default function EmployeesPage() {
               </datalist>
             </div>
             <div>
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: 10, marginBottom: 8 }}>
+                <div style={{ flex: 1 }}>
+                  <label style={{ ...labelStyle, marginBottom: 4 }}>{t('visibleDepartmentsTitle')}</label>
+                  <div style={{ fontSize: 11, color: muted, lineHeight: 1.45 }}>{t('visibleDepartmentsHint')}</div>
+                </div>
+                {allDepartments.length > 0 && (
+                  <div style={{ display: 'flex', gap: 6, flexShrink: 0 }}>
+                    <button type="button" style={miniActionBtn} onClick={selectAllVisibleDepartments}>
+                      {t('visibleDepartmentsSelectAll')}
+                    </button>
+                    <button type="button" style={miniActionBtn} onClick={clearVisibleDepartments}>
+                      {t('visibleDepartmentsClear')}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {allDepartments.length === 0 ? (
+                <div
+                  style={{
+                    padding: '16px 14px',
+                    borderRadius: 12,
+                    border: `1px dashed ${border}`,
+                    background: D ? 'rgba(255,255,255,0.02)' : '#fafafa',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                  }}
+                >
+                  <div
+                    style={{
+                      width: 36,
+                      height: 36,
+                      borderRadius: 10,
+                      background: D ? 'rgba(99,102,241,0.12)' : 'rgba(99,102,241,0.08)',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    <Layers size={16} color={INDIGO} />
+                  </div>
+                  <span style={{ fontSize: 12, color: muted, lineHeight: 1.45 }}>{t('visibleDepartmentsEmpty')}</span>
+                </div>
+              ) : (
+                <div
+                  style={{
+                    padding: 12,
+                    borderRadius: 14,
+                    border: `1px solid ${form.visibleDepartments.length ? `${INDIGO}44` : border}`,
+                    background: D ? 'rgba(255,255,255,0.02)' : '#fafafa',
+                  }}
+                >
+                  {form.visibleDepartments.length > 0 ? (
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        marginBottom: 10,
+                        padding: '4px 10px',
+                        borderRadius: 999,
+                        background: D ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.1)',
+                        color: INDIGO,
+                        fontSize: 11,
+                        fontWeight: 700,
+                      }}
+                    >
+                      <Check size={12} />
+                      {form.visibleDepartments.length} {t('visibleDepartmentsSelected')}
+                    </div>
+                  ) : (
+                    <div
+                      style={{
+                        marginBottom: 10,
+                        padding: '8px 10px',
+                        borderRadius: 10,
+                        border: `1px dashed ${border}`,
+                        background: D ? 'rgba(255,255,255,0.02)' : '#fff',
+                        fontSize: 12,
+                        color: muted,
+                        lineHeight: 1.45,
+                      }}
+                    >
+                      {t('visibleDepartmentsNone')}
+                    </div>
+                  )}
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gap: 8,
+                      maxHeight: 176,
+                      overflowY: 'auto',
+                    }}
+                  >
+                    {allDepartments.map((dept) => {
+                      const checked = form.visibleDepartments.includes(dept.name);
+                      return (
+                        <button
+                          key={dept.id}
+                          type="button"
+                          style={deptChipBtn(checked)}
+                          onClick={() => toggleVisibleDepartment(dept.name)}
+                        >
+                          <span style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
+                            <span
+                              style={{
+                                width: 28,
+                                height: 28,
+                                borderRadius: 8,
+                                flexShrink: 0,
+                                background: checked
+                                  ? 'rgba(99,102,241,0.2)'
+                                  : D
+                                    ? 'rgba(255,255,255,0.06)'
+                                    : 'rgba(0,0,0,0.04)',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                              }}
+                            >
+                              <Layers size={14} color={checked ? INDIGO : muted} />
+                            </span>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {dept.name}
+                            </span>
+                          </span>
+                          {checked && (
+                            <span
+                              style={{
+                                width: 20,
+                                height: 20,
+                                borderRadius: 999,
+                                background: INDIGO,
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                flexShrink: 0,
+                              }}
+                            >
+                              <Check size={12} color="#fff" />
+                            </span>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+            <div>
               <label style={labelStyle}>{t('phone')}</label>
               <input
                 style={inputStyle}
@@ -570,7 +837,7 @@ export default function EmployeesPage() {
           <div style={{ display: 'flex', gap: 10, marginTop: 22 }}>
             <button
               type="button"
-              onClick={() => setDialogOpen(false)}
+              onClick={closeEmployeeDialog}
               style={{
                 flex: 1,
                 padding: 10,
@@ -800,6 +1067,140 @@ export default function EmployeesPage() {
       </div>
     );
 
+  const renderDeviceResetModal = () =>
+    deviceResetTarget && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 400,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}
+        onClick={() => {
+          if (deviceResetSaving) return;
+          setDeviceResetTarget(null);
+          setDeviceResetError('');
+        }}
+      >
+        <div
+          style={{
+            background: tableBg,
+            borderRadius: 20,
+            border: `1px solid ${border}`,
+            width: '100%',
+            maxWidth: 400,
+            margin: 16,
+            padding: '28px 24px',
+            boxShadow: D ? '0 24px 64px rgba(0,0,0,0.7)' : '0 24px 64px rgba(0,0,0,0.15)',
+            textAlign: 'center',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 16,
+              margin: '0 auto 16px',
+              background: D ? 'rgba(100,116,139,0.2)' : 'rgba(100,116,139,0.12)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            <Smartphone size={22} color="#64748b" />
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: txt, marginBottom: 8 }}>{t('deviceResetTitle')}</div>
+          <div style={{ fontSize: 13, color: muted, marginBottom: 12, lineHeight: 1.5 }}>
+            <strong style={{ color: txt }}>{deviceResetTarget.fullName}</strong>
+          </div>
+          <div style={{ fontSize: 13, color: muted, marginBottom: 16, lineHeight: 1.5 }}>{t('deviceResetWarn')}</div>
+          {getUserDevices(deviceResetTarget).length > 0 && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '10px 12px',
+                borderRadius: 10,
+                border: `1px solid ${border}`,
+                background: surface,
+                textAlign: 'left',
+              }}
+            >
+              {getUserDevices(deviceResetTarget).map((device, index) => (
+                <div key={device.id} style={{ fontSize: 12, color: txt, lineHeight: 1.5 }}>
+                  <span style={{ fontWeight: 700, color: INDIGO }}>
+                    {t('deviceSlot')} {index + 1}:
+                  </span>{' '}
+                  <span style={{ fontFamily: 'monospace' }}>{formatDeviceId(device.id)}</span>
+                </div>
+              ))}
+            </div>
+          )}
+          {deviceResetError && (
+            <div
+              style={{
+                marginBottom: 16,
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: D ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
+                border: `1px solid ${D ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.2)'}`,
+                color: '#ef4444',
+                fontSize: 12,
+              }}
+            >
+              {deviceResetError}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 10 }}>
+            <button
+              type="button"
+              disabled={deviceResetSaving}
+              onClick={() => {
+                setDeviceResetTarget(null);
+                setDeviceResetError('');
+              }}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 11,
+                border: `1px solid ${border}`,
+                background: 'transparent',
+                color: muted,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: deviceResetSaving ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleConfirmDeviceReset}
+              disabled={deviceResetSaving}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 11,
+                border: 'none',
+                background: deviceResetSaving ? (D ? '#374151' : '#d1d5db') : '#64748b',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: deviceResetSaving ? 'not-allowed' : 'pointer',
+                boxShadow: deviceResetSaving ? 'none' : '0 4px 14px rgba(100,116,139,0.35)',
+              }}
+            >
+              {deviceResetSaving ? t('loginLoading') : t('deviceResetBtn')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+
   const renderDeleteModal = () =>
     deleteTarget && (
       <div
@@ -914,6 +1315,7 @@ export default function EmployeesPage() {
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {renderModal()}
       {renderPasswordModal()}
+      {renderDeviceResetModal()}
       {renderDeleteModal()}
 
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}>
@@ -1001,7 +1403,7 @@ export default function EmployeesPage() {
           }}
         >
           <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 620 }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: 980 }}>
               <thead>
                 <tr
                   style={{
@@ -1009,7 +1411,7 @@ export default function EmployeesPage() {
                     borderBottom: `1px solid ${border}`,
                   }}
                 >
-                  {[t('name'), t('login'), t('role'), t('department'), t('actions')].map((label) => (
+                  {[t('name'), t('login'), t('role'), t('department'), t('visibleDepartmentsCol'), t('device'), t('actions')].map((label) => (
                     <th
                       key={label}
                       style={{
@@ -1029,7 +1431,9 @@ export default function EmployeesPage() {
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((u, i) => (
+                {filtered.map((u, i) => {
+                  const deptViewer = hasDeptTaskAccess(u);
+                  return (
                   <tr
                     key={u.id}
                     style={{
@@ -1039,6 +1443,7 @@ export default function EmployeesPage() {
                           ? `1px solid ${D ? 'rgba(255,255,255,0.045)' : 'rgba(0,0,0,0.045)'}`
                           : 'none',
                       transition: 'background 0.13s',
+                      boxShadow: deptViewer ? `inset 3px 0 0 ${INDIGO}` : undefined,
                     }}
                     onMouseEnter={(e) => {
                       e.currentTarget.style.background = rowHov;
@@ -1092,6 +1497,58 @@ export default function EmployeesPage() {
                       </span>
                     </td>
                     <td style={{ padding: '9px 14px', fontSize: 13, color: muted }}>{u.department ?? '—'}</td>
+                    <td style={{ padding: '9px 14px', maxWidth: 220 }}>
+                      {deptViewer ? (
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {u.visibleDepartments!.map((dept) => (
+                            <span
+                              key={dept}
+                              style={{
+                                fontSize: 11,
+                                fontWeight: 600,
+                                padding: '3px 8px',
+                                borderRadius: 6,
+                                background: D ? 'rgba(99,102,241,0.18)' : 'rgba(99,102,241,0.1)',
+                                color: INDIGO,
+                                whiteSpace: 'nowrap',
+                              }}
+                            >
+                              {dept}
+                            </span>
+                          ))}
+                        </div>
+                      ) : (
+                        <span style={{ fontSize: 13, color: muted }}>—</span>
+                      )}
+                    </td>
+                    <td style={{ padding: '9px 14px', minWidth: 170 }}>
+                      {(() => {
+                        const devices = getUserDevices(u);
+                        if (devices.length === 0) {
+                          return <span style={{ fontSize: 13, color: muted }}>{t('deviceNone')}</span>;
+                        }
+                        return (
+                          <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                            {devices.map((device, index) => {
+                              const lastLogin = formatDeviceTime(device.lastLoginAt);
+                              return (
+                                <div key={device.id} style={{ fontSize: 11, color: txt, lineHeight: 1.45 }}>
+                                  <span style={{ fontWeight: 700, color: INDIGO }}>
+                                    {t('deviceSlot')} {index + 1}:
+                                  </span>{' '}
+                                  <span style={{ fontFamily: 'monospace' }}>{formatDeviceId(device.id)}</span>
+                                  {lastLogin && (
+                                    <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>
+                                      {t('deviceLastLogin')}: {lastLogin}
+                                    </div>
+                                  )}
+                                </div>
+                              );
+                            })}
+                          </div>
+                        );
+                      })()}
+                    </td>
                     <td style={{ padding: '9px 14px' }}>
                       <div style={{ display: 'flex', gap: 4 }}>
                         <button type="button" title={t('edit')} onClick={() => openEdit(u)} style={actionBtn(D, INDIGO)}>
@@ -1107,6 +1564,14 @@ export default function EmployeesPage() {
                         </button>
                         <button
                           type="button"
+                          title={t('resetDevice')}
+                          onClick={() => openDeviceResetModal(u)}
+                          style={actionBtn(D, '#64748b')}
+                        >
+                          <Smartphone size={14} />
+                        </button>
+                        <button
+                          type="button"
                           title={t('delete')}
                           onClick={() => {
                             setDeleteError('');
@@ -1119,7 +1584,8 @@ export default function EmployeesPage() {
                       </div>
                     </td>
                   </tr>
-                ))}
+                  );
+                })}
               </tbody>
             </table>
           </div>

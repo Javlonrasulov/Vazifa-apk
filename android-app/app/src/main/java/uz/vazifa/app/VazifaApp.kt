@@ -10,6 +10,8 @@ import dagger.hilt.android.HiltAndroidApp
 import dagger.hilt.android.EntryPointAccessors
 import uz.vazifa.app.di.ImageLoaderEntryPoint
 import uz.vazifa.app.notifications.VazifaNotificationHelper
+import uz.vazifa.app.service.PresenceService
+import javax.inject.Inject
 
 object AppForegroundState {
     @Volatile
@@ -23,6 +25,8 @@ object AppForegroundState {
 
 @HiltAndroidApp
 class VazifaApp : Application(), ImageLoaderFactory {
+    @Inject lateinit var presenceService: PresenceService
+
     override fun onCreate() {
         super.onCreate()
         VazifaNotificationHelper.createChannels(this)
@@ -35,6 +39,7 @@ class VazifaApp : Application(), ImageLoaderFactory {
                 AppForegroundState.setForeground(false)
             }
         })
+        presenceService.start()
     }
 
     override fun newImageLoader(): ImageLoader {

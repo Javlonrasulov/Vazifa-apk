@@ -21,10 +21,19 @@ import { TaskAttachment } from '../tasks/entities/task-attachment.entity';
 import { TaskAssignment } from '../tasks/entities/task-assignment.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
+import { resetUserDevices, bindUserDevice } from '../common/utils/user-devices';
+import { DepartmentsService } from '../departments/departments.service';
+import {
+  isUserOnline,
+  PRESENCE_TOUCH_THROTTLE_MS,
+  resolveLastSeenAt,
+} from '../common/utils/presence';
 
 @Injectable()
 export class UsersService implements OnModuleInit {
   static readonly DEFAULT_ADMIN_PERMISSIONS = ['employees', 'system_users'];
+
+  private readonly lastSeenTouchCache = new Map<string, number>();
 
   constructor(
     @InjectRepository(User)
@@ -33,6 +42,7 @@ export class UsersService implements OnModuleInit {
     private optionRepo: Repository<UserFieldOption>,
     private dataSource: DataSource,
     private audit: AuditService,
+    private departmentsService: DepartmentsService,
   ) {}
 
   async onModuleInit() {
@@ -58,6 +68,11 @@ export class UsersService implements OnModuleInit {
     const trimmed = name?.trim();
     if (!trimmed) return;
 
+    if (type === 'department') {
+      await this.departmentsService.ensureDepartment(trimmed);
+      return;
+    }
+
     const nameNormalized = trimmed.toLowerCase();
     const exists = await this.optionRepo.findOne({ where: { type, nameNormalized } });
     if (exists) return;
@@ -68,6 +83,10 @@ export class UsersService implements OnModuleInit {
   }
 
   async getFieldOptions(type: UserFieldOptionType, q?: string) {
+    if (type === 'department') {
+      return this.departmentsService.findNames(q);
+    }
+
     const qb = this.optionRepo
       .createQueryBuilder('o')
       .where('o.type = :type', { type })
@@ -84,17 +103,10 @@ export class UsersService implements OnModuleInit {
   }
 
   async getMobileDepartmentOptions(): Promise<string[]> {
-    const users = await this.repo.find({
-      where: { role: UserRole.EMPLOYEE, isActive: true },
-      select: ['department'],
-    });
-    return [
-      ...new Set(
-        users
-          .map((u) => u.department?.trim())
-          .filter((d): d is string => !!d),
-      ),
-    ].sort((a, b) => a.localeCompare(b, 'uz'));
+    const departments = await this.departmentsService.findAll();
+    return departments
+      .filter((d) => d.employeeCount > 0)
+      .map((d) => d.name);
   }
 
   async findAll() {
@@ -110,7 +122,7 @@ export class UsersService implements OnModuleInit {
       ],
       order: { fullName: 'ASC' },
     });
-    return users.map((u) => this.sanitize(u));
+    return users.map((u) => this.sanitizeWithPresence(u));
   }
 
   async findById(id: string) {
@@ -191,6 +203,9 @@ export class UsersService implements OnModuleInit {
       canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
       position: isAdmin ? null : (dto.position ?? null),
       department: isAdmin ? null : (dto.department ?? null),
+      visibleDepartments: isAdmin
+        ? null
+        : this.normalizeVisibleDepartments(dto.visibleDepartments),
       phone: isAdmin ? null : (dto.phone ?? null),
       adminPermissions: isAdmin
         ? (dto.adminPermissions?.length
@@ -237,6 +252,9 @@ export class UsersService implements OnModuleInit {
     if (dto.canAssignTasks !== undefined) user.canAssignTasks = dto.canAssignTasks;
     if (dto.position !== undefined) user.position = dto.position;
     if (dto.department !== undefined) user.department = dto.department;
+    if (dto.visibleDepartments !== undefined) {
+      user.visibleDepartments = this.normalizeVisibleDepartments(dto.visibleDepartments);
+    }
     if (dto.phone !== undefined) {
       await this.assertUniquePhone(dto.phone, id);
       user.phone = dto.phone;
@@ -311,9 +329,7 @@ export class UsersService implements OnModuleInit {
 
   async resetDevice(id: string, actorId?: string) {
     const user = await this.findById(id);
-    user.deviceId = null;
-    user.deviceApproved = false;
-    user.pendingDeviceId = null;
+    resetUserDevices(user);
     await this.repo.save(user);
     await this.audit.log(actorId ?? null, AuditAction.DEVICE_RESET, 'user', id);
     return this.sanitize(user);
@@ -325,10 +341,13 @@ export class UsersService implements OnModuleInit {
       throw new BadRequestException('Kutilayotgan qurilma yo\'q');
     }
     if (approve) {
-      user.deviceId = user.pendingDeviceId;
-      user.deviceApproved = true;
+      const bindResult = bindUserDevice(user, user.pendingDeviceId);
+      if (bindResult === 'limit') {
+        throw new BadRequestException('Maksimal 2 ta qurilma');
+      }
+    } else {
+      user.pendingDeviceId = null;
     }
-    user.pendingDeviceId = null;
     await this.repo.save(user);
     await this.audit.log(actorId ?? null, AuditAction.DEVICE_BOUND, 'user', id, { approve });
     return this.sanitize(user);
@@ -341,5 +360,36 @@ export class UsersService implements OnModuleInit {
   sanitize(user: User) {
     const { passwordHash, fcmToken, ...rest } = user;
     return rest;
+  }
+
+  async touchLastSeen(userId: string, force = false): Promise<void> {
+    const now = Date.now();
+    const lastTouch = this.lastSeenTouchCache.get(userId) ?? 0;
+    if (!force && now - lastTouch < PRESENCE_TOUCH_THROTTLE_MS) return;
+
+    this.lastSeenTouchCache.set(userId, now);
+    await this.repo.update(userId, { lastSeenAt: new Date(now) });
+  }
+
+  sanitizeWithPresence(user: User) {
+    const base = this.sanitize(user);
+    const lastSeen = resolveLastSeenAt(user);
+    return {
+      ...base,
+      lastSeenAt: lastSeen?.toISOString() ?? null,
+      isOnline: isUserOnline(user),
+    };
+  }
+
+  private normalizeVisibleDepartments(departments?: string[] | null): string[] | null {
+    if (!departments?.length) return null;
+    const unique = new Map<string, string>();
+    for (const item of departments) {
+      const trimmed = item?.trim();
+      if (!trimmed) continue;
+      unique.set(trimmed.toLowerCase(), trimmed);
+    }
+    const values = [...unique.values()];
+    return values.length ? values : null;
   }
 }

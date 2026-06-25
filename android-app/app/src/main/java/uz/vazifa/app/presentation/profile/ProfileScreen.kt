@@ -37,7 +37,7 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
     var showNewPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
 
-    LaunchedEffect(Unit) { viewModel.load() }
+    LaunchedEffect(Unit) { viewModel.load(onSessionExpired = onLogout) }
 
     val passwordChangedMsg = localized("profile_password_changed")
     LaunchedEffect(state.changePasswordSuccess) {

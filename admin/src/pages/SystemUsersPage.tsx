@@ -485,7 +485,9 @@ export default function SystemUsersPage() {
                   {showPassword ? <EyeOff size={15} /> : <Eye size={15} />}
                 </button>
               </div>
-              {!editUser && (
+              {editUser ? (
+                <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>{t('passwordOptionalHint')}</div>
+              ) : (
                 <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>{t('defaultPasswordHint')}</div>
               )}
             </div>

@@ -29,8 +29,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.hasActiveAssignment
 import uz.vazifa.app.domain.model.hasCompletedAssignment
@@ -143,7 +145,7 @@ class DashboardSectionViewModel @Inject constructor(
                 when (section) {
                     DashboardSection.EMPLOYEES -> {
                         val employees = repo.getContacts()
-                            .filter { it.role == "employee" && it.login != "xodim1" }
+                            .filter { it.isTaskAssignable() }
                             .sortedBy { it.fullName }
                         val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
                         _state.update {
@@ -214,7 +216,7 @@ class EmployeesTabViewModel @Inject constructor(
             _state.update { it.copy(loading = true) }
             runCatching {
                 val employees = repo.getContacts()
-                    .filter { it.role == "employee" && it.login != "xodim1" }
+                    .filter { it.isTaskAssignable() }
                     .sortedBy { it.fullName }
                 val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
                 _state.update {
@@ -266,7 +268,13 @@ fun EmployeesTabScreen(
         visibleEmployees.all { it.id in state.selectedEmployeeIds }
     val fieldColors = liquidGlassFieldColors()
 
-    LaunchedEffect(Unit) { viewModel.load() }
+    LaunchedEffect(Unit) {
+        viewModel.load()
+        while (true) {
+            delay(30_000)
+            viewModel.load()
+        }
+    }
 
     VazifaTabScaffold(
         titleContent = {
@@ -405,7 +413,15 @@ fun DashboardSectionScreen(
         visibleEmployees.all { it.id in state.selectedEmployeeIds }
     val fieldColors = liquidGlassFieldColors()
 
-    LaunchedEffect(Unit) { viewModel.load() }
+    LaunchedEffect(Unit) {
+        viewModel.load()
+        if (isEmployees) {
+            while (true) {
+                delay(30_000)
+                viewModel.load()
+            }
+        }
+    }
 
     taskToDelete?.let { taskId ->
         AlertDialog(
@@ -650,19 +666,28 @@ private fun EmployeeRow(
             verticalAlignment = Alignment.CenterVertically,
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            Box(
-                Modifier
-                    .size(42.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(style.gradient)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    employeeInitials(user.fullName),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 14.sp,
-                )
+            Box(Modifier.size(42.dp)) {
+                Box(
+                    Modifier
+                        .matchParentSize()
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(style.gradient)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(
+                        employeeInitials(user.fullName),
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                    )
+                }
+                Box(
+                    Modifier
+                        .size(11.dp)
+                        .align(Alignment.BottomEnd),
+                ) {
+                    EmployeePresenceDot(user)
+                }
             }
             Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
                 Text(user.fullName, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
@@ -674,6 +699,7 @@ private fun EmployeeRow(
                 if (subtitle.isNotBlank()) {
                     Text(subtitle, color = LiquidTheme.textMuted, fontSize = 12.sp)
                 }
+                EmployeePresenceStatus(user)
             }
         }
         GlassHeaderIconButton(

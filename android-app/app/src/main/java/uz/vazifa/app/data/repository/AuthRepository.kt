@@ -96,6 +96,36 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    fun hasStoredSession(): Boolean =
+        !tokenStore.accessToken.isNullOrBlank()
+
+    suspend fun hasStoredSessionAsync(): Boolean {
+        val prefs = loadPrefs()
+        return !prefs[KEY_ACCESS].isNullOrBlank()
+    }
+
+    /** Serverdan foydalanuvchini oladi; autentifikatsiya xatosi bo'lsa sessiyani tozalaydi. */
+    private suspend fun fetchUserFromServer(): UserDto? {
+        return try {
+            val user = api.api.me()
+            saveUserJson(user)
+            user
+        } catch (e: HttpException) {
+            if (e.code() == 401 && refreshAndPersist()) {
+                try {
+                    val user = api.api.me()
+                    saveUserJson(user)
+                    return user
+                } catch (_: Exception) {
+                    logout()
+                    return null
+                }
+            }
+            logout()
+            null
+        }
+    }
+
     /** Bildirishnomalar yoqilgan va serverga token yuborilgan bo'lsa true. */
     suspend fun registerPushToken(): Boolean {
         if (!areNotificationsEnabled()) {
@@ -169,38 +199,16 @@ class AuthRepository @Inject constructor(
     suspend fun restoreSession(): UserDto? {
         val prefs = loadPrefs()
         val access = prefs[KEY_ACCESS]
-        if (access.isNullOrBlank()) return null
+        if (access.isNullOrBlank()) {
+            context.dataStore.edit { it.remove(KEY_USER) }
+            return null
+        }
 
         loadTokensFromPrefs(prefs)
 
         return try {
-            val user = api.api.me()
-            saveUserJson(user)
-            user
-        } catch (e: HttpException) {
-            if (e.code() == 401) {
-                if (refreshAndPersist()) {
-                    try {
-                        val user = api.api.me()
-                        saveUserJson(user)
-                        return user
-                    } catch (retry: HttpException) {
-                        if (retry.code() == 401) {
-                            logout()
-                            return null
-                        }
-                    } catch (_: IOException) {
-                        return loadCachedUser(prefs)
-                    }
-                } else {
-                    logout()
-                    return null
-                }
-            }
-            loadCachedUser(prefs)
+            fetchUserFromServer()
         } catch (_: IOException) {
-            loadCachedUser(prefs)
-        } catch (_: Exception) {
             loadCachedUser(prefs)
         }
     }
@@ -230,16 +238,19 @@ class AuthRepository @Inject constructor(
         api.api.changePassword(ChangePasswordRequest(currentPassword, newPassword))
     }
 
+    suspend fun sendPresenceHeartbeat() {
+        api.api.sendPresence()
+    }
+
     suspend fun currentUser(): UserDto? {
         val prefs = loadPrefs()
+        val hasTokens = !tokenStore.accessToken.isNullOrBlank() || !prefs[KEY_ACCESS].isNullOrBlank()
+        if (!hasTokens) return null
+
+        loadTokensFromPrefs(prefs)
         return try {
-            if (tokenStore.accessToken.isNullOrBlank() && prefs[KEY_ACCESS].isNullOrBlank()) {
-                loadCachedUser(prefs)
-            } else {
-                loadTokensFromPrefs(prefs)
-                api.api.me().also { saveUserJson(it) }
-            }
-        } catch (_: Exception) {
+            fetchUserFromServer()
+        } catch (_: IOException) {
             loadCachedUser(prefs)
         }
     }

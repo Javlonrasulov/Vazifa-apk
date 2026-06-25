@@ -74,6 +74,19 @@ class NavViewModel @Inject constructor(
         currentUser = user
     }
 
+    fun refreshUser(onSessionExpired: () -> Unit = {}) {
+        viewModelScope.launch {
+            val hadSession = auth.hasStoredSessionAsync()
+            val user = auth.currentUser()
+            if (user != null) {
+                currentUser = user
+            } else if (hadSession) {
+                currentUser = null
+                onSessionExpired()
+            }
+        }
+    }
+
     fun ensureNotifications(onAllowed: () -> Unit, onBlocked: () -> Unit) {
         viewModelScope.launch {
             if (auth.shouldSkipNotifGate()) onAllowed() else onBlocked()
@@ -92,6 +105,7 @@ fun VazifaNavHost(
     val route = backStack?.destination?.route
     val user = viewModel.currentUser
     val isDirector = user?.canAssignTasks == true
+    val showDepartmentTasks = !user?.visibleDepartments.isNullOrEmpty()
     val showBottomNav = route == Routes.MAIN
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
 
@@ -114,11 +128,19 @@ fun VazifaNavHost(
 
     DisposableEffect(lifecycleOwner, route) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && requiresNotificationAccess(route)) {
-                viewModel.ensureNotifications(
-                    onAllowed = {},
-                    onBlocked = { redirectToNotificationGate() },
-                )
+            if (event == Lifecycle.Event.ON_RESUME) {
+                if (route == Routes.MAIN) {
+                    viewModel.refreshUser {
+                        viewModel.clearBootRoute()
+                        navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                    }
+                }
+                if (requiresNotificationAccess(route)) {
+                    viewModel.ensureNotifications(
+                        onAllowed = {},
+                        onBlocked = { redirectToNotificationGate() },
+                    )
+                }
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
@@ -197,9 +219,19 @@ fun VazifaNavHost(
                 )
             }
             composable(Routes.MAIN) {
+                val goLogin = {
+                    viewModel.clearBootRoute()
+                    navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                }
                 LaunchedEffect(Unit) {
+                    viewModel.refreshUser(onSessionExpired = goLogin)
                     if (!viewModel.auth.shouldSkipNotifGate()) {
                         redirectToNotificationGate()
+                    }
+                }
+                LaunchedEffect(isDirector) {
+                    if (isDirector && selectedTab == AppTab.TASKS) {
+                        selectedTab = AppTab.HOME
                     }
                 }
                 when (selectedTab) {
@@ -238,6 +270,9 @@ fun VazifaNavHost(
                     AppTab.TASKS -> TasksScreen(
                         onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                         onEditTask = { navController.navigate(Routes.editTask(it)) },
+                    )
+                    AppTab.DEPT_TASKS -> DepartmentTasksScreen(
+                        onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                     )
                     AppTab.CREATE -> if (isDirector) {
                         CreateTaskScreen(
@@ -319,6 +354,7 @@ fun VazifaNavHost(
             VazifaBottomNav(
                 selected = selectedTab,
                 isDirector = isDirector,
+                showDepartmentTasks = showDepartmentTasks,
                 onSelect = { selectedTab = it },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)

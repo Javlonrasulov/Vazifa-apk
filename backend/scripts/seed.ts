@@ -9,6 +9,7 @@ import { TaskComment } from '../src/tasks/entities/task-comment.entity';
 import { AuditLog } from '../src/audit/entities/audit-log.entity';
 import { ChatMessage } from '../src/chat/entities/chat-message.entity';
 import { UserFieldOption } from '../src/users/entities/user-field-option.entity';
+import { Department } from '../src/departments/entities/department.entity';
 import { UserRole } from '../src/common/enums';
 
 async function seed() {
@@ -19,7 +20,7 @@ async function seed() {
     username: process.env.DB_USERNAME || 'vazifa',
     password: process.env.DB_PASSWORD || 'vazifa123',
     database: process.env.DB_DATABASE || 'vazifa',
-    entities: [User, Task, TaskAssignment, TaskAttachment, TaskComment, AuditLog, ChatMessage, UserFieldOption],
+    entities: [User, Task, TaskAssignment, TaskAttachment, TaskComment, AuditLog, ChatMessage, UserFieldOption, Department],
     synchronize: true,
   });
 

@@ -16,8 +16,10 @@ import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.hasCompletedAssignment
+import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.util.TaskDeadlineCountdown
 import uz.vazifa.app.util.UzbekTextSearch
+import java.io.File
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZonedDateTime
@@ -60,6 +62,37 @@ data class TasksUiState(
 )
 
 @HiltViewModel
+class DepartmentTasksViewModel @Inject constructor(
+    private val repo: TaskRepository,
+    private val auth: AuthRepository,
+) : ViewModel() {
+    private val _state = MutableStateFlow(DepartmentTasksUiState())
+    val state = _state.asStateFlow()
+
+    fun load() = viewModelScope.launch {
+        _state.update { it.copy(loading = true) }
+        runCatching {
+            val user = auth.currentUser()
+            _state.update {
+                it.copy(
+                    tasks = repo.getDepartmentTasks(),
+                    visibleDepartments = user?.visibleDepartments.orEmpty(),
+                    loading = false,
+                )
+            }
+        }.onFailure {
+            _state.update { s -> s.copy(loading = false) }
+        }
+    }
+}
+
+data class DepartmentTasksUiState(
+    val tasks: List<Task> = emptyList(),
+    val visibleDepartments: List<String> = emptyList(),
+    val loading: Boolean = false,
+)
+
+@HiltViewModel
 class TaskDetailViewModel @Inject constructor(
     private val repo: TaskRepository,
     private val auth: AuthRepository,
@@ -99,6 +132,15 @@ class TaskDetailViewModel @Inject constructor(
             load(taskId)
         }.onFailure { _state.update { it.copy(loading = false) } }
     }
+
+    fun completeWithVoice(taskId: String, assignmentId: String, voiceFile: File) = viewModelScope.launch {
+        _state.update { it.copy(loading = true) }
+        runCatching {
+            repo.uploadFileAttachment(taskId, voiceFile, "audio/mp4", voiceFile.name)
+            repo.updateStatus(taskId, assignmentId, TaskStatus.COMPLETED.key)
+            load(taskId)
+        }.onFailure { _state.update { it.copy(loading = false) } }
+    }
 }
 
 data class TaskDetailUiState(
@@ -122,8 +164,7 @@ class CreateTaskViewModel @Inject constructor(
         runCatching {
             _state.update {
                 it.copy(
-                    contacts = repo.getContacts()
-                        .filter { u -> u.role == "employee" && u.login != "xodim1" },
+                    contacts = repo.getContacts().filter { it.isTaskAssignable() },
                 )
             }
         }

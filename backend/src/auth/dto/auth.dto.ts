@@ -78,6 +78,11 @@ export class CreateUserDto {
   @IsArray()
   @IsString({ each: true })
   adminPermissions?: string[];
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  visibleDepartments?: string[];
 }
 
 export class UpdateUserDto {
@@ -125,6 +130,11 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   canAccessAdminPanel?: boolean;
+
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  visibleDepartments?: string[];
 }
 
 export class ResetPasswordDto {

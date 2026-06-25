@@ -152,6 +152,7 @@ fun TaskDetailScreen(
             val isCreator = task.isCreator(state.currentUserId)
             val showManagerView = canAssignTasks && isCreator
             val showAssigneeView = myAssignment != null
+            val showObserverView = !showManagerView && !showAssigneeView
             val isCompleted = myAssignment?.status == TaskStatus.COMPLETED.key
             val displayStatus = myAssignment?.status ?: task.assignments.firstOrNull()?.status
 
@@ -239,12 +240,52 @@ fun TaskDetailScreen(
                                 }
                             }
                         }
+                        if (showObserverView) {
+                            task.createdBy?.let { creator ->
+                                val dept = creator.department?.takeIf { it.isNotBlank() }
+                                Text(
+                                    "${localized("dept_task_from")}: ${creator.fullName}${dept?.let { " ($it)" } ?: ""}",
+                                    color = LiquidTheme.textMuted,
+                                    fontSize = 13.sp,
+                                )
+                            }
+                            Text(localized("task_assignee_status"), color = LiquidTheme.textMuted, fontSize = 13.sp)
+                            task.assignments.forEach { a ->
+                                val assignee = a.assignee
+                                val dept = assignee?.department?.takeIf { it.isNotBlank() }
+                                val name = assignee?.fullName ?: a.assigneeId
+                                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                                    Text(
+                                        "${localized("dept_task_to")}: $name${dept?.let { " ($it)" } ?: ""} — ${localizedStatus(a.status)}",
+                                        color = LiquidTheme.text,
+                                        fontSize = 13.sp,
+                                    )
+                                    if (a.status == TaskStatus.COMPLETED.key && !a.completedAt.isNullOrBlank()) {
+                                        Text(
+                                            "  ${localized("task_completed_at")}: ${TaskDeadlineCountdown.formatDisplay(a.completedAt)}",
+                                            color = LiquidTheme.textMuted,
+                                            fontSize = 12.sp,
+                                        )
+                                    }
+                                }
+                            }
+                            TaskDeadlineCountdown.durationBetween(task.startAt, task.deadlineAt)?.let { duration ->
+                                val totalMinutes = duration.days * 24 * 60 + duration.hours * 60 + duration.minutes
+                                if (totalMinutes > 0) {
+                                    Text(
+                                        "${localized("task_time_given")}: ${formatTaskDuration(duration.days, duration.hours, duration.minutes)}",
+                                        color = LiquidTheme.textMuted,
+                                        fontSize = 13.sp,
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
 
                 if (task.attachments.isNotEmpty()) {
-                    Text(localized("task_photos"), color = LiquidTheme.textMuted, fontSize = 13.sp)
-                    TaskAttachmentGrid(task.attachments.map { it.url })
+                    Text(localized("task_attachments"), color = LiquidTheme.textMuted, fontSize = 13.sp)
+                    TaskAttachmentsList(task.attachments)
                 }
 
                 if (task.comments.isNotEmpty()) {
@@ -267,13 +308,19 @@ fun TaskDetailScreen(
                             colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
                         ) { Text(localized("status_accepted")) }
                     }
-                    Button(
+                    TaskVoiceCompleteBar(
+                        enabled = !state.loading,
+                        onVoiceRecorded = { file ->
+                            viewModel.completeWithVoice(task.id, myAssignment.id, file)
+                        },
+                    )
+                    TextButton(
                         onClick = { showCompleteDialog = true },
                         enabled = !state.loading,
-                        modifier = Modifier.fillMaxWidth().height(52.dp),
-                        shape = RoundedCornerShape(LiquidGlass.RadiusChip),
-                        colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-                    ) { Text(localized("task_complete_btn")) }
+                        modifier = Modifier.fillMaxWidth(),
+                    ) {
+                        Text(localized("task_complete_with_text"))
+                    }
                 }
             }
         }

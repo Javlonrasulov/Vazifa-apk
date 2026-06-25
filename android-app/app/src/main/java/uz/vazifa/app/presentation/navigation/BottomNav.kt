@@ -47,6 +47,7 @@ enum class AppTab(val route: String) {
     HOME("home"),
     EMPLOYEES("employees"),
     TASKS("tasks"),
+    DEPT_TASKS("dept_tasks"),
     CREATE("create"),
     PROFILE("profile"),
 }
@@ -55,22 +56,29 @@ enum class AppTab(val route: String) {
 fun VazifaBottomNav(
     selected: AppTab,
     isDirector: Boolean,
+    showDepartmentTasks: Boolean = false,
     onSelect: (AppTab) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val tabs = if (isDirector) {
-        listOf(
-            Triple(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")),
-            Triple(AppTab.EMPLOYEES, Icons.Default.People, localized("nav_employees")),
-            Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
-            Triple(AppTab.CREATE, Icons.Default.Add, localized("task_create")),
-            Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
-        )
+        buildList {
+            add(Triple(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")))
+            add(Triple(AppTab.EMPLOYEES, Icons.Default.People, localized("nav_employees")))
+            add(Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")))
+            if (showDepartmentTasks) {
+                add(Triple(AppTab.DEPT_TASKS, Icons.Default.Business, localized("nav_dept_tasks")))
+            }
+            add(Triple(AppTab.CREATE, Icons.Default.Add, localized("task_create")))
+            add(Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")))
+        }
     } else {
-        listOf(
-            Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
-            Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
-        )
+        buildList {
+            add(Triple(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")))
+            if (showDepartmentTasks) {
+                add(Triple(AppTab.DEPT_TASKS, Icons.Default.Business, localized("nav_dept_tasks")))
+            }
+            add(Triple(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")))
+        }
     }
 
     val isDark = LiquidTheme.isDark

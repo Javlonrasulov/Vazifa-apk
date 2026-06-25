@@ -28,8 +28,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.delay
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.User
+import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -62,7 +64,7 @@ class EmployeeDetailViewModel @Inject constructor(
             _state.update { it.copy(loading = true) }
             runCatching {
                 val employee = repo.getContacts()
-                    .firstOrNull { it.id == employeeId && it.role == "employee" }
+                    .firstOrNull { it.id == employeeId && it.isTaskAssignable() }
                 val tasks = repo.getTasks()
                 val (stats, items) = EmployeeStatsCalculator.compute(employeeId, tasks)
                 _state.update {
@@ -83,7 +85,13 @@ fun EmployeeDetailScreen(
     viewModel: EmployeeDetailViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    LaunchedEffect(Unit) { viewModel.load() }
+    LaunchedEffect(Unit) {
+        viewModel.load()
+        while (true) {
+            delay(30_000)
+            viewModel.load()
+        }
+    }
 
     VazifaTabScaffold(
         title = state.employee?.fullName ?: localized("dash_employees"),
@@ -164,22 +172,32 @@ private fun EmployeeProfileCard(employee: User) {
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
-        Box(
-            Modifier
-                .size(56.dp)
-                .clip(CircleShape)
-                .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                employeeInitials(employee.fullName),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = 18.sp,
-            )
+        Box(Modifier.size(56.dp)) {
+            Box(
+                Modifier
+                    .matchParentSize()
+                    .clip(CircleShape)
+                    .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    employeeInitials(employee.fullName),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 18.sp,
+                )
+            }
+            Box(
+                Modifier
+                    .size(13.dp)
+                    .align(Alignment.BottomEnd),
+            ) {
+                EmployeePresenceDot(employee, dotSize = 13.dp)
+            }
         }
         Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
             Text(employee.fullName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 18.sp)
+            EmployeePresenceStatus(employee)
             employee.position?.takeIf { it.isNotBlank() }?.let {
                 Text(it, color = LiquidTheme.textMuted, fontSize = 13.sp)
             }

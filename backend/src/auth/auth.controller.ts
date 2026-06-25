@@ -57,4 +57,10 @@ export class AuthController {
     const { passwordHash, fcmToken, ...rest } = req.user;
     return rest;
   }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Post('presence')
+  presence(@Request() req: { user: User }) {
+    return this.authService.heartbeat(req.user.id);
+  }
 }

@@ -37,6 +37,9 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   department: string | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  visibleDepartments: string[] | null;
+
   @Column({ type: 'varchar', nullable: true })
   phone: string | null;
 
@@ -49,6 +52,14 @@ export class User {
   @Column({ type: 'varchar', nullable: true })
   pendingDeviceId: string | null;
 
+  @Column({ type: 'simple-json', nullable: true })
+  linkedDevices: Array<{
+    id: string;
+    approved: boolean;
+    linkedAt: string;
+    lastLoginAt?: string;
+  }> | null;
+
   @Column({ type: 'varchar', nullable: true })
   fcmToken: string | null;
 
@@ -60,6 +71,9 @@ export class User {
 
   @Column({ default: true })
   isActive: boolean;
+
+  @Column({ type: 'timestamptz', nullable: true })
+  lastSeenAt: Date | null;
 
   @Column({ default: false })
   canAccessAdminPanel: boolean;

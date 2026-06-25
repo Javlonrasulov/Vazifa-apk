@@ -11,6 +11,7 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../common/enums';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../common/enums';
+import { bindUserDevice, getApprovedDevices } from '../common/utils/user-devices';
 
 @Injectable()
 export class AuthService {
@@ -46,7 +47,19 @@ export class AuthService {
       throw new ForbiddenException('Admin web panel orqali kiradi');
     }
 
-    await this.handleDeviceBinding(user, deviceId);
+    const hadDevice = getApprovedDevices(user).some((d) => d.id === deviceId);
+    const bindResult = bindUserDevice(user, deviceId);
+    if (bindResult === 'limit') {
+      throw new ForbiddenException({
+        code: 'DEVICE_LIMIT_REACHED',
+        message: 'Maksimal 2 ta qurilma. Admin bilan bog\'laning',
+      });
+    }
+    await this.usersService.saveUser(user);
+    await this.usersService.touchLastSeen(user.id, true);
+    if (!hadDevice) {
+      await this.audit.log(user.id, AuditAction.DEVICE_BOUND, 'user', user.id, { deviceId });
+    }
 
     const tokens = await this.generateTokens(user);
     await this.audit.log(user.id, AuditAction.LOGIN, 'user', user.id, { deviceId });
@@ -54,28 +67,8 @@ export class AuthService {
     return {
       ...tokens,
       user: this.usersService.sanitize(user),
-      devicePendingApproval: !!user.pendingDeviceId && !user.deviceApproved,
+      devicePendingApproval: false,
     };
-  }
-
-  private async handleDeviceBinding(user: User, deviceId: string) {
-    if (!user.deviceId) {
-      user.deviceId = deviceId;
-      user.deviceApproved = true;
-      await this.usersService.saveUser(user);
-      await this.audit.log(user.id, AuditAction.DEVICE_BOUND, 'user', user.id);
-      return;
-    }
-
-    if (user.deviceId === deviceId) return;
-
-    user.pendingDeviceId = deviceId;
-    user.deviceApproved = false;
-    await this.usersService.saveUser(user);
-    throw new ForbiddenException({
-      code: 'DEVICE_NOT_APPROVED',
-      message: 'Yangi qurilma admin tasdig\'ini kutmoqda',
-    });
   }
 
   async adminLogin(login: string, password: string) {
@@ -125,6 +118,12 @@ export class AuthService {
     if (language) user.language = language;
     await this.usersService.saveUser(user);
     return this.usersService.sanitize(user);
+  }
+
+  async heartbeat(userId: string) {
+    await this.usersService.touchLastSeen(userId, true);
+    const user = await this.usersService.findById(userId);
+    return this.usersService.sanitizeWithPresence(user);
   }
 
   private async generateTokens(user: User) {

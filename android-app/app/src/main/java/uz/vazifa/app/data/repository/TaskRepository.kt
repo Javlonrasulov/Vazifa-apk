@@ -24,6 +24,7 @@ import uz.vazifa.app.domain.model.TaskComment
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.util.ImageCompress
 import uz.vazifa.app.util.MediaUrl
+import java.io.File
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -34,6 +35,10 @@ class TaskRepository @Inject constructor(
 ) {
 
     suspend fun getTasks(): List<Task> = api.api.getTasks()
+        .map { it.toDomain() }
+        .distinctBy { it.id }
+
+    suspend fun getDepartmentTasks(): List<Task> = api.api.getDepartmentTasks()
         .map { it.toDomain() }
         .distinctBy { it.id }
 
@@ -77,25 +82,37 @@ class TaskRepository @Inject constructor(
         api.api.addComment(taskId, CommentRequest(body))
     }
 
-    suspend fun uploadAttachment(taskId: String, imageUri: Uri) {
-        val file = ImageCompress.compressToFile(context, imageUri)
+    suspend fun uploadFileAttachment(
+        taskId: String,
+        file: java.io.File,
+        mimeType: String,
+        fileName: String = file.name,
+    ) {
         val part = MultipartBody.Part.createFormData(
             "file",
-            file.name,
-            file.asRequestBody("image/jpeg".toMediaTypeOrNull()),
+            fileName,
+            file.asRequestBody(mimeType.toMediaTypeOrNull()),
         )
         try {
             api.api.uploadAttachment(taskId, part)
         } finally {
-            file.delete()
+            if (file.exists()) file.delete()
         }
+    }
+
+    suspend fun uploadAttachment(taskId: String, imageUri: Uri) {
+        val file = ImageCompress.compressToFile(context, imageUri)
+        uploadFileAttachment(taskId, file, "image/jpeg", file.name)
     }
 
     suspend fun getContacts(): List<User> = api.api.getContacts().map { it.toUser() }
 
     suspend fun getDepartments(): List<String> = api.api.getDepartments()
 
-    private fun UserDto.toUser() = User(id, login, fullName, role, position, department, phone)
+    private fun UserDto.toUser() = User(
+        id, login, fullName, role, position, department, phone, notificationsEnabled, canAssignTasks,
+        isOnline, lastSeenAt,
+    )
 
     private fun TaskDto.toDomain() = Task(
         id, title, description, priority, status, startAt, deadlineAt, createdById,

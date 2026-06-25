@@ -28,7 +28,12 @@ data class User(
     val department: String? = null,
     val phone: String? = null,
     val notificationsEnabled: Boolean = true,
+    val canAssignTasks: Boolean = false,
+    val isOnline: Boolean = false,
+    val lastSeenAt: String? = null,
 )
+
+fun User.isTaskAssignable(): Boolean = login != "xodim1"
 
 data class TaskAssignment(
     val id: String,

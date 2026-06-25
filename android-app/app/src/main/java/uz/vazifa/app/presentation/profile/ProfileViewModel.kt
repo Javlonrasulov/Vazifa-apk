@@ -9,7 +9,6 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
-import uz.vazifa.app.data.remote.ApiClient
 import uz.vazifa.app.data.remote.UserDto
 import uz.vazifa.app.data.repository.AppSettingsRepository
 import uz.vazifa.app.data.repository.AuthRepository
@@ -33,19 +32,21 @@ data class ProfileUiState(
 @HiltViewModel
 class ProfileViewModel @Inject constructor(
     private val auth: AuthRepository,
-    private val api: ApiClient,
     private val settings: AppSettingsRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ProfileUiState())
     val state = _state.asStateFlow()
 
-    fun load() = viewModelScope.launch {
-        runCatching {
-            val user = api.api.me()
-            val themeMode = settings.themeMode.first()
-            val lang = settings.language.first()
-            _state.update { it.copy(user = user, themeMode = themeMode, language = lang) }
+    fun load(onSessionExpired: () -> Unit = {}) = viewModelScope.launch {
+        val hadSession = auth.hasStoredSessionAsync()
+        val user = auth.currentUser()
+        if (user == null) {
+            if (hadSession) onSessionExpired()
+            return@launch
         }
+        val themeMode = settings.themeMode.first()
+        val lang = settings.language.first()
+        _state.update { it.copy(user = user, themeMode = themeMode, language = lang) }
     }
 
     fun setLanguage(language: AppLanguage) = viewModelScope.launch {

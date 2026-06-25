@@ -2,12 +2,15 @@ import { Module } from '@nestjs/common';
 import { ConfigModule, ConfigService } from '@nestjs/config';
 import { TypeOrmModule } from '@nestjs/typeorm';
 import { ScheduleModule } from '@nestjs/schedule';
+import { APP_INTERCEPTOR } from '@nestjs/core';
 import { AuthModule } from './auth/auth.module';
 import { UsersModule } from './users/users.module';
 import { TasksModule } from './tasks/tasks.module';
 import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
+import { DepartmentsModule } from './departments/departments.module';
+import { PresenceInterceptor } from './common/interceptors/presence.interceptor';
 
 @Module({
   imports: [
@@ -33,6 +36,13 @@ import { ChatModule } from './chat/chat.module';
     AuditModule,
     NotificationsModule,
     ChatModule,
+    DepartmentsModule,
+  ],
+  providers: [
+    {
+      provide: APP_INTERCEPTOR,
+      useClass: PresenceInterceptor,
+    },
   ],
 })
 export class AppModule {}

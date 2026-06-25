@@ -72,10 +72,17 @@ export interface User {
   canAssignTasks: boolean;
   position: string | null;
   department: string | null;
+  visibleDepartments: string[] | null;
   phone: string | null;
   deviceId: string | null;
   deviceApproved: boolean;
   pendingDeviceId: string | null;
+  linkedDevices: Array<{
+    id: string;
+    approved: boolean;
+    linkedAt: string;
+    lastLoginAt?: string;
+  }> | null;
   notificationsEnabled: boolean;
   isActive: boolean;
   canAccessAdminPanel: boolean;
@@ -96,11 +103,43 @@ export async function fetchUsers() {
 }
 
 export async function fetchFieldOptions(type: 'position' | 'department', q?: string) {
-  const path = type === 'position' ? 'positions' : 'departments';
-  const { data } = await api.get<string[]>(`/users/options/${path}`, {
+  if (type === 'department') {
+    const { data } = await api.get<string[]>('/departments/names', {
+      params: q?.trim() ? { q: q.trim() } : undefined,
+    });
+    return data;
+  }
+  const { data } = await api.get<string[]>('/users/options/positions', {
     params: q?.trim() ? { q: q.trim() } : undefined,
   });
   return data;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  employeeCount: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export async function fetchDepartments() {
+  const { data } = await api.get<Department[]>('/departments');
+  return data;
+}
+
+export async function createDepartment(name: string) {
+  const { data } = await api.post<Department>('/departments', { name });
+  return data;
+}
+
+export async function updateDepartment(id: string, name: string) {
+  const { data } = await api.patch<Department>(`/departments/${id}`, { name });
+  return data;
+}
+
+export async function deleteDepartment(id: string) {
+  await api.delete(`/departments/${id}`);
 }
 
 export async function createUser(body: {
@@ -112,6 +151,7 @@ export async function createUser(body: {
   position?: string;
   department?: string;
   phone?: string;
+  visibleDepartments?: string[];
   adminPermissions?: string[];
 }) {
   const { data } = await api.post('/users', body);
