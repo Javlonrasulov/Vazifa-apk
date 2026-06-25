@@ -13,6 +13,10 @@ export class LoginDto {
   @IsString()
   @IsNotEmpty()
   deviceId: string;
+
+  @IsOptional()
+  @IsString()
+  deviceName?: string;
 }
 
 export class RefreshTokenDto {

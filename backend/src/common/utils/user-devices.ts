@@ -4,6 +4,7 @@ export const MAX_USER_DEVICES = 2;
 
 export type LinkedDevice = {
   id: string;
+  name?: string;
   approved: boolean;
   linkedAt: string;
   lastLoginAt?: string;
@@ -13,6 +14,12 @@ export function formatDeviceId(id: string): string {
   const trimmed = id.trim();
   if (trimmed.length <= 10) return trimmed.toUpperCase();
   return trimmed.slice(-8).toUpperCase();
+}
+
+export function formatDeviceLabel(device: Pick<LinkedDevice, 'id' | 'name'>): string {
+  const name = device.name?.trim();
+  if (name) return name;
+  return formatDeviceId(device.id);
 }
 
 export function getLinkedDevices(user: User): LinkedDevice[] {
@@ -48,14 +55,20 @@ export function syncLegacyDeviceFields(user: User): void {
 
 export type DeviceBindResult = 'ok' | 'limit';
 
-export function bindUserDevice(user: User, deviceId: string): DeviceBindResult {
+export function bindUserDevice(
+  user: User,
+  deviceId: string,
+  deviceName?: string | null,
+): DeviceBindResult {
   const now = new Date().toISOString();
   const devices = getLinkedDevices(user);
   const existing = devices.find((device) => device.id === deviceId);
+  const normalizedName = deviceName?.trim() || undefined;
 
   if (existing) {
     existing.approved = true;
     existing.lastLoginAt = now;
+    if (normalizedName) existing.name = normalizedName;
     user.linkedDevices = devices;
     syncLegacyDeviceFields(user);
     return 'ok';
@@ -68,6 +81,7 @@ export function bindUserDevice(user: User, deviceId: string): DeviceBindResult {
 
   devices.push({
     id: deviceId,
+    name: normalizedName,
     approved: true,
     linkedAt: now,
     lastLoginAt: now,

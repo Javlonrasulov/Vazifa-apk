@@ -38,6 +38,7 @@ import uz.vazifa.app.localization.AppLanguage
 import uz.vazifa.app.presentation.components.liquidGlassFieldColors
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.*
+import uz.vazifa.app.util.DeviceInfo
 import uz.vazifa.app.util.UzbekPhoneVisualTransformation
 import javax.inject.Inject
 
@@ -55,6 +56,7 @@ fun LoginScreen(
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val deviceId = remember { Settings.Secure.getString(context.contentResolver, Settings.Secure.ANDROID_ID) }
+    val deviceName = remember { DeviceInfo.displayName() }
     var showLangMenu by remember { mutableStateOf(false) }
     var showPassword by remember { mutableStateOf(false) }
     val fieldColors = liquidGlassFieldColors()
@@ -189,7 +191,7 @@ fun LoginScreen(
 
             Spacer(Modifier.height(24.dp))
             Button(
-                onClick = { viewModel.login(deviceId) },
+                onClick = { viewModel.login(deviceId, deviceName) },
                 enabled = !state.loading,
                 modifier = Modifier.fillMaxWidth().height(52.dp),
                 shape = RoundedCornerShape(LiquidGlass.RadiusChip),

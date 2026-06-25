@@ -27,10 +27,11 @@ import {
   resetPassword,
   updateUser,
 } from '../api';
+import DepartmentFilterDropdown from '../components/DepartmentFilterDropdown';
 import { useAppSettings } from '../i18n/LanguageContext';
 import { INDIGO, useAdminTheme } from '../theme/adminTheme';
 import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave, phonesSame } from '../utils/phone';
-import { formatDeviceId, formatDeviceTime, getUserDevices } from '../utils/devices';
+import { formatDeviceId, formatDeviceLabel, formatDeviceTime, getUserDevices } from '../utils/devices';
 
 const DEFAULT_EMPLOYEE_PASSWORD = '123456';
 
@@ -54,6 +55,7 @@ export default function EmployeesPage() {
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [departmentFilter, setDepartmentFilter] = useState<string | null>(null);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [editUser, setEditUser] = useState<User | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<User | null>(null);
@@ -223,7 +225,8 @@ export default function EmployeesPage() {
   useEffect(() => {
     load();
     loadFieldOptions();
-  }, [load, loadFieldOptions]);
+    void loadAllDepartments();
+  }, [load, loadFieldOptions, loadAllDepartments]);
 
   useEffect(() => {
     if (!toast) return;
@@ -240,11 +243,55 @@ export default function EmployeesPage() {
   const hasDeptTaskAccess = (u: User) =>
     Array.isArray(u.visibleDepartments) && u.visibleDepartments.length > 0;
 
+  const normalizeDept = (value: string | null | undefined) => (value ?? '').trim().toLowerCase();
+
+  const departmentFilterData = useMemo(() => {
+    const countByNorm = new Map<string, { label: string; count: number }>();
+
+    for (const user of users) {
+      const raw = user.department?.trim();
+      if (!raw) continue;
+      const norm = normalizeDept(raw);
+      const existing = countByNorm.get(norm);
+      if (existing) {
+        existing.count += 1;
+      } else {
+        countByNorm.set(norm, { label: raw, count: 1 });
+      }
+    }
+
+    for (const dept of allDepartments) {
+      const norm = normalizeDept(dept.name);
+      const existing = countByNorm.get(norm);
+      if (existing) {
+        existing.label = dept.name;
+      } else {
+        countByNorm.set(norm, { label: dept.name, count: 0 });
+      }
+    }
+
+    const options = [...countByNorm.entries()]
+      .map(([key, item]) => ({ key, label: item.label, count: item.count }))
+      .filter((item) => item.count > 0)
+      .sort((a, b) => a.label.localeCompare(b.label, 'uz'));
+
+    const noDepartmentCount = users.filter((u) => !u.department?.trim()).length;
+
+    return { options, noDepartmentCount };
+  }, [users, allDepartments]);
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();
     let list = users;
+
+    if (departmentFilter === '__none__') {
+      list = list.filter((u) => !u.department?.trim());
+    } else if (departmentFilter) {
+      list = list.filter((u) => normalizeDept(u.department) === departmentFilter);
+    }
+
     if (q) {
-      list = users.filter(
+      list = list.filter(
         (u) =>
           u.fullName.toLowerCase().includes(q) ||
           u.login.toLowerCase().includes(q) ||
@@ -258,7 +305,7 @@ export default function EmployeesPage() {
       if (aRank !== bRank) return bRank - aRank;
       return a.fullName.localeCompare(b.fullName, 'uz');
     });
-  }, [users, search]);
+  }, [users, search, departmentFilter]);
 
   const openDeviceResetModal = (u: User) => {
     setDeviceResetError('');
@@ -1135,7 +1182,12 @@ export default function EmployeesPage() {
                   <span style={{ fontWeight: 700, color: INDIGO }}>
                     {t('deviceSlot')} {index + 1}:
                   </span>{' '}
-                  <span style={{ fontFamily: 'monospace' }}>{formatDeviceId(device.id)}</span>
+                  <span style={{ fontWeight: 600, color: txt }}>{formatDeviceLabel(device)}</span>
+                  {!device.name && (
+                    <span style={{ fontFamily: 'monospace', fontSize: 10, color: muted, marginLeft: 6 }}>
+                      ({formatDeviceId(device.id)})
+                    </span>
+                  )}
                 </div>
               ))}
             </div>
@@ -1326,7 +1378,15 @@ export default function EmployeesPage() {
           </span>
         </div>
 
-        <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <DepartmentFilterDropdown
+            value={departmentFilter}
+            onChange={setDepartmentFilter}
+            totalCount={users.length}
+            noDepartmentCount={departmentFilterData.noDepartmentCount}
+            options={departmentFilterData.options}
+          />
+
           <div
             style={{
               display: 'flex',
@@ -1536,7 +1596,12 @@ export default function EmployeesPage() {
                                   <span style={{ fontWeight: 700, color: INDIGO }}>
                                     {t('deviceSlot')} {index + 1}:
                                   </span>{' '}
-                                  <span style={{ fontFamily: 'monospace' }}>{formatDeviceId(device.id)}</span>
+                                  <span style={{ fontWeight: 600, color: txt }}>{formatDeviceLabel(device)}</span>
+                                  {!device.name && (
+                                    <span style={{ fontFamily: 'monospace', fontSize: 10, color: muted, marginLeft: 6 }}>
+                                      ({formatDeviceId(device.id)})
+                                    </span>
+                                  )}
                                   {lastLogin && (
                                     <div style={{ fontSize: 10, color: muted, marginTop: 2 }}>
                                       {t('deviceLastLogin')}: {lastLogin}

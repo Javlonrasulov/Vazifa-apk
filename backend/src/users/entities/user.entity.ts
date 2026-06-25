@@ -55,6 +55,7 @@ export class User {
   @Column({ type: 'simple-json', nullable: true })
   linkedDevices: Array<{
     id: string;
+    name?: string;
     approved: boolean;
     linkedAt: string;
     lastLoginAt?: string;

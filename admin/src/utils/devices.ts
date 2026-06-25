@@ -1,5 +1,6 @@
 export type LinkedDevice = {
   id: string;
+  name?: string;
   approved: boolean;
   linkedAt: string;
   lastLoginAt?: string;
@@ -9,6 +10,12 @@ export function formatDeviceId(id: string): string {
   const trimmed = id.trim();
   if (trimmed.length <= 10) return trimmed.toUpperCase();
   return trimmed.slice(-8).toUpperCase();
+}
+
+export function formatDeviceLabel(device: Pick<LinkedDevice, 'id' | 'name'>): string {
+  const name = device.name?.trim();
+  if (name) return name;
+  return formatDeviceId(device.id);
 }
 
 export function getUserDevices(user: {

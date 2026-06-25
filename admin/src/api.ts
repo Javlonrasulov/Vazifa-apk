@@ -79,6 +79,7 @@ export interface User {
   pendingDeviceId: string | null;
   linkedDevices: Array<{
     id: string;
+    name?: string;
     approved: boolean;
     linkedAt: string;
     lastLoginAt?: string;

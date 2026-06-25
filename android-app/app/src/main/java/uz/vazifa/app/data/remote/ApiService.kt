@@ -3,7 +3,12 @@ package uz.vazifa.app.data.remote
 import okhttp3.MultipartBody
 import retrofit2.http.*
 
-data class LoginRequest(val login: String, val password: String, val deviceId: String)
+data class LoginRequest(
+    val login: String,
+    val password: String,
+    val deviceId: String,
+    val deviceName: String? = null,
+)
 data class LoginResponse(
     val accessToken: String,
     val refreshToken: String,

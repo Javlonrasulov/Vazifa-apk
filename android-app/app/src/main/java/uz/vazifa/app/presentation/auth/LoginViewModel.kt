@@ -49,7 +49,7 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
 
     fun onPasswordChange(v: String) = _state.update { it.copy(password = v, errorKey = null) }
 
-    fun login(deviceId: String) {
+    fun login(deviceId: String, deviceName: String) {
         val current = _state.value
         if (current.mode == LoginMode.PHONE && current.phoneDigits.length < 9) {
             _state.update { it.copy(errorKey = "login_empty") }
@@ -73,7 +73,7 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
         viewModelScope.launch {
             _state.update { it.copy(loading = true, errorKey = null) }
             try {
-                auth.login(identifier, current.password, deviceId)
+                auth.login(identifier, current.password, deviceId, deviceName)
                 _state.update { it.copy(loading = false, loggedIn = true) }
             } catch (e: HttpException) {
                 val key = when (e.code()) {

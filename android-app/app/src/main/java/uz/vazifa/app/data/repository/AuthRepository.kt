@@ -175,8 +175,8 @@ class AuthRepository @Inject constructor(
         return true
     }
 
-    suspend fun login(login: String, password: String, deviceId: String): UserDto {
-        val res = api.api.login(LoginRequest(login, password, deviceId))
+    suspend fun login(login: String, password: String, deviceId: String, deviceName: String? = null): UserDto {
+        val res = api.api.login(LoginRequest(login, password, deviceId, deviceName))
         saveTokens(res.accessToken, res.refreshToken)
         saveUserJson(res.user)
         return res.user

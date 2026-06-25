@@ -30,7 +30,7 @@ export class AuthService {
     }
   }
 
-  async login(identifier: string, password: string, deviceId: string) {
+  async login(identifier: string, password: string, deviceId: string, deviceName?: string) {
     const trimmed = identifier.trim();
     const user =
       (await this.usersService.findByLogin(trimmed.toLowerCase())) ??
@@ -48,7 +48,7 @@ export class AuthService {
     }
 
     const hadDevice = getApprovedDevices(user).some((d) => d.id === deviceId);
-    const bindResult = bindUserDevice(user, deviceId);
+    const bindResult = bindUserDevice(user, deviceId, deviceName);
     if (bindResult === 'limit') {
       throw new ForbiddenException({
         code: 'DEVICE_LIMIT_REACHED',
