@@ -3,7 +3,6 @@ import {
   ConflictException,
   Injectable,
   NotFoundException,
-  OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
@@ -14,7 +13,7 @@ import { UserRole } from '../common/enums';
 import { CreateDepartmentDto, UpdateDepartmentDto } from './dto/department.dto';
 
 @Injectable()
-export class DepartmentsService implements OnModuleInit {
+export class DepartmentsService {
   constructor(
     @InjectRepository(Department)
     private deptRepo: Repository<Department>,
@@ -24,33 +23,8 @@ export class DepartmentsService implements OnModuleInit {
     private optionRepo: Repository<UserFieldOption>,
   ) {}
 
-  async onModuleInit() {
-    const users = await this.userRepo.find({ select: ['department'] });
-    for (const user of users) {
-      await this.ensureDepartment(user.department);
-    }
-
-    const options = await this.optionRepo.find({ where: { type: 'department' } });
-    for (const option of options) {
-      await this.ensureDepartment(option.name);
-    }
-  }
-
   private normalize(name: string) {
     return name.trim().toLowerCase();
-  }
-
-  async ensureDepartment(name?: string | null) {
-    const trimmed = name?.trim();
-    if (!trimmed) return null;
-
-    const nameNormalized = this.normalize(trimmed);
-    const existing = await this.deptRepo.findOne({ where: { nameNormalized } });
-    if (existing) return existing;
-
-    return this.deptRepo.save(
-      this.deptRepo.create({ name: trimmed, nameNormalized }),
-    );
   }
 
   private async countEmployees(departmentName: string): Promise<number> {
@@ -145,12 +119,43 @@ export class DepartmentsService implements OnModuleInit {
       throw new BadRequestException(`Bu bo'limda ${employeeCount} ta xodim bor`);
     }
 
+    await this.purgeDepartmentReferences(department.name);
+
     await this.optionRepo.delete({
       type: 'department',
       nameNormalized: department.nameNormalized,
     });
     await this.deptRepo.remove(department);
     return { success: true };
+  }
+
+  private async purgeDepartmentReferences(name: string) {
+    const trimmed = name.trim();
+    const normalized = this.normalize(trimmed);
+
+    await this.userRepo
+      .createQueryBuilder()
+      .update(User)
+      .set({ department: null })
+      .where('LOWER(TRIM(department)) = :normalized', { normalized })
+      .execute();
+
+    const users = await this.userRepo
+      .createQueryBuilder('u')
+      .select(['u.id', 'u.visibleDepartments'])
+      .where('u.visibleDepartments IS NOT NULL')
+      .getMany();
+
+    for (const user of users) {
+      if (!user.visibleDepartments?.length) continue;
+      const filtered = user.visibleDepartments.filter(
+        (d) => this.normalize(d) !== normalized,
+      );
+      if (filtered.length === user.visibleDepartments.length) continue;
+      await this.userRepo.update(user.id, {
+        visibleDepartments: filtered.length ? filtered : null,
+      });
+    }
   }
 
   private async syncFieldOption(name: string) {

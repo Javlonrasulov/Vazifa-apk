@@ -345,7 +345,7 @@ export default function EmployeesPage() {
     setForm({
       ...emptyEmployeeForm(),
       login: u.login,
-      password: '',
+      password: u.passwordPlain ?? '',
       fullName: u.fullName,
       role: u.role as 'director' | 'employee',
       canAssignTasks: u.canAssignTasks ?? u.role === 'director',
@@ -363,7 +363,8 @@ export default function EmployeesPage() {
     setSaving(true);
     setSaveError('');
     try {
-      if (form.password && form.password.length < 6) {
+      const trimmedPassword = form.password.trim();
+      if (trimmedPassword && trimmedPassword.length < 6) {
         setSaveError(t('passwordMinError'));
         return;
       }
@@ -379,9 +380,11 @@ export default function EmployeesPage() {
       }
 
       if (editUser) {
+        const initialPassword = (editUser.passwordPlain ?? '').trim();
+        const passwordChanged = trimmedPassword !== initialPassword;
         const updated = await updateUser(editUser.id, {
           login: form.login.trim(),
-          ...(form.password ? { password: form.password } : {}),
+          ...(passwordChanged && trimmedPassword ? { password: trimmedPassword } : {}),
           fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
@@ -399,7 +402,7 @@ export default function EmployeesPage() {
         }
         const created = await createUser({
           login: form.login,
-          password: form.password || DEFAULT_EMPLOYEE_PASSWORD,
+          password: trimmedPassword || DEFAULT_EMPLOYEE_PASSWORD,
           fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
@@ -444,8 +447,8 @@ export default function EmployeesPage() {
 
   const openPasswordModal = (u: User) => {
     setPasswordTarget(u);
-    setNewPassword('');
-    setShowNewPassword(false);
+    setNewPassword(u.passwordPlain ?? '');
+    setShowNewPassword(true);
     setPasswordError('');
   };
 
@@ -458,18 +461,25 @@ export default function EmployeesPage() {
 
   const handleConfirmPassword = async () => {
     if (!passwordTarget) return;
-    if (newPassword.length < 6) {
+    const trimmed = newPassword.trim();
+    if (trimmed.length < 6) {
       setPasswordError(t('passwordMinError'));
+      return;
+    }
+    const initialPassword = (passwordTarget.passwordPlain ?? '').trim();
+    if (trimmed === initialPassword) {
+      closePasswordModal();
       return;
     }
     setPasswordSaving(true);
     setPasswordError('');
     try {
-      await resetPassword(passwordTarget.id, newPassword);
+      await resetPassword(passwordTarget.id, trimmed);
       closePasswordModal();
       setToast(t('passwordChanged'));
-    } catch {
-      setPasswordError(t('error'));
+      await load();
+    } catch (err) {
+      setPasswordError(mapSaveError(err));
     } finally {
       setPasswordSaving(false);
     }

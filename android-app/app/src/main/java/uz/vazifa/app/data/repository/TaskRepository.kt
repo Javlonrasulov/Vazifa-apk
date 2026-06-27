@@ -16,7 +16,9 @@ import uz.vazifa.app.data.remote.TaskDto
 import uz.vazifa.app.data.remote.UpdateStatusRequest
 import uz.vazifa.app.data.remote.UpdateTaskRequest
 import uz.vazifa.app.data.remote.UserDto
+import uz.vazifa.app.domain.model.Department
 import uz.vazifa.app.domain.model.DashboardStats
+import uz.vazifa.app.data.remote.DepartmentDto
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskAssignment
 import uz.vazifa.app.domain.model.TaskAttachment
@@ -107,7 +109,10 @@ class TaskRepository @Inject constructor(
 
     suspend fun getContacts(): List<User> = api.api.getContacts().map { it.toUser() }
 
-    suspend fun getDepartments(): List<String> = api.api.getDepartments()
+    suspend fun getDepartments(): List<Department> =
+        api.api.getDepartments().map { it.toDomain() }
+
+    private fun DepartmentDto.toDomain() = Department(id, name, employeeCount)
 
     private fun UserDto.toUser() = User(
         id, login, fullName, role, position, department, phone, notificationsEnabled, canAssignTasks,

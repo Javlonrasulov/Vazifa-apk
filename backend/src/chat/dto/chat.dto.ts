@@ -1,0 +1,91 @@
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsNumber,
+  IsObject,
+  IsOptional,
+  IsString,
+  IsUUID,
+} from 'class-validator';
+import { ChatMessageMeta, ChatMessageType } from '../entities/chat-message.entity';
+
+export class SendMessageDto {
+  @IsUUID()
+  receiverId: string;
+
+  @IsOptional()
+  @IsEnum(ChatMessageType)
+  type?: ChatMessageType;
+
+  @IsOptional()
+  @IsString()
+  body?: string;
+
+  @IsOptional()
+  @IsString()
+  filePath?: string;
+
+  @IsOptional()
+  @IsString()
+  fileName?: string;
+
+  @IsOptional()
+  @IsString()
+  mimeType?: string;
+
+  @IsOptional()
+  @IsObject()
+  meta?: ChatMessageMeta;
+
+  @IsOptional()
+  @IsUUID()
+  replyToId?: string;
+
+  @IsOptional()
+  @IsString()
+  forwardedFrom?: string;
+
+  @IsOptional()
+  @IsString()
+  clientId?: string;
+}
+
+export class EditMessageDto {
+  @IsString()
+  body: string;
+}
+
+export class ReactDto {
+  @IsOptional()
+  @IsString()
+  emoji?: string | null;
+}
+
+export class MarkReadDto {
+  @IsUUID()
+  peerId: string;
+
+  @IsOptional()
+  @IsArray()
+  @IsUUID('all', { each: true })
+  messageIds?: string[];
+}
+
+export class TypingDto {
+  @IsUUID()
+  receiverId: string;
+
+  @IsBoolean()
+  typing: boolean;
+}
+
+export class HistoryQueryDto {
+  @IsOptional()
+  @IsString()
+  before?: string;
+
+  @IsOptional()
+  @IsNumber()
+  limit?: number;
+}

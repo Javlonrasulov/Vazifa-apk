@@ -54,7 +54,7 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
   me(@Request() req: { user: User }) {
-    const { passwordHash, fcmToken, ...rest } = req.user;
+    const { passwordHash, fcmToken, passwordPlain, ...rest } = req.user;
     return rest;
   }
 

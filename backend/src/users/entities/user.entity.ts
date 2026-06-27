@@ -22,6 +22,9 @@ export class User {
   @Column()
   passwordHash: string;
 
+  @Column({ type: 'varchar', nullable: true })
+  passwordPlain: string | null;
+
   @Column()
   fullName: string;
 

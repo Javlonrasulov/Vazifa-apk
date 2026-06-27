@@ -20,8 +20,12 @@ import androidx.navigation.NavType
 import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.data.repository.ChatUnreadRepository
+import uz.vazifa.app.data.repository.NotificationInboxRepository
 import uz.vazifa.app.data.remote.UserDto
 import uz.vazifa.app.presentation.auth.LoginScreen
 import uz.vazifa.app.presentation.dashboard.DirectorDashboardScreen
@@ -30,16 +34,22 @@ import uz.vazifa.app.presentation.dashboard.DashboardSectionScreen
 import uz.vazifa.app.presentation.dashboard.EmployeesTabScreen
 import uz.vazifa.app.presentation.dashboard.EmployeeDetailScreen
 import uz.vazifa.app.presentation.notifications.NotificationGateScreen
+import uz.vazifa.app.presentation.chat.ChatListScreen
+import uz.vazifa.app.presentation.chat.ChatConversationScreen
+import uz.vazifa.app.presentation.chat.NewChatScreen
 import uz.vazifa.app.presentation.profile.ProfileScreen
-import uz.vazifa.app.presentation.tasks.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
+import uz.vazifa.app.presentation.tasks.*
+
 import javax.inject.Inject
 
 @HiltViewModel
 class NavViewModel @Inject constructor(
     val auth: AuthRepository,
+    private val inbox: NotificationInboxRepository,
+    private val chatUnread: ChatUnreadRepository,
 ) : ViewModel() {
     var currentUser by mutableStateOf<UserDto?>(null)
         private set
@@ -92,12 +102,28 @@ class NavViewModel @Inject constructor(
             if (auth.shouldSkipNotifGate()) onAllowed() else onBlocked()
         }
     }
+
+    fun clearNotificationBadge() {
+        viewModelScope.launch { inbox.clearAll() }
+    }
+
+    val chatUnreadCount = chatUnread.unreadCount.stateIn(
+        viewModelScope,
+        SharingStarted.WhileSubscribed(5_000),
+        0,
+    )
+
+    fun clearChatUnread() {
+        viewModelScope.launch { chatUnread.clear() }
+    }
 }
 
 @Composable
 fun VazifaNavHost(
     pendingTaskId: String? = null,
     onPendingTaskConsumed: () -> Unit = {},
+    pendingChatUserId: String? = null,
+    onPendingChatConsumed: () -> Unit = {},
     viewModel: NavViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
@@ -105,11 +131,12 @@ fun VazifaNavHost(
     val route = backStack?.destination?.route
     val user = viewModel.currentUser
     val isDirector = user?.canAssignTasks == true
-    val showDepartmentTasks = !user?.visibleDepartments.isNullOrEmpty()
     val showBottomNav = route == Routes.MAIN
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val chatUnreadCount by viewModel.chatUnreadCount.collectAsState()
 
-    var selectedTab by remember { mutableStateOf(if (isDirector) AppTab.HOME else AppTab.TASKS) }
+    var selectedTab by remember { mutableStateOf(AppTab.HOME) }
+    var showCreateSheet by remember { mutableStateOf(false) }
     var preselectedAssigneeIds by remember { mutableStateOf<Set<String>?>(null) }
     val startDestination = viewModel.bootRoute ?: Routes.SPLASH
     val lifecycleOwner = LocalLifecycleOwner.current
@@ -157,12 +184,27 @@ fun VazifaNavHost(
         val taskId = pendingTaskId ?: return@LaunchedEffect
         if (user == null) return@LaunchedEffect
         if (route == Routes.LOGIN || route == Routes.SPLASH || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        viewModel.clearNotificationBadge()
         if (route != Routes.taskDetail(taskId)) {
             navController.navigate(Routes.taskDetail(taskId))
         }
         onPendingTaskConsumed()
     }
 
+    LaunchedEffect(pendingChatUserId, route, user) {
+        val chatUserId = pendingChatUserId ?: return@LaunchedEffect
+        if (user == null) return@LaunchedEffect
+        if (route == Routes.LOGIN || route == Routes.SPLASH || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        viewModel.clearChatUnread()
+        navController.navigate(Routes.chatConversation(chatUserId, ""))
+        onPendingChatConsumed()
+    }
+
+    CompositionLocalProvider(
+        LocalTaskNavigator provides { taskId ->
+            navController.navigate(Routes.taskDetail(taskId))
+        },
+    ) {
     Box(
         Modifier
             .fillMaxSize()
@@ -181,7 +223,7 @@ fun VazifaNavHost(
                     viewModel.checkAuth { ok, u ->
                         if (ok && u != null) {
                             viewModel.resolveAfterAuth { dest ->
-                                selectedTab = if (u.canAssignTasks) AppTab.HOME else AppTab.TASKS
+                                selectedTab = AppTab.HOME
                                 navController.navigate(dest) { popUpTo(Routes.SPLASH) { inclusive = true } }
                             }
                         } else {
@@ -201,7 +243,7 @@ fun VazifaNavHost(
                         viewModel.checkAuth { _, u ->
                             u?.let { viewModel.setUser(it) }
                             viewModel.resolveAfterAuth { dest ->
-                                selectedTab = if (viewModel.currentUser?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
+                                selectedTab = AppTab.HOME
                                 navController.navigate(dest) { popUpTo(Routes.LOGIN) { inclusive = true } }
                             }
                         }
@@ -213,7 +255,7 @@ fun VazifaNavHost(
                     authRepository = viewModel.auth,
                     onGranted = {
                         viewModel.markBootRoute(Routes.MAIN)
-                        selectedTab = if (viewModel.currentUser?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
+                        selectedTab = AppTab.HOME
                         navController.navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
                     },
                 )
@@ -227,11 +269,6 @@ fun VazifaNavHost(
                     viewModel.refreshUser(onSessionExpired = goLogin)
                     if (!viewModel.auth.shouldSkipNotifGate()) {
                         redirectToNotificationGate()
-                    }
-                }
-                LaunchedEffect(isDirector) {
-                    if (isDirector && selectedTab == AppTab.TASKS) {
-                        selectedTab = AppTab.HOME
                     }
                 }
                 when (selectedTab) {
@@ -273,6 +310,11 @@ fun VazifaNavHost(
                     )
                     AppTab.DEPT_TASKS -> DepartmentTasksScreen(
                         onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                    )
+                    AppTab.CHAT -> ChatListScreen(
+                        currentUserId = user?.id.orEmpty(),
+                        onOpenChat = { peerId, name -> navController.navigate(Routes.chatConversation(peerId, name)) },
+                        onNewChat = { navController.navigate(Routes.CHAT_NEW) },
                     )
                     AppTab.CREATE -> if (isDirector) {
                         CreateTaskScreen(
@@ -348,19 +390,62 @@ fun VazifaNavHost(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(
+                Routes.CHAT_CONVERSATION,
+                arguments = listOf(
+                    navArgument("peerId") { type = NavType.StringType },
+                    navArgument("name") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { entry ->
+                ChatConversationScreen(
+                    peerId = entry.arguments?.getString("peerId").orEmpty(),
+                    peerName = entry.arguments?.getString("name").orEmpty(),
+                    currentUserId = user?.id.orEmpty(),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.CHAT_NEW) {
+                NewChatScreen(
+                    currentUserId = user?.id.orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onPick = { peerId, name ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.chatConversation(peerId, name))
+                    },
+                )
+            }
         }
 
         if (showBottomNav) {
             VazifaBottomNav(
                 selected = selectedTab,
-                isDirector = isDirector,
-                showDepartmentTasks = showDepartmentTasks,
-                onSelect = { selectedTab = it },
+                chatUnreadCount = chatUnreadCount,
+                onSelect = { tab ->
+                    selectedTab = tab
+                    if (tab == AppTab.CHAT) viewModel.clearChatUnread()
+                },
+                onCreateClick = { showCreateSheet = true },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
                     .navigationBarsPadding()
                     .zIndex(100f),
             )
         }
+
+        CreateActionSheet(
+            visible = showCreateSheet,
+            onDismiss = { showCreateSheet = false },
+            onAction = { action ->
+                when (action) {
+                    CreateAction.NEW_TASK -> navController.navigate(Routes.CREATE_TASK)
+                    CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
+                    CreateAction.SUPPORT -> {
+                        selectedTab = AppTab.CHAT
+                        viewModel.clearChatUnread()
+                    }
+                }
+            },
+        )
+    }
     }
 }

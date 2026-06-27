@@ -31,9 +31,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
 import uz.vazifa.app.data.repository.TaskRepository
+import uz.vazifa.app.domain.model.Department
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.domain.model.User
+import uz.vazifa.app.domain.model.matchesDepartment
 import uz.vazifa.app.domain.model.hasActiveAssignment
 import uz.vazifa.app.domain.model.hasCompletedAssignment
 import uz.vazifa.app.domain.model.canCreatorManage
@@ -41,8 +43,6 @@ import uz.vazifa.app.domain.model.isOverdue
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
-import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
-import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
@@ -101,7 +101,7 @@ fun DashboardSection.style(): SectionStyle = when (this) {
 data class DashboardSectionUiState(
     val loading: Boolean = false,
     val employees: List<User> = emptyList(),
-    val departments: List<String> = emptyList(),
+    val departments: List<Department> = emptyList(),
     val selectedDepartment: String? = null,
     val searchQuery: String = "",
     val tasks: List<Task> = emptyList(),
@@ -109,21 +109,19 @@ data class DashboardSectionUiState(
 ) {
     val filteredEmployees: List<User>
         get() {
-            var list = employees
-            selectedDepartment?.let { dept ->
-                list = list.filter { it.department == dept }
-            }
             val q = searchQuery.trim()
+            var list = employees
             if (q.isNotBlank()) {
                 list = list.filter { user ->
                     UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q)
                 }
+            } else {
+                selectedDepartment?.let { dept ->
+                    list = list.filter { it.matchesDepartment(dept) }
+                }
             }
             return list
         }
-
-    fun departmentCount(department: String): Int =
-        employees.count { it.department == department }
 }
 
 @HiltViewModel
@@ -266,7 +264,6 @@ fun EmployeesTabScreen(
     val visibleEmployees = state.filteredEmployees
     val allSelected = visibleEmployees.isNotEmpty() &&
         visibleEmployees.all { it.id in state.selectedEmployeeIds }
-    val fieldColors = liquidGlassFieldColors()
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -277,16 +274,7 @@ fun EmployeesTabScreen(
     }
 
     VazifaTabScaffold(
-        titleContent = {
-            EmployeeDepartmentTitle(
-                title = localized("nav_employees"),
-                selectedDepartment = state.selectedDepartment,
-                departments = state.departments,
-                totalCount = state.employees.size,
-                departmentCount = state::departmentCount,
-                onDepartmentSelected = viewModel::onDepartmentSelected,
-            )
-        },
+        title = localized("nav_employees"),
         actions = {
             if (visibleEmployees.isNotEmpty()) {
                 TextButton(onClick = {
@@ -312,55 +300,20 @@ fun EmployeesTabScreen(
                             }
                         }
                         else -> {
-                            LazyColumn(
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 16.dp,
-                                    bottom = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                item {
-                                    SectionSummaryCard(
-                                        section = DashboardSection.EMPLOYEES,
-                                        style = style,
-                                        count = state.employees.size,
-                                    )
-                                }
-                                item {
-                                    OutlinedTextField(
-                                        value = state.searchQuery,
-                                        onValueChange = viewModel::onSearch,
-                                        label = { Text(localized("task_search_employee")) },
-                                        modifier = Modifier.fillMaxWidth(),
-                                        shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                                        colors = fieldColors,
-                                        leadingIcon = {
-                                            Icon(
-                                                Icons.Default.Search,
-                                                contentDescription = null,
-                                                tint = LiquidTheme.textMuted,
-                                            )
-                                        },
-                                        singleLine = true,
-                                    )
-                                }
-                                if (visibleEmployees.isEmpty()) {
-                                    item { SectionEmptyCard(style) }
-                                } else {
-                                    items(visibleEmployees, key = { it.id }) { employee ->
-                                        EmployeeRow(
-                                            user = employee,
-                                            style = style,
-                                            selected = employee.id in state.selectedEmployeeIds,
-                                            onToggleSelect = { viewModel.toggleEmployee(employee.id) },
-                                            onClick = { onEmployeeClick(employee.id) },
-                                            onAssignTask = { onAssignTask(setOf(employee.id)) },
-                                        )
-                                    }
-                                }
-                            }
+                            EmployeesPageContent(
+                                employees = visibleEmployees,
+                                departments = state.departments,
+                                selectedDepartment = state.selectedDepartment,
+                                searchQuery = state.searchQuery,
+                                selectedEmployeeIds = state.selectedEmployeeIds,
+                                style = style,
+                                bottomPadding = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
+                                onDepartmentSelected = viewModel::onDepartmentSelected,
+                                onSearch = viewModel::onSearch,
+                                onToggleEmployee = viewModel::toggleEmployee,
+                                onEmployeeClick = onEmployeeClick,
+                                onAssignTask = { onAssignTask(setOf(it)) },
+                            )
                         }
                     }
                 }
@@ -411,7 +364,6 @@ fun DashboardSectionScreen(
     }
     val allSelected = isEmployees && visibleEmployees.isNotEmpty() &&
         visibleEmployees.all { it.id in state.selectedEmployeeIds }
-    val fieldColors = liquidGlassFieldColors()
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -441,19 +393,7 @@ fun DashboardSectionScreen(
     }
 
     VazifaTabScaffold(
-        title = if (!isEmployees) localized(section.titleKey()) else null,
-        titleContent = if (isEmployees) {
-            {
-                EmployeeDepartmentTitle(
-                    title = localized(section.titleKey()),
-                    selectedDepartment = state.selectedDepartment,
-                    departments = state.departments,
-                    totalCount = state.employees.size,
-                    departmentCount = state::departmentCount,
-                    onDepartmentSelected = viewModel::onDepartmentSelected,
-                )
-            }
-        } else null,
+        title = localized(section.titleKey()),
         onBack = onBack,
         actions = {
             if (isEmployees && visibleEmployees.isNotEmpty()) {
@@ -479,53 +419,31 @@ fun DashboardSectionScreen(
                                 CircularProgressIndicator(color = LiquidGlass.Blue)
                             }
                         }
+                        isEmployees -> {
+                            EmployeesPageContent(
+                                employees = visibleEmployees,
+                                departments = state.departments,
+                                selectedDepartment = state.selectedDepartment,
+                                searchQuery = state.searchQuery,
+                                selectedEmployeeIds = state.selectedEmployeeIds,
+                                style = style,
+                                bottomPadding = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
+                                onDepartmentSelected = viewModel::onDepartmentSelected,
+                                onSearch = viewModel::onSearch,
+                                onToggleEmployee = viewModel::toggleEmployee,
+                                onEmployeeClick = onEmployeeClick,
+                                onAssignTask = { onAssignTask(setOf(it)) },
+                            )
+                        }
                         else -> {
                             LazyColumn(
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 16.dp,
-                                    bottom = if (isEmployees && state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
-                                ),
+                                contentPadding = PaddingValues(16.dp),
                                 verticalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
                                 item {
                                     SectionSummaryCard(section = section, style = style, count = count)
                                 }
-                                if (isEmployees) {
-                                    item {
-                                        OutlinedTextField(
-                                            value = state.searchQuery,
-                                            onValueChange = viewModel::onSearch,
-                                            label = { Text(localized("task_search_employee")) },
-                                            modifier = Modifier.fillMaxWidth(),
-                                            shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                                            colors = fieldColors,
-                                            leadingIcon = {
-                                                Icon(
-                                                    Icons.Default.Search,
-                                                    contentDescription = null,
-                                                    tint = LiquidTheme.textMuted,
-                                                )
-                                            },
-                                            singleLine = true,
-                                        )
-                                    }
-                                    if (visibleEmployees.isEmpty()) {
-                                        item { SectionEmptyCard(style) }
-                                    } else {
-                                        items(visibleEmployees, key = { it.id }) { employee ->
-                                            EmployeeRow(
-                                                user = employee,
-                                                style = style,
-                                                selected = employee.id in state.selectedEmployeeIds,
-                                                onToggleSelect = { viewModel.toggleEmployee(employee.id) },
-                                                onClick = { onEmployeeClick(employee.id) },
-                                                onAssignTask = { onAssignTask(setOf(employee.id)) },
-                                            )
-                                        }
-                                    }
-                                } else if (state.tasks.isEmpty()) {
+                                if (state.tasks.isEmpty()) {
                                     item { SectionEmptyCard(style) }
                                 } else {
                                     items(state.tasks, key = { it.id }) { task ->
@@ -638,146 +556,5 @@ private fun SectionEmptyCard(style: SectionStyle) {
             fontSize = 14.sp,
             fontWeight = FontWeight.Medium,
         )
-    }
-}
-
-@Composable
-private fun EmployeeRow(
-    user: User,
-    style: SectionStyle,
-    selected: Boolean,
-    onToggleSelect: () -> Unit,
-    onClick: () -> Unit,
-    onAssignTask: () -> Unit,
-) {
-    Row(
-        Modifier
-            .fillMaxWidth()
-            .liquidGlassThemed()
-            .padding(horizontal = 8.dp, vertical = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
-        Row(
-            Modifier
-                .weight(1f)
-                .clickable(onClick = onClick),
-            verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Box(Modifier.size(42.dp)) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .background(Brush.linearGradient(style.gradient)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        employeeInitials(user.fullName),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                    )
-                }
-                Box(
-                    Modifier
-                        .size(11.dp)
-                        .align(Alignment.BottomEnd),
-                ) {
-                    EmployeePresenceDot(user)
-                }
-            }
-            Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text(user.fullName, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
-                val subtitle = listOfNotNull(
-                    user.position?.takeIf { it.isNotBlank() },
-                    user.department?.takeIf { it.isNotBlank() },
-                    user.phone?.takeIf { it.isNotBlank() },
-                ).joinToString(" · ")
-                if (subtitle.isNotBlank()) {
-                    Text(subtitle, color = LiquidTheme.textMuted, fontSize = 12.sp)
-                }
-                EmployeePresenceStatus(user)
-            }
-        }
-        GlassHeaderIconButton(
-            onClick = onAssignTask,
-            icon = Icons.Default.Add,
-            tint = LiquidGlass.Blue,
-            contentDescription = localized("task_create_for_employee"),
-        )
-    }
-}
-
-private fun employeeInitials(name: String): String =
-    name.trim().split(Regex("\\s+"))
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercaseChar().toString() }
-
-@Composable
-private fun EmployeeDepartmentTitle(
-    title: String,
-    selectedDepartment: String?,
-    departments: List<String>,
-    totalCount: Int,
-    departmentCount: (String) -> Int,
-    onDepartmentSelected: (String?) -> Unit,
-) {
-    var expanded by remember { mutableStateOf(false) }
-    val filterLabel = selectedDepartment ?: localized("emp_all_departments")
-
-    Row(
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
-    ) {
-        Text(title, fontWeight = FontWeight.Bold, color = LiquidTheme.text)
-        Box {
-            TextButton(onClick = { expanded = true }) {
-                Text(
-                    filterLabel,
-                    color = LiquidGlass.Blue,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 14.sp,
-                )
-                Icon(
-                    Icons.Default.ArrowDropDown,
-                    contentDescription = null,
-                    tint = LiquidGlass.Blue,
-                )
-            }
-            LiquidGlassDropdownMenu(
-                expanded = expanded,
-                onDismissRequest = { expanded = false },
-            ) {
-                Text(
-                    localized("emp_department"),
-                    color = LiquidTheme.textMuted,
-                    fontWeight = FontWeight.SemiBold,
-                    fontSize = 12.sp,
-                    modifier = Modifier.padding(horizontal = 16.dp, vertical = 6.dp),
-                )
-                LiquidGlassDropdownItem(
-                    text = "${localized("emp_all_departments")} ($totalCount)",
-                    selected = selectedDepartment == null,
-                    onClick = {
-                        onDepartmentSelected(null)
-                        expanded = false
-                    },
-                )
-                departments.forEach { department ->
-                    LiquidGlassDropdownItem(
-                        text = "$department (${departmentCount(department)})",
-                        selected = selectedDepartment == department,
-                        onClick = {
-                            onDepartmentSelected(department)
-                            expanded = false
-                        },
-                    )
-                }
-            }
-        }
     }
 }

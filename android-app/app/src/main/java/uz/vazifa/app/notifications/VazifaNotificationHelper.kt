@@ -62,6 +62,7 @@ object VazifaNotificationHelper {
         body: String,
         taskId: String?,
         type: String?,
+        chatUserId: String? = null,
     ) {
         if (!canShowNotifications(context)) return
 
@@ -70,10 +71,11 @@ object VazifaNotificationHelper {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP
             taskId?.let { putExtra(EXTRA_TASK_ID, it) }
             type?.let { putExtra(EXTRA_TYPE, it) }
+            chatUserId?.let { putExtra(EXTRA_CHAT_USER_ID, it) }
         }
         val pending = PendingIntent.getActivity(
             context,
-            (taskId?.hashCode() ?: title.hashCode()),
+            (chatUserId?.hashCode() ?: taskId?.hashCode() ?: title.hashCode()),
             intent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
@@ -95,7 +97,7 @@ object VazifaNotificationHelper {
 
         try {
             NotificationManagerCompat.from(context).notify(
-                taskId?.hashCode() ?: System.currentTimeMillis().toInt(),
+                chatUserId?.hashCode() ?: taskId?.hashCode() ?: System.currentTimeMillis().toInt(),
                 notification,
             )
         } catch (_: SecurityException) {
@@ -121,4 +123,5 @@ object VazifaNotificationHelper {
 
     const val EXTRA_TASK_ID = "task_id"
     const val EXTRA_TYPE = "notif_type"
+    const val EXTRA_CHAT_USER_ID = "chat_user_id"
 }

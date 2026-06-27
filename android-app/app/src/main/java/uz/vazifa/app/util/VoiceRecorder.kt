@@ -33,6 +33,8 @@ class VoiceRecorder(private val context: Context) {
         return file
     }
 
+    fun amplitude(): Int = runCatching { mediaRecorder?.maxAmplitude ?: 0 }.getOrDefault(0)
+
     fun stop(): File? {
         val file = outputFile
         return try {

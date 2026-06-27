@@ -1,0 +1,53 @@
+#!/bin/bash
+set -e
+
+tar xzf /tmp/vazifa-update.tar.gz -C /opt/vazifa-prod
+rsync -a /opt/vazifa-prod/backend/ /opt/vazifa-dev/backend/ --exclude .env
+rsync -a /opt/vazifa-prod/admin/ /opt/vazifa-dev/admin/
+
+add_chat_block() {
+  local file="$1"
+  local port="$2"
+  if grep -q 'location /chat/' "$file"; then
+    return
+  fi
+  sed -i "/location = \\/docs/i\\
+  location /chat/ {\\
+    proxy_pass http://127.0.0.1:${port}/chat/;\\
+    proxy_http_version 1.1;\\
+    proxy_set_header Upgrade \$http_upgrade;\\
+    proxy_set_header Connection \"upgrade\";\\
+    proxy_set_header Host \$host;\\
+    proxy_set_header X-Forwarded-Proto \$scheme;\\
+    proxy_set_header X-Forwarded-For \$proxy_add_x_forwarded_for;\\
+  }\\
+" "$file"
+}
+
+for env in prod dev; do
+  dir="/opt/vazifa-${env}"
+  cd "$dir/backend"
+  npm ci
+  npm run build
+  set -a && source .env && set +a
+  npm run seed || true
+
+  cd "$dir/admin"
+  if [ "$env" = prod ]; then
+    echo "VITE_API_URL=https://vazifa.liderplast.uz/api/v1" > .env.production
+  else
+    echo "VITE_API_URL=https://dev.vazifa.liderplast.uz/api/v1" > .env.production
+  fi
+  npm install
+  npm run build
+done
+
+add_chat_block /etc/nginx/sites-enabled/vazifa-prod.conf 3105
+add_chat_block /etc/nginx/sites-enabled/vazifa-dev.conf 3106
+
+nginx -t
+systemctl reload nginx
+
+pm2 restart vazifa-api-prod vazifa-api-dev
+sleep 3
+curl -sk -o /dev/null -w "site:%{http_code} api:%{http_code}\n" https://vazifa.liderplast.uz/ https://vazifa.liderplast.uz/api/v1/auth/time

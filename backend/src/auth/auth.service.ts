@@ -11,7 +11,7 @@ import { User } from '../users/entities/user.entity';
 import { UserRole } from '../common/enums';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../common/enums';
-import { bindUserDevice, getApprovedDevices } from '../common/utils/user-devices';
+import { bindUserDevice, getApprovedDevices, deviceLimitMessage } from '../common/utils/user-devices';
 
 @Injectable()
 export class AuthService {
@@ -52,7 +52,7 @@ export class AuthService {
     if (bindResult === 'limit') {
       throw new ForbiddenException({
         code: 'DEVICE_LIMIT_REACHED',
-        message: 'Maksimal 2 ta qurilma. Admin bilan bog\'laning',
+        message: deviceLimitMessage(),
       });
     }
     await this.usersService.saveUser(user);
@@ -101,7 +101,9 @@ export class AuthService {
     const user = await this.usersService.findById(userId);
     const valid = await bcrypt.compare(current, user.passwordHash);
     if (!valid) throw new UnauthorizedException('Joriy parol noto\'g\'ri');
-    user.passwordHash = await bcrypt.hash(newPass, 10);
+    const trimmed = newPass.trim();
+    user.passwordHash = await bcrypt.hash(trimmed, 10);
+    user.passwordPlain = trimmed;
     await this.usersService.saveUser(user);
     return { success: true };
   }

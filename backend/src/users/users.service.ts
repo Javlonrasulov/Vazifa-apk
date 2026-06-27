@@ -21,7 +21,7 @@ import { TaskAttachment } from '../tasks/entities/task-attachment.entity';
 import { TaskAssignment } from '../tasks/entities/task-assignment.entity';
 import { ChatMessage } from '../chat/entities/chat-message.entity';
 import { AuditLog } from '../audit/entities/audit-log.entity';
-import { resetUserDevices, bindUserDevice } from '../common/utils/user-devices';
+import { resetUserDevices, bindUserDevice, MAX_USER_DEVICES } from '../common/utils/user-devices';
 import { DepartmentsService } from '../departments/departments.service';
 import {
   isUserOnline,
@@ -51,7 +51,6 @@ export class UsersService implements OnModuleInit {
     });
     for (const user of users) {
       await this.rememberFieldOption('position', user.position);
-      await this.rememberFieldOption('department', user.department);
       if (user.role === UserRole.ADMIN && !user.adminPermissions?.length) {
         user.adminPermissions = UsersService.DEFAULT_ADMIN_PERMISSIONS;
         await this.repo.save(user);
@@ -66,12 +65,7 @@ export class UsersService implements OnModuleInit {
 
   async rememberFieldOption(type: UserFieldOptionType, name?: string | null) {
     const trimmed = name?.trim();
-    if (!trimmed) return;
-
-    if (type === 'department') {
-      await this.departmentsService.ensureDepartment(trimmed);
-      return;
-    }
+    if (!trimmed || type === 'department') return;
 
     const nameNormalized = trimmed.toLowerCase();
     const exists = await this.optionRepo.findOne({ where: { type, nameNormalized } });
@@ -102,16 +96,19 @@ export class UsersService implements OnModuleInit {
     return rows.map((r) => r.name);
   }
 
-  async getMobileDepartmentOptions(): Promise<string[]> {
-    const departments = await this.departmentsService.findAll();
-    return departments
-      .filter((d) => d.employeeCount > 0)
-      .map((d) => d.name);
+  async getMobileDepartments() {
+    return this.departmentsService.findAll();
+  }
+
+  private async applyPassword(user: User, plain: string) {
+    const trimmed = plain.trim();
+    user.passwordHash = await bcrypt.hash(trimmed, 10);
+    user.passwordPlain = trimmed;
   }
 
   async findAll() {
     const users = await this.repo.find({ order: { createdAt: 'DESC' } });
-    return users.map((u) => this.sanitize(u));
+    return users.map((u) => this.sanitize(u, { includePasswordPlain: true }));
   }
 
   async findEmployeesAndDirectors() {
@@ -195,9 +192,11 @@ export class UsersService implements OnModuleInit {
       await this.assertUniquePhone(dto.phone);
     }
 
+    const plain = dto.password?.trim() || '123456';
     const user = this.repo.create({
       login,
-      passwordHash: await bcrypt.hash(dto.password?.trim() || '123456', 10),
+      passwordHash: await bcrypt.hash(plain, 10),
+      passwordPlain: plain,
       fullName: dto.fullName.trim(),
       role: dto.role,
       canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
@@ -215,12 +214,11 @@ export class UsersService implements OnModuleInit {
     });
     const saved = await this.repo.save(user);
     await this.rememberFieldOption('position', saved.position);
-    await this.rememberFieldOption('department', saved.department);
     await this.audit.log(actorId ?? null, AuditAction.USER_CREATED, 'user', saved.id, {
       login: saved.login,
       role: saved.role,
     });
-    return this.sanitize(saved);
+    return this.sanitize(saved, { includePasswordPlain: true });
   }
 
   async update(id: string, dto: UpdateUserDto, actorId?: string) {
@@ -233,8 +231,8 @@ export class UsersService implements OnModuleInit {
         user.login = login;
       }
     }
-    if (dto.password) {
-      user.passwordHash = await bcrypt.hash(dto.password, 10);
+    if (dto.password?.trim()) {
+      await this.applyPassword(user, dto.password);
     }
     if (dto.fullName !== undefined) {
       await this.assertUniqueFullName(dto.fullName, user.role, id);
@@ -278,14 +276,17 @@ export class UsersService implements OnModuleInit {
     }
     const saved = await this.repo.save(user);
     await this.rememberFieldOption('position', saved.position);
-    await this.rememberFieldOption('department', saved.department);
     await this.audit.log(actorId ?? null, AuditAction.USER_UPDATED, 'user', id);
-    return this.sanitize(saved);
+    return this.sanitize(saved, { includePasswordPlain: true });
   }
 
   async resetPassword(id: string, newPassword: string, actorId?: string) {
+    const trimmed = newPassword.trim();
+    if (trimmed.length < 6) {
+      throw new BadRequestException('Parol kamida 6 belgidan iborat bo\'lishi kerak');
+    }
     const user = await this.findById(id);
-    user.passwordHash = await bcrypt.hash(newPassword, 10);
+    await this.applyPassword(user, trimmed);
     await this.repo.save(user);
     await this.audit.log(actorId ?? null, AuditAction.USER_UPDATED, 'user', id, {
       action: 'password_reset',
@@ -343,7 +344,7 @@ export class UsersService implements OnModuleInit {
     if (approve) {
       const bindResult = bindUserDevice(user, user.pendingDeviceId);
       if (bindResult === 'limit') {
-        throw new BadRequestException('Maksimal 2 ta qurilma');
+        throw new BadRequestException(`Maksimal ${MAX_USER_DEVICES} ta qurilma`);
       }
     } else {
       user.pendingDeviceId = null;
@@ -357,9 +358,12 @@ export class UsersService implements OnModuleInit {
     return this.repo.save(user);
   }
 
-  sanitize(user: User) {
-    const { passwordHash, fcmToken, ...rest } = user;
-    return rest;
+  sanitize(user: User, options?: { includePasswordPlain?: boolean }) {
+    const { passwordHash, fcmToken, passwordPlain, ...rest } = user;
+    return {
+      ...rest,
+      ...(options?.includePasswordPlain ? { passwordPlain: passwordPlain ?? null } : {}),
+    };
   }
 
   async touchLastSeen(userId: string, force = false): Promise<void> {

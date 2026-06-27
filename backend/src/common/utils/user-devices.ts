@@ -1,6 +1,10 @@
 import { User } from '../../users/entities/user.entity';
 
-export const MAX_USER_DEVICES = 2;
+export const MAX_USER_DEVICES = 10;
+
+export function deviceLimitMessage(): string {
+  return `Maksimal ${MAX_USER_DEVICES} ta qurilma. Admin bilan bog'laning`;
+}
 
 export type LinkedDevice = {
   id: string;

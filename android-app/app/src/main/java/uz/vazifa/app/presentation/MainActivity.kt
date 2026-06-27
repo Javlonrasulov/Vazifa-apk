@@ -35,6 +35,8 @@ class MainActivity : ComponentActivity() {
 
     var pendingTaskId by mutableStateOf<String?>(null)
         private set
+    var pendingChatUserId by mutableStateOf<String?>(null)
+        private set
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -50,6 +52,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
+        pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -66,6 +69,8 @@ class MainActivity : ComponentActivity() {
                     VazifaNavHost(
                         pendingTaskId = pendingTaskId,
                         onPendingTaskConsumed = { pendingTaskId = null },
+                        pendingChatUserId = pendingChatUserId,
+                        onPendingChatConsumed = { pendingChatUserId = null },
                     )
                 }
             }
@@ -76,5 +81,6 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
+        pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
     }
 }

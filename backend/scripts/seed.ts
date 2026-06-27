@@ -33,6 +33,7 @@ async function seed() {
       repo.create({
         login: 'admin',
         passwordHash: await bcrypt.hash('admin123', 10),
+        passwordPlain: 'admin123',
         fullName: 'Administrator',
         role: UserRole.ADMIN,
         department: 'IT',
@@ -49,6 +50,7 @@ async function seed() {
       repo.create({
         login: 'director1',
         passwordHash: await bcrypt.hash('director123', 10),
+        passwordPlain: 'director123',
         fullName: 'Direktor Namuna',
         role: UserRole.DIRECTOR,
         canAssignTasks: true,

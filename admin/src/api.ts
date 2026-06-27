@@ -68,6 +68,7 @@ export interface User {
   id: string;
   login: string;
   fullName: string;
+  passwordPlain?: string | null;
   role: 'admin' | 'director' | 'employee';
   canAssignTasks: boolean;
   position: string | null;

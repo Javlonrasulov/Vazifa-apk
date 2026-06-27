@@ -41,7 +41,7 @@ export class UsersController {
   @Get('mobile/departments')
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   getMobileDepartments() {
-    return this.usersService.getMobileDepartmentOptions();
+    return this.usersService.getMobileDepartments();
   }
 
   @Get('options/positions')

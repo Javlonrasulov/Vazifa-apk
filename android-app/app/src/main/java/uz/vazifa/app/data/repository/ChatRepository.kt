@@ -1,0 +1,181 @@
+package uz.vazifa.app.data.repository
+
+import kotlinx.coroutines.flow.SharedFlow
+import kotlinx.coroutines.flow.StateFlow
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.MultipartBody
+import okhttp3.RequestBody.Companion.asRequestBody
+import uz.vazifa.app.data.remote.ApiClient
+import uz.vazifa.app.data.remote.ChatEvent
+import uz.vazifa.app.data.remote.ChatMessageDto
+import uz.vazifa.app.data.remote.ChatMetaDto
+import uz.vazifa.app.data.remote.ChatPeerDto
+import uz.vazifa.app.data.remote.ChatSocket
+import uz.vazifa.app.data.remote.ChatUploadDto
+import uz.vazifa.app.data.remote.EditMessageBody
+import uz.vazifa.app.data.remote.MarkReadBody
+import uz.vazifa.app.data.remote.ReactBody
+import uz.vazifa.app.data.remote.SendMessageBody
+import uz.vazifa.app.data.remote.UserDto
+import uz.vazifa.app.domain.model.ChatMessage
+import uz.vazifa.app.domain.model.ChatMessageMeta
+import uz.vazifa.app.domain.model.ChatMessageStatus
+import uz.vazifa.app.domain.model.ChatMessageType
+import uz.vazifa.app.domain.model.ChatPeer
+import uz.vazifa.app.domain.model.Conversation
+import java.io.File
+import javax.inject.Inject
+import javax.inject.Singleton
+
+@Singleton
+class ChatRepository @Inject constructor(
+    private val client: ApiClient,
+    private val socket: ChatSocket,
+) {
+    private val api get() = client.api
+
+    val events: SharedFlow<ChatEvent> get() = socket.events
+    val connected: StateFlow<Boolean> get() = socket.connected
+
+    fun connect() = socket.connect()
+    fun disconnect() = socket.disconnect()
+    fun sendTyping(receiverId: String, typing: Boolean) = socket.sendTyping(receiverId, typing)
+    fun ping() = socket.ping()
+
+    suspend fun getConversations(): List<Conversation> =
+        api.getConversations().map { dto ->
+            Conversation(
+                peer = dto.peer.toDomain(),
+                lastMessage = dto.lastMessage?.toDomain(),
+                unreadCount = dto.unreadCount,
+            )
+        }
+
+    suspend fun getHistory(peerId: String, before: String? = null, limit: Int = 40): List<ChatMessage> =
+        api.getChatHistory(peerId, before, limit).map { it.toDomain() }
+
+    suspend fun unreadCount(): Int = api.getChatUnread().count
+
+    suspend fun search(q: String): Pair<List<ChatMessage>, List<ChatPeer>> {
+        val res = api.searchChat(q)
+        return res.messages.map { it.toDomain() } to res.peers.map { it.toDomain() }
+    }
+
+    suspend fun getContacts(): List<ChatPeer> = api.getContacts().map { it.toPeer() }
+
+    suspend fun send(
+        receiverId: String,
+        type: ChatMessageType,
+        body: String? = null,
+        upload: ChatUploadDto? = null,
+        meta: ChatMessageMeta? = null,
+        replyToId: String? = null,
+        forwardedFrom: String? = null,
+        clientId: String,
+    ): ChatMessage {
+        val mergedMeta = (meta ?: ChatMessageMeta()).copy(
+            fileUrl = upload?.fileUrl ?: meta?.fileUrl,
+            fileSize = upload?.fileSize ?: meta?.fileSize,
+        )
+        val dto = api.sendChatMessage(
+            SendMessageBody(
+                receiverId = receiverId,
+                type = type.key,
+                body = body,
+                filePath = upload?.filePath,
+                fileName = upload?.fileName,
+                mimeType = upload?.mimeType,
+                meta = mergedMeta.toDto(),
+                replyToId = replyToId,
+                forwardedFrom = forwardedFrom,
+                clientId = clientId,
+            ),
+        )
+        return dto.toDomain()
+    }
+
+    suspend fun uploadFile(file: File, mime: String): ChatUploadDto {
+        val body = file.asRequestBody(mime.toMediaTypeOrNull())
+        val part = MultipartBody.Part.createFormData("file", file.name, body)
+        return api.uploadChatFile(part)
+    }
+
+    suspend fun markRead(peerId: String, messageIds: List<String>? = null) {
+        socket.emitRead(peerId, messageIds)
+        runCatching { api.markChatRead(MarkReadBody(peerId, messageIds)) }
+    }
+
+    suspend fun edit(id: String, body: String): ChatMessage = api.editChatMessage(id, EditMessageBody(body)).toDomain()
+    suspend fun delete(id: String) { api.deleteChatMessage(id) }
+    suspend fun react(id: String, emoji: String?): ChatMessage = api.reactChatMessage(id, ReactBody(emoji)).toDomain()
+    suspend fun pin(id: String): ChatMessage = api.pinChatMessage(id).toDomain()
+}
+
+fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
+    id = id,
+    senderId = senderId,
+    receiverId = receiverId,
+    type = ChatMessageType.from(type),
+    body = body,
+    filePath = filePath,
+    fileName = fileName,
+    mimeType = mimeType,
+    meta = meta?.toDomain(),
+    replyToId = replyToId,
+    replyTo = replyTo?.toDomain(),
+    forwardedFrom = forwardedFrom,
+    reactions = reactions ?: emptyMap(),
+    status = ChatMessageStatus.from(status),
+    isRead = isRead,
+    isEdited = isEdited,
+    isDeleted = isDeleted,
+    isPinned = isPinned,
+    clientId = clientId,
+    createdAt = createdAt,
+)
+
+private fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
+    fileUrl = fileUrl,
+    fileSize = fileSize,
+    durationSec = durationSec,
+    waveform = waveform,
+    width = width,
+    height = height,
+    thumbUrl = thumbUrl,
+    latitude = latitude,
+    longitude = longitude,
+    contactName = contactName,
+    contactPhone = contactPhone,
+)
+
+private fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
+    fileUrl = fileUrl,
+    fileSize = fileSize,
+    durationSec = durationSec,
+    waveform = waveform,
+    width = width,
+    height = height,
+    thumbUrl = thumbUrl,
+    latitude = latitude,
+    longitude = longitude,
+    contactName = contactName,
+    contactPhone = contactPhone,
+)
+
+private fun ChatPeerDto.toDomain(): ChatPeer = ChatPeer(
+    id = id,
+    fullName = fullName,
+    position = position,
+    department = department,
+    isOnline = isOnline,
+    lastSeenAt = lastSeenAt,
+)
+
+private fun UserDto.toPeer(): ChatPeer = ChatPeer(
+    id = id,
+    fullName = fullName,
+    position = position,
+    department = department,
+    isOnline = isOnline,
+    lastSeenAt = lastSeenAt,
+)

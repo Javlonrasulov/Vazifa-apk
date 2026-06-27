@@ -7,12 +7,16 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.data.repository.ChatUnreadRepository
+import uz.vazifa.app.data.repository.NotificationInboxRepository
 import uz.vazifa.app.notifications.VazifaNotificationHelper
 import javax.inject.Inject
 
 @AndroidEntryPoint
 class FcmService : FirebaseMessagingService() {
     @Inject lateinit var authRepository: AuthRepository
+    @Inject lateinit var notificationInbox: NotificationInboxRepository
+    @Inject lateinit var chatUnread: ChatUnreadRepository
 
     override fun onNewToken(token: String) {
         super.onNewToken(token)
@@ -27,6 +31,14 @@ class FcmService : FirebaseMessagingService() {
         val body = data["body"] ?: message.notification?.body ?: ""
         val taskId = data["taskId"]
         val type = data["type"]
-        VazifaNotificationHelper.show(applicationContext, title, body, taskId, type)
+        val chatUserId = data["chatUserId"]
+        CoroutineScope(Dispatchers.IO).launch {
+            if (type == "chat") {
+                chatUnread.increment()
+            } else {
+                notificationInbox.add(taskId, title, body, type)
+            }
+        }
+        VazifaNotificationHelper.show(applicationContext, title, body, taskId, type, chatUserId)
     }
 }

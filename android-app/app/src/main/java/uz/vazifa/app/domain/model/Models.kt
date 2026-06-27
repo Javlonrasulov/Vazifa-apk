@@ -35,6 +35,15 @@ data class User(
 
 fun User.isTaskAssignable(): Boolean = login != "xodim1"
 
+fun User.matchesDepartment(departmentName: String): Boolean =
+    department?.trim()?.equals(departmentName.trim(), ignoreCase = true) == true
+
+data class Department(
+    val id: String,
+    val name: String,
+    val employeeCount: Int,
+)
+
 data class TaskAssignment(
     val id: String,
     val assigneeId: String,

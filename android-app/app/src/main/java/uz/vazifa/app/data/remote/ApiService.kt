@@ -52,6 +52,12 @@ data class UpdateTaskRequest(
     val deadlineAt: String? = null,
 )
 data class CommentRequest(val body: String)
+data class DepartmentDto(
+    val id: String,
+    val name: String,
+    val employeeCount: Int,
+)
+
 data class DashboardStatsDto(
     val totalEmployees: Int,
     val activeTasks: Int,
@@ -124,8 +130,130 @@ interface ApiService {
     suspend fun getContacts(): List<UserDto>
 
     @GET("users/mobile/departments")
-    suspend fun getDepartments(): List<String>
+    suspend fun getDepartments(): List<DepartmentDto>
+
+    @GET("chat/conversations")
+    suspend fun getConversations(): List<ConversationDto>
+
+    @GET("chat/unread-count")
+    suspend fun getChatUnread(): ChatUnreadDto
+
+    @GET("chat/search")
+    suspend fun searchChat(@Query("q") q: String): ChatSearchDto
+
+    @GET("chat/{userId}")
+    suspend fun getChatHistory(
+        @Path("userId") userId: String,
+        @Query("before") before: String? = null,
+        @Query("limit") limit: Int = 40,
+    ): List<ChatMessageDto>
+
+    @Multipart
+    @POST("chat/upload")
+    suspend fun uploadChatFile(@Part file: MultipartBody.Part): ChatUploadDto
+
+    @POST("chat/send")
+    suspend fun sendChatMessage(@Body body: SendMessageBody): ChatMessageDto
+
+    @POST("chat/read")
+    suspend fun markChatRead(@Body body: MarkReadBody): Map<String, Boolean>
+
+    @PATCH("chat/{id}")
+    suspend fun editChatMessage(@Path("id") id: String, @Body body: EditMessageBody): ChatMessageDto
+
+    @DELETE("chat/{id}")
+    suspend fun deleteChatMessage(@Path("id") id: String): Map<String, Any>
+
+    @POST("chat/{id}/react")
+    suspend fun reactChatMessage(@Path("id") id: String, @Body body: ReactBody): ChatMessageDto
+
+    @POST("chat/{id}/pin")
+    suspend fun pinChatMessage(@Path("id") id: String): ChatMessageDto
 }
+
+data class ChatMetaDto(
+    val fileUrl: String? = null,
+    val fileSize: Long? = null,
+    val durationSec: Int? = null,
+    val waveform: List<Int>? = null,
+    val width: Int? = null,
+    val height: Int? = null,
+    val thumbUrl: String? = null,
+    val latitude: Double? = null,
+    val longitude: Double? = null,
+    val contactName: String? = null,
+    val contactPhone: String? = null,
+)
+
+data class ChatMessageDto(
+    val id: String,
+    val senderId: String,
+    val receiverId: String,
+    val type: String = "text",
+    val body: String? = null,
+    val filePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val meta: ChatMetaDto? = null,
+    val replyToId: String? = null,
+    val replyTo: ChatMessageDto? = null,
+    val forwardedFrom: String? = null,
+    val reactions: Map<String, String>? = null,
+    val status: String = "sent",
+    val isRead: Boolean = false,
+    val isEdited: Boolean = false,
+    val isDeleted: Boolean = false,
+    val isPinned: Boolean = false,
+    val clientId: String? = null,
+    val createdAt: String,
+)
+
+data class ChatPeerDto(
+    val id: String,
+    val fullName: String,
+    val position: String? = null,
+    val department: String? = null,
+    val isOnline: Boolean = false,
+    val lastSeenAt: String? = null,
+)
+
+data class ConversationDto(
+    val peer: ChatPeerDto,
+    val lastMessage: ChatMessageDto? = null,
+    val unreadCount: Int = 0,
+)
+
+data class ChatSearchDto(
+    val messages: List<ChatMessageDto> = emptyList(),
+    val peers: List<ChatPeerDto> = emptyList(),
+)
+
+data class ChatUnreadDto(val count: Int = 0)
+
+data class ChatUploadDto(
+    val filePath: String,
+    val fileName: String,
+    val mimeType: String,
+    val fileSize: Long,
+    val fileUrl: String? = null,
+)
+
+data class SendMessageBody(
+    val receiverId: String,
+    val type: String? = null,
+    val body: String? = null,
+    val filePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val meta: ChatMetaDto? = null,
+    val replyToId: String? = null,
+    val forwardedFrom: String? = null,
+    val clientId: String? = null,
+)
+
+data class MarkReadBody(val peerId: String, val messageIds: List<String>? = null)
+data class EditMessageBody(val body: String)
+data class ReactBody(val emoji: String?)
 
 data class TaskDto(
     val id: String,

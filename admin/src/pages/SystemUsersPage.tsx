@@ -90,7 +90,7 @@ export default function SystemUsersPage() {
     const perms = (u.adminPermissions ?? PERMISSION_KEYS) as PermissionKey[];
     setForm({
       login: u.login,
-      password: '',
+      password: u.passwordPlain ?? '',
       fullName: u.fullName,
       permissions: PERMISSION_KEYS.filter((k) => perms.includes(k)),
     });
@@ -148,11 +148,12 @@ export default function SystemUsersPage() {
         setSaveError(t('loginEmpty'));
         return;
       }
-      if (!editUser && form.password.length < 6) {
+      const trimmedPassword = form.password.trim();
+      if (!editUser && trimmedPassword.length < 6) {
         setSaveError(t('passwordMinError'));
         return;
       }
-      if (editUser && form.password && form.password.length < 6) {
+      if (editUser && trimmedPassword && trimmedPassword.length < 6) {
         setSaveError(t('passwordMinError'));
         return;
       }
@@ -168,9 +169,11 @@ export default function SystemUsersPage() {
       }
 
       if (editUser) {
+        const initialPassword = (editUser.passwordPlain ?? '').trim();
+        const passwordChanged = trimmedPassword !== initialPassword;
         const updated = await updateUser(editUser.id, {
           login: form.login.trim(),
-          ...(form.password ? { password: form.password } : {}),
+          ...(passwordChanged && trimmedPassword ? { password: trimmedPassword } : {}),
           fullName: form.fullName.trim(),
           adminPermissions: form.permissions,
         });
@@ -179,7 +182,7 @@ export default function SystemUsersPage() {
       } else {
         const created = await createUser({
           login: form.login.trim(),
-          password: form.password || DEFAULT_PASSWORD,
+          password: trimmedPassword || DEFAULT_PASSWORD,
           fullName: form.fullName.trim(),
           role: 'admin',
           adminPermissions: form.permissions,
