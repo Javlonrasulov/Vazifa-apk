@@ -425,7 +425,7 @@ private fun VoiceButton(
                 if (recording) Brush.linearGradient(listOf(LiquidGlass.Rose, LiquidGlass.Rose.copy(alpha = 0.7f)))
                 else Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan)),
             )
-            .pointerInput(recording) {
+            .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
                     onStart()
@@ -450,7 +450,12 @@ private fun VoiceButton(
             },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(Icons.Default.Mic, null, tint = Color.White, modifier = Modifier.size(24.dp))
+        Icon(
+            if (recording) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
+            null,
+            tint = Color.White,
+            modifier = Modifier.size(24.dp),
+        )
     }
 }
 

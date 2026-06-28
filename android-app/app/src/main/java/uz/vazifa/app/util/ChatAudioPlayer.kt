@@ -42,18 +42,23 @@ class ChatAudioPlayer {
         context: Context,
         remoteUrl: String,
         speed: Float,
+        authToken: String? = null,
         onProgress: (Float) -> Unit,
         onComplete: () -> Unit,
         onError: () -> Unit,
     ): Boolean {
-        val local = cacheRemote(context, remoteUrl) ?: run {
+        val local = cacheRemote(context, remoteUrl, authToken) ?: run {
             onError()
             return false
         }
         return toggleLocal(local, speed, onProgress, onComplete, onError)
     }
 
-    private suspend fun cacheRemote(context: Context, remoteUrl: String): File? = withContext(Dispatchers.IO) {
+    private suspend fun cacheRemote(
+        context: Context,
+        remoteUrl: String,
+        authToken: String? = null,
+    ): File? = withContext(Dispatchers.IO) {
         val name = remoteUrl.substringAfterLast('/').ifBlank { remoteUrl.hashCode().toString() }
         val cacheFile = File(context.cacheDir, "voice_play_$name")
         if (cacheFile.exists() && cacheFile.length() > 512) return@withContext cacheFile
@@ -62,6 +67,9 @@ class ChatAudioPlayer {
             conn.connectTimeout = 12_000
             conn.readTimeout = 20_000
             conn.requestMethod = "GET"
+            if (!authToken.isNullOrBlank()) {
+                conn.setRequestProperty("Authorization", "Bearer $authToken")
+            }
             conn.connect()
             if (conn.responseCode !in 200..299) error("HTTP ${conn.responseCode}")
             conn.inputStream.use { input ->

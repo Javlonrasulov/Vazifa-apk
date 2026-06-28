@@ -201,8 +201,14 @@ class CreateTaskViewModel @Inject constructor(
             }
         }
     }
-    fun onTitle(v: String) = _state.update { it.copy(title = v) }
+    fun onTitle(v: String) = _state.update { it.copy(title = v, titleError = false) }
     fun onDescription(v: String) = _state.update { it.copy(description = v) }
+    fun onVoiceRecorded(file: File) = _state.update { it.copy(voiceFile = file) }
+    fun removeVoice() {
+        _state.value.voiceFile?.delete()
+        _state.update { it.copy(voiceFile = null) }
+    }
+    fun showTitleError() = _state.update { it.copy(titleError = true) }
     fun onDeadlineHours(v: String) {
         val filtered = filterDeadlineHoursInput(v)
         _state.update { current ->
@@ -236,10 +242,10 @@ class CreateTaskViewModel @Inject constructor(
         it.copy(selectedIds = ids)
     }
 
-    fun create(imageUri: Uri?) = viewModelScope.launch {
+    fun create(imageUri: Uri?, voiceFile: File? = null) = viewModelScope.launch {
         val title = _state.value.title.trim()
         if (title.isBlank()) {
-            _state.update { it.copy(errorKey = "task_title_empty") }
+            _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
             return@launch
         }
         if (_state.value.selectedIds.isEmpty()) {
@@ -271,7 +277,15 @@ class CreateTaskViewModel @Inject constructor(
                         _state.update { it.copy(errorKey = "task_photo_upload_failed") }
                     }
             }
-            _state.update { it.copy(loading = false, created = true) }
+            val voice = voiceFile ?: _state.value.voiceFile
+            if (voice != null) {
+                runCatching {
+                    repo.uploadFileAttachment(task.id, voice, "audio/mp4", voice.name)
+                }.onFailure {
+                    _state.update { it.copy(errorKey = "task_voice_upload_failed") }
+                }
+            }
+            _state.update { it.copy(loading = false, created = true, voiceFile = null) }
         }.onFailure { e ->
             _state.update { it.copy(loading = false, errorKey = mapCreateError(e)) }
         }
@@ -281,7 +295,7 @@ class CreateTaskViewModel @Inject constructor(
         val id = editTaskId ?: return@launch
         val title = _state.value.title.trim()
         if (title.isBlank()) {
-            _state.update { it.copy(errorKey = "task_title_empty") }
+            _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
             return@launch
         }
         _state.update { it.copy(loading = true, errorKey = null) }
@@ -327,6 +341,7 @@ class CreateTaskViewModel @Inject constructor(
     }
 
     fun resetForm() {
+        _state.value.voiceFile?.delete()
         _state.update {
             CreateTaskUiState(contacts = it.contacts, isEditMode = editTaskId != null).withSyncedDeadline(zone)
         }
@@ -379,6 +394,8 @@ data class CreateTaskUiState(
     val contacts: List<User> = emptyList(),
     val assigneeSearch: String = "",
     val selectedIds: Set<String> = emptySet(),
+    val voiceFile: File? = null,
+    val titleError: Boolean = false,
     val loading: Boolean = false,
     val created: Boolean = false,
     val errorKey: String? = null,

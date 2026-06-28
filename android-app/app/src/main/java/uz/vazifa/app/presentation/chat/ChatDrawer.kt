@@ -42,10 +42,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
-import android.os.Build
 import androidx.compose.ui.draw.drawBehind
-import androidx.compose.ui.graphics.asComposeRenderEffect
-import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -97,7 +94,6 @@ fun ChatDrawerContent(
         modifier
             .fillMaxHeight()
             .width(312.dp)
-            .liquidDrawerBlur()
             .drawBehind { drawDrawerBackdrop(isDark) },
     ) {
         Column(
@@ -363,15 +359,4 @@ private fun DrawerFooter(isOpen: Boolean) {
             )
         }
     }
-}
-
-private fun Modifier.liquidDrawerBlur(): Modifier {
-    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
-        return graphicsLayer {
-            renderEffect = android.graphics.RenderEffect
-                .createBlurEffect(24f, 24f, android.graphics.Shader.TileMode.CLAMP)
-                .asComposeRenderEffect()
-        }
-    }
-    return this
 }

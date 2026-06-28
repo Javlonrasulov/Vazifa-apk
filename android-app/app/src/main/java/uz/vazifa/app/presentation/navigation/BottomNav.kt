@@ -541,7 +541,7 @@ object Routes {
     const val TASK_DETAIL = "task/{taskId}"
     const val DASH_SECTION = "dash/{section}"
     const val EMPLOYEE_DETAIL = "employee/{employeeId}"
-    const val CREATE_TASK = "create_task"
+    const val CREATE_TASK = "create_task?assigneeIds={assigneeIds}"
     const val EDIT_TASK = "edit_task/{taskId}"
     const val CHAT_CONVERSATION = "chat_conv/{peerId}?name={name}"
     const val CHAT_NEW = "chat_new"
@@ -552,6 +552,10 @@ object Routes {
     fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
     fun employeeDetail(id: String) = "employee/$id"
+    fun createTask(assigneeIds: Set<String> = emptySet()): String {
+        val encoded = android.net.Uri.encode(assigneeIds.joinToString(","))
+        return "create_task?assigneeIds=$encoded"
+    }
     fun chatConversation(peerId: String, name: String) =
         "chat_conv/$peerId?name=${android.net.Uri.encode(name)}"
     fun createRoom(type: String) = "chat_create_room/$type"

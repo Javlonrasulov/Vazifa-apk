@@ -13,6 +13,7 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
@@ -391,11 +392,13 @@ fun CreateTaskScreen(
         viewModel.loadContacts()
         viewModel.loadForEdit()
     }
-    LaunchedEffect(preselectedAssigneeIds) {
-        preselectedAssigneeIds?.takeIf { it.isNotEmpty() }?.let { ids ->
+    LaunchedEffect(preselectedAssigneeIds, state.contacts) {
+        val ids = preselectedAssigneeIds?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
+        if (state.contacts.isEmpty()) return@LaunchedEffect
+        if (state.selectedIds != ids) {
             viewModel.preselectAssignees(ids)
-            onPreselectConsumed()
         }
+        onPreselectConsumed()
     }
     LaunchedEffect(state.selectedIds.size) {
         if (state.selectedIds.size <= 2) showAllSelectedAssignees = false
@@ -426,42 +429,61 @@ fun CreateTaskScreen(
             OutlinedTextField(
                 state.title, viewModel::onTitle,
                 label = { Text(localized("task_name")) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                colors = fieldColors,
-            )
-            OutlinedTextField(
-                state.description, viewModel::onDescription,
-                label = { Text(localized("task_desc")) },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 3,
-                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                colors = fieldColors,
-            )
-            OutlinedTextField(
-                state.deadlineHours, viewModel::onDeadlineHours,
-                label = { Text(localized("task_deadline_hours")) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                colors = fieldColors,
-                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
-            )
-            OutlinedTextField(
-                value = state.deadlineDateTime?.format(deadlineDisplayFmt).orEmpty(),
-                onValueChange = {},
-                readOnly = true,
-                label = { Text(localized("task_deadline_datetime")) },
                 modifier = Modifier
                     .fillMaxWidth()
-                    .clickable { showDatePicker = true },
+                    .onFocusChanged { focus ->
+                        if (!focus.isFocused && state.title.isBlank()) {
+                            viewModel.showTitleError()
+                        }
+                    },
+                isError = state.titleError && state.title.isBlank(),
+                supportingText = if (state.titleError && state.title.isBlank()) {
+                    { Text(localized("task_title_empty")) }
+                } else {
+                    null
+                },
                 shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 colors = fieldColors,
-                trailingIcon = {
-                    IconButton(onClick = { showDatePicker = true }) {
-                        Icon(Icons.Default.CalendarToday, contentDescription = null, tint = LiquidGlass.Blue)
-                    }
-                },
             )
+            DescriptionVoiceInput(
+                value = state.description,
+                onValueChange = viewModel::onDescription,
+                voiceFile = state.voiceFile,
+                onVoiceRecorded = viewModel::onVoiceRecorded,
+                onVoiceRemove = viewModel::removeVoice,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                OutlinedTextField(
+                    state.deadlineHours, viewModel::onDeadlineHours,
+                    label = { Text(localized("task_deadline_hours")) },
+                    modifier = Modifier.weight(0.38f),
+                    shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                    colors = fieldColors,
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Decimal),
+                    singleLine = true,
+                )
+                OutlinedTextField(
+                    value = state.deadlineDateTime?.format(deadlineDisplayFmt).orEmpty(),
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text(localized("task_deadline_datetime")) },
+                    modifier = Modifier
+                        .weight(0.62f)
+                        .clickable { showDatePicker = true },
+                    shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                    colors = fieldColors,
+                    singleLine = true,
+                    trailingIcon = {
+                        IconButton(onClick = { showDatePicker = true }) {
+                            Icon(Icons.Default.CalendarToday, contentDescription = null, tint = LiquidGlass.Blue)
+                        }
+                    },
+                )
+            }
             Text(localized("task_assignees"), color = LiquidTheme.textMuted, fontSize = 13.sp)
             if (!state.isEditMode) {
                 Text(localized("task_assignee_hint"), color = LiquidTheme.textMuted, fontSize = 12.sp)
@@ -526,6 +548,10 @@ fun CreateTaskScreen(
             }
             Button(
                 onClick = {
+                    if (state.title.isBlank()) {
+                        viewModel.showTitleError()
+                        return@Button
+                    }
                     if (state.isEditMode) viewModel.update() else viewModel.create(createImageUri)
                 },
                 enabled = state.canCreate,

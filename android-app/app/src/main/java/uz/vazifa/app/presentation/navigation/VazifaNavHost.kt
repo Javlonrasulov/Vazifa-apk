@@ -423,8 +423,7 @@ fun VazifaNavHost(
                         EmployeesTabScreen(
                             onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
                             onAssignTask = { ids ->
-                                preselectedAssigneeIds = ids
-                                selectedTab = AppTab.CREATE
+                                navController.navigate(Routes.createTask(ids))
                             },
                         )
                     } else {
@@ -489,9 +488,7 @@ fun VazifaNavHost(
                     onEditTask = { navController.navigate(Routes.editTask(it)) },
                     currentUserId = user?.id,
                     onAssignTask = { ids ->
-                        preselectedAssigneeIds = ids
-                        navController.popBackStack()
-                        selectedTab = AppTab.CREATE
+                        navController.navigate(Routes.createTask(ids))
                     },
                     onEmployeeClick = { employeeId ->
                         navController.navigate(Routes.employeeDetail(employeeId))
@@ -506,16 +503,29 @@ fun VazifaNavHost(
                     onBack = { navController.popBackStack() },
                     onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                     onAssignTask = { employeeId ->
-                        preselectedAssigneeIds = setOf(employeeId)
-                        navController.popBackStack(Routes.MAIN, false)
-                        selectedTab = AppTab.CREATE
+                        navController.navigate(Routes.createTask(setOf(employeeId)))
                     },
                 )
             }
-            composable(Routes.CREATE_TASK) {
+            composable(
+                Routes.CREATE_TASK,
+                arguments = listOf(
+                    navArgument("assigneeIds") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) { entry ->
+                val raw = entry.arguments?.getString("assigneeIds").orEmpty()
+                val assigneeIds = raw.split(",")
+                    .map { it.trim() }
+                    .filter { it.isNotEmpty() }
+                    .toSet()
+                    .takeIf { it.isNotEmpty() }
                 CreateTaskScreen(
                     onBack = { navController.popBackStack() },
                     onCreated = { navController.popBackStack() },
+                    preselectedAssigneeIds = assigneeIds,
                 )
             }
             composable(
@@ -622,7 +632,7 @@ fun VazifaNavHost(
             onDismiss = { showCreateSheet = false },
             onAction = { action ->
                 when (action) {
-                    CreateAction.NEW_TASK -> navController.navigate(Routes.CREATE_TASK)
+                    CreateAction.NEW_TASK -> navController.navigate(Routes.createTask())
                     CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
                     CreateAction.SUPPORT -> {
                         selectedTab = AppTab.CHAT
