@@ -11,9 +11,11 @@ import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -44,9 +46,6 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import androidx.compose.ui.window.Dialog
-import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
-import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
 import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -79,21 +78,36 @@ fun ChatConversationScreen(
     peerName: String,
     currentUserId: String,
     onBack: () -> Unit,
-    viewModel: ChatViewModel = hiltViewModel(),
+    viewModel: ChatViewModel = hiltViewModel(key = peerId),
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val sendFailedText = localized("chat_send_failed")
 
-    LaunchedEffect(peerId) {
-        viewModel.start(peerId, currentUserId, ChatPeer(id = peerId, fullName = peerName))
+    LaunchedEffect(peerId, currentUserId) {
+        if (peerId.isNotBlank() && currentUserId.isNotBlank()) {
+            viewModel.start(peerId, currentUserId, ChatPeer(id = peerId, fullName = peerName))
+        }
     }
 
     var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var deleteTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var forwardTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var forwardPeers by remember { mutableStateOf<List<ChatPeer>>(emptyList()) }
+    var forwardLoading by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+    val strings = rememberStringResolver()
+    val copiedText = localized("chat_copied")
+    val forwardText = localized("chat_forward")
 
     LiquidBackground(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding(),
+        ) {
             ChatHeader(
                 peer = state.peer ?: ChatPeer(id = peerId, fullName = peerName),
                 activity = state.peerActivity,
@@ -121,6 +135,9 @@ fun ChatConversationScreen(
                     scope.launch {
                         viewModel.setUploading(true)
                         runCatching { sendPicked(context, viewModel, uri, type) }
+                            .onFailure {
+                                android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                            }
                         viewModel.setUploading(false)
                     }
                 },
@@ -136,6 +153,8 @@ fun ChatConversationScreen(
                                 upload,
                                 ChatMessageMeta(durationSec = dur, waveform = wave),
                             )
+                        }.onFailure {
+                            android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
                         }
                         viewModel.setUploading(false)
                     }
@@ -160,19 +179,55 @@ fun ChatConversationScreen(
     }
 
     actionTarget?.let { target ->
+        val copyText = copyableMessageText(target, strings)
         MessageActionSheet(
             message = target,
             isMine = viewModel.isMine(target),
+            canCopy = copyText.isNotBlank(),
             onDismiss = { actionTarget = null },
             onReact = { emoji -> viewModel.react(target, emoji); actionTarget = null },
             onReply = { viewModel.setReplyTo(target); actionTarget = null },
             onCopy = {
-                copyToClipboard(context, target.body.orEmpty())
+                copyToClipboard(context, copyText)
+                android.widget.Toast.makeText(context, copiedText, android.widget.Toast.LENGTH_SHORT).show()
                 actionTarget = null
             },
+            onForward = {
+                forwardTarget = target
+                forwardLoading = true
+                forwardPeers = emptyList()
+                actionTarget = null
+                scope.launch {
+                    forwardPeers = viewModel.loadForwardTargets()
+                    forwardLoading = false
+                }
+            },
             onEdit = { viewModel.startEdit(target); actionTarget = null },
-            onDelete = { viewModel.delete(target); actionTarget = null },
+            onDelete = { deleteTarget = target; actionTarget = null },
             onPin = { viewModel.pin(target); actionTarget = null },
+        )
+    }
+
+    deleteTarget?.let { msg ->
+        DeleteMessageDialog(
+            peerName = state.peer?.displayName ?: peerName,
+            isMine = viewModel.isMine(msg),
+            onDismiss = { deleteTarget = null },
+            onDeleteForMe = { viewModel.hideForMe(msg); deleteTarget = null },
+            onDeleteForEveryone = { viewModel.delete(msg); deleteTarget = null },
+        )
+    }
+
+    forwardTarget?.let { msg ->
+        ForwardPickerDialog(
+            peers = forwardPeers,
+            loading = forwardLoading,
+            onDismiss = { forwardTarget = null },
+            onPick = { peer ->
+                viewModel.forward(msg, peer.id)
+                forwardTarget = null
+                android.widget.Toast.makeText(context, forwardText, android.widget.Toast.LENGTH_SHORT).show()
+            },
         )
     }
 }
@@ -185,7 +240,6 @@ private fun ChatHeader(peer: ChatPeer, activity: String?, onBack: () -> Unit, on
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
-            .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -377,6 +431,7 @@ private fun DateChip(createdAt: String) {
     }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun MessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Unit) {
     val bubbleShape = RoundedCornerShape(
@@ -386,7 +441,10 @@ private fun MessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Un
         bottomEnd = if (mine) 4.dp else 18.dp,
     )
     Row(
-        Modifier.fillMaxWidth().padding(vertical = 1.dp),
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 1.dp)
+            .combinedClickable(onClick = {}, onLongClick = onLongPress),
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start, modifier = Modifier.widthIn(max = 300.dp)) {
@@ -400,9 +458,6 @@ private fun MessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Un
                             Modifier.liquidGlassThemed(radius = 18.dp)
                         },
                     )
-                    .pointerInput(msg.id) {
-                        detectTapGestures(onLongPress = { onLongPress() })
-                    }
                     .padding(horizontal = 4.dp, vertical = 4.dp),
             ) {
                 BubbleContent(msg, mine)
@@ -483,6 +538,19 @@ private fun ReplyPreview(reply: ChatMessage, mine: Boolean) {
 @Composable
 private fun ImageContent(msg: ChatMessage) {
     val url = msg.meta?.fileUrl?.let { MediaUrl.fromFilePath(it) } ?: msg.filePath?.let { MediaUrl.fromFilePath(it) }
+    if (url.isNullOrBlank()) {
+        Box(
+            Modifier
+                .widthIn(min = 120.dp, max = 260.dp)
+                .heightIn(min = 80.dp, max = 320.dp)
+                .clip(RoundedCornerShape(14.dp))
+                .background(Color.White.copy(alpha = 0.15f)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Image, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(36.dp))
+        }
+        return
+    }
     AsyncImage(
         model = url,
         contentDescription = null,
@@ -678,17 +746,15 @@ private suspend fun sendPicked(
     uri: Uri,
     type: ChatMessageType,
 ) {
-    runCatching {
-        if (type == ChatMessageType.IMAGE) {
-            val file = ImageCompress.compressToFile(context, uri)
-            val upload = viewModel.upload(file, "image/jpeg")
-            viewModel.sendUpload(ChatMessageType.IMAGE, upload)
-        } else {
-            val file = ChatFiles.copyToCache(context, uri) ?: return
-            val mime = ChatFiles.mimeType(context, uri)
-            val upload = viewModel.upload(file, mime)
-            viewModel.sendUpload(type, upload, ChatMessageMeta(fileSize = file.length()))
-        }
+    if (type == ChatMessageType.IMAGE) {
+        val file = ImageCompress.compressToFile(context, uri)
+        val upload = viewModel.upload(file, "image/jpeg")
+        viewModel.sendUpload(ChatMessageType.IMAGE, upload)
+    } else {
+        val file = ChatFiles.copyToCache(context, uri) ?: error("file copy failed")
+        val mime = ChatFiles.mimeType(context, uri)
+        val upload = viewModel.upload(file, mime)
+        viewModel.sendUpload(type, upload, ChatMessageMeta(fileSize = file.length()))
     }
 }
 
@@ -721,15 +787,27 @@ fun RoomConversationScreen(
     roomId: String,
     currentUserId: String,
     onBack: () -> Unit,
-    viewModel: RoomViewModel = hiltViewModel(),
+    viewModel: RoomViewModel = hiltViewModel(key = roomId),
 ) {
     val state by viewModel.state.collectAsState()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val sendFailedText = localized("chat_send_failed")
 
-    LaunchedEffect(roomId) { viewModel.start(roomId, currentUserId) }
+    LaunchedEffect(roomId, currentUserId) {
+        if (roomId.isNotBlank() && currentUserId.isNotBlank()) {
+            viewModel.start(roomId, currentUserId)
+        }
+    }
 
     var actionTarget by remember { mutableStateOf<uz.vazifa.app.domain.model.RoomMessage?>(null) }
+    var deleteTarget by remember { mutableStateOf<uz.vazifa.app.domain.model.RoomMessage?>(null) }
+    var forwardTarget by remember { mutableStateOf<uz.vazifa.app.domain.model.RoomMessage?>(null) }
+    var forwardPeers by remember { mutableStateOf<List<ChatPeer>>(emptyList()) }
+    var forwardLoading by remember { mutableStateOf(false) }
+    val strings = rememberStringResolver()
+    val copiedText = localized("chat_copied")
+    val forwardText = localized("chat_forward")
 
     val inputState = ChatUiState(
         input = state.input,
@@ -738,7 +816,12 @@ fun RoomConversationScreen(
     )
 
     LiquidBackground(Modifier.fillMaxSize()) {
-        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+        Column(
+            Modifier
+                .fillMaxSize()
+                .statusBarsPadding()
+                .imePadding(),
+        ) {
             RoomHeader(room = state.room, roomId = roomId, typingLabel = state.typingLabel, onBack = onBack)
 
             RoomMessageList(
@@ -763,6 +846,9 @@ fun RoomConversationScreen(
                         scope.launch {
                             viewModel.setUploading(true)
                             runCatching { sendPickedRoom(context, viewModel, uri, type) }
+                                .onFailure {
+                                    android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             viewModel.setUploading(false)
                         }
                     },
@@ -778,6 +864,8 @@ fun RoomConversationScreen(
                                     upload,
                                     ChatMessageMeta(durationSec = dur, waveform = wave),
                                 )
+                            }.onFailure {
+                                android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
                             }
                             viewModel.setUploading(false)
                         }
@@ -792,19 +880,56 @@ fun RoomConversationScreen(
     }
 
     actionTarget?.let { target ->
+        val chatMsg = target.toChatMessage()
+        val copyText = copyableMessageText(chatMsg, strings)
         MessageActionSheet(
-            message = target.toChatMessage(),
+            message = chatMsg,
             isMine = viewModel.isMine(target.senderId),
+            canCopy = copyText.isNotBlank(),
             onDismiss = { actionTarget = null },
             onReact = { emoji -> viewModel.react(target, emoji); actionTarget = null },
             onReply = { viewModel.setReplyTo(target); actionTarget = null },
             onCopy = {
-                copyToClipboard(context, target.body.orEmpty())
+                copyToClipboard(context, copyText)
+                android.widget.Toast.makeText(context, copiedText, android.widget.Toast.LENGTH_SHORT).show()
                 actionTarget = null
             },
+            onForward = {
+                forwardTarget = target
+                forwardLoading = true
+                forwardPeers = emptyList()
+                actionTarget = null
+                scope.launch {
+                    forwardPeers = viewModel.loadForwardTargets()
+                    forwardLoading = false
+                }
+            },
             onEdit = { viewModel.startEdit(target); actionTarget = null },
-            onDelete = { viewModel.delete(target); actionTarget = null },
+            onDelete = { deleteTarget = target; actionTarget = null },
             onPin = { viewModel.pin(target); actionTarget = null },
+        )
+    }
+
+    deleteTarget?.let { msg ->
+        DeleteMessageDialog(
+            peerName = state.room?.title ?: "",
+            isMine = viewModel.isMine(msg.senderId),
+            onDismiss = { deleteTarget = null },
+            onDeleteForMe = { viewModel.hideForMe(msg); deleteTarget = null },
+            onDeleteForEveryone = { viewModel.delete(msg); deleteTarget = null },
+        )
+    }
+
+    forwardTarget?.let { msg ->
+        ForwardPickerDialog(
+            peers = forwardPeers,
+            loading = forwardLoading,
+            onDismiss = { forwardTarget = null },
+            onPick = { peer ->
+                viewModel.forward(msg, peer.id)
+                forwardTarget = null
+                android.widget.Toast.makeText(context, forwardText, android.widget.Toast.LENGTH_SHORT).show()
+            },
         )
     }
 }
@@ -820,7 +945,6 @@ private fun RoomHeader(
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
-            .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -956,16 +1080,14 @@ private suspend fun sendPickedRoom(
     uri: Uri,
     type: ChatMessageType,
 ) {
-    runCatching {
-        if (type == ChatMessageType.IMAGE) {
-            val file = ImageCompress.compressToFile(context, uri)
-            val upload = viewModel.upload(file, "image/jpeg")
-            viewModel.sendUpload(ChatMessageType.IMAGE, upload)
-        } else {
-            val file = ChatFiles.copyToCache(context, uri) ?: return
-            val mime = ChatFiles.mimeType(context, uri)
-            val upload = viewModel.upload(file, mime)
-            viewModel.sendUpload(type, upload, ChatMessageMeta(fileSize = file.length()))
-        }
+    if (type == ChatMessageType.IMAGE) {
+        val file = ImageCompress.compressToFile(context, uri)
+        val upload = viewModel.upload(file, "image/jpeg")
+        viewModel.sendUpload(ChatMessageType.IMAGE, upload)
+    } else {
+        val file = ChatFiles.copyToCache(context, uri) ?: error("file copy failed")
+        val mime = ChatFiles.mimeType(context, uri)
+        val upload = viewModel.upload(file, mime)
+        viewModel.sendUpload(type, upload, ChatMessageMeta(fileSize = file.length()))
     }
 }

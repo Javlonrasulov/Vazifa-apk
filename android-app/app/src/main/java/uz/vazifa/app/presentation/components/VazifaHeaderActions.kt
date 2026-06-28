@@ -195,7 +195,7 @@ fun NotificationHeaderIconButton(
             contentDescription = localized("notif_inbox_title"),
         )
         if (count > 0) {
-            val badgeText = if (count > 99) "99+" else count.toString()
+            val badgeText = formatBadgeCount(count)
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
@@ -205,12 +205,9 @@ fun NotificationHeaderIconButton(
                     .background(LiquidGlass.Rose),
                 contentAlignment = Alignment.Center,
             ) {
-                Text(
-                    badgeText,
-                    color = Color.White,
+                CountBadgeLabel(
+                    text = badgeText,
                     fontSize = if (badgeText.length > 1) 8.sp else 9.sp,
-                    fontWeight = FontWeight.Bold,
-                    lineHeight = if (badgeText.length > 1) 8.sp else 9.sp,
                 )
             }
         }

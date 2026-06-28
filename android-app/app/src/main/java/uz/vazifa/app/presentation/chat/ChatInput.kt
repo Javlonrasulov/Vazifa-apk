@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.BasicTextField
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.*
@@ -83,6 +84,7 @@ fun ChatInputArea(
     val context = LocalContext.current
     var showAttach by remember { mutableStateOf(false) }
     var showEmoji by remember { mutableStateOf(false) }
+    val sendFailedText = localized("chat_send_failed")
     val recorder = remember { VoiceRecorder(context) }
     var recording by remember { mutableStateOf(false) }
     var recordSeconds by remember { mutableStateOf(0) }
@@ -111,6 +113,48 @@ fun ChatInputArea(
         if (granted) lastLocation(context)?.let { (lat, lng) -> onSendLocation(lat, lng) }
     }
 
+    fun beginRecording() {
+        runCatching {
+            currentFile = recorder.start()
+            recording = true
+            cancelHint = false
+            onRecordingChange(true)
+        }.onFailure {
+            android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) beginRecording()
+    }
+
+    fun launchCamera() {
+        val file = File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
+        val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
+        cameraUri = uri
+        cameraLauncher.launch(uri)
+    }
+
+    val cameraPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) launchCamera()
+    }
+
+    fun requestCamera() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED) {
+            launchCamera()
+        } else {
+            cameraPermission.launch(Manifest.permission.CAMERA)
+        }
+    }
+
+    fun requestRecording() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            beginRecording()
+        } else {
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
+    }
+
     LaunchedEffect(recording) {
         if (recording) {
             amplitudes.clear()
@@ -125,7 +169,7 @@ fun ChatInputArea(
         }
     }
 
-    Column(Modifier.fillMaxWidth().background(LiquidTheme.bgMid.copy(alpha = 0.92f)).navigationBarsPadding().imePadding()) {
+    Column(Modifier.fillMaxWidth().background(LiquidTheme.bgMid.copy(alpha = 0.92f)).navigationBarsPadding()) {
         AnimatedVisibility(visible = state.replyTo != null || state.editing != null) {
             ReplyEditBar(state, onCancelReplyEdit)
         }
@@ -139,10 +183,7 @@ fun ChatInputArea(
                 onPhoto = { showAttach = false; imageLauncher.launch("image/*") },
                 onCamera = {
                     showAttach = false
-                    val file = File(context.cacheDir, "cam_${System.currentTimeMillis()}.jpg")
-                    val uri = FileProvider.getUriForFile(context, "${context.packageName}.fileprovider", file)
-                    cameraUri = uri
-                    cameraLauncher.launch(uri)
+                    requestCamera()
                 },
                 onVideo = { showAttach = false; videoLauncher.launch("video/*") },
                 onFile = { showAttach = false; fileLauncher.launch("*/*") },
@@ -217,14 +258,7 @@ fun ChatInputArea(
             } else {
                 VoiceButton(
                     recording = recording,
-                    onStart = {
-                        runCatching {
-                            currentFile = recorder.start()
-                            recording = true
-                            cancelHint = false
-                            onRecordingChange(true)
-                        }
-                    },
+                    onStart = { requestRecording() },
                     onStop = {
                         recording = false
                         onRecordingChange(false)
@@ -389,10 +423,12 @@ private fun VoiceButton(
 fun MessageActionSheet(
     message: ChatMessage,
     isMine: Boolean,
+    canCopy: Boolean,
     onDismiss: () -> Unit,
     onReact: (String) -> Unit,
     onReply: () -> Unit,
     onCopy: () -> Unit,
+    onForward: () -> Unit,
     onEdit: () -> Unit,
     onDelete: () -> Unit,
     onPin: () -> Unit,
@@ -418,14 +454,17 @@ fun MessageActionSheet(
             GlassCard(radius = 20.dp, modifier = Modifier.width(220.dp)) {
                 Column(Modifier.padding(vertical = 6.dp)) {
                     ActionItem(Icons.AutoMirrored.Filled.Reply, localized("chat_reply"), onReply)
-                    if (message.type == ChatMessageType.TEXT && !message.isDeleted) {
+                    if (canCopy) {
                         ActionItem(Icons.Default.ContentCopy, localized("chat_copy"), onCopy)
+                    }
+                    if (!message.isDeleted) {
+                        ActionItem(Icons.AutoMirrored.Filled.Forward, localized("chat_forward"), onForward)
                     }
                     if (isMine && message.type == ChatMessageType.TEXT && !message.isDeleted) {
                         ActionItem(Icons.Default.Edit, localized("chat_edit"), onEdit)
                     }
                     ActionItem(Icons.Default.PushPin, localized(if (message.isPinned) "chat_unpin" else "chat_pin"), onPin)
-                    if (isMine) {
+                    if (!message.isDeleted) {
                         ActionItem(Icons.Default.Delete, localized("chat_delete"), onDelete, danger = true)
                     }
                 }

@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -77,6 +78,8 @@ import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatRoom
 import uz.vazifa.app.domain.model.Conversation
 import uz.vazifa.app.presentation.components.VazifaHeaderActions
+import uz.vazifa.app.presentation.components.CountBadgeLabel
+import uz.vazifa.app.presentation.components.formatBadgeCount
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidBackground
@@ -110,6 +113,7 @@ fun ChatListScreen(
     val scope = rememberCoroutineScope()
     val drawerState = rememberDrawerState(DrawerValue.Closed)
     val drawerOpen = drawerState.isOpen
+    var appActive by remember { mutableStateOf(true) }
 
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotBlank()) {
@@ -121,27 +125,41 @@ fun ChatListScreen(
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, currentUserId) {
         val observer = LifecycleEventObserver { _, event ->
-            if (event == Lifecycle.Event.ON_RESUME && currentUserId.isNotBlank()) {
-                viewModel.refresh()
+            when (event) {
+                Lifecycle.Event.ON_RESUME -> {
+                    appActive = true
+                    if (currentUserId.isNotBlank()) {
+                        viewModel.reconnect()
+                        viewModel.refresh()
+                    }
+                }
+                Lifecycle.Event.ON_PAUSE -> appActive = false
+                else -> Unit
             }
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
+    val drawerOnline = state.connected || appActive
+
     ModalNavigationDrawer(
         drawerState = drawerState,
+        scrimColor = Color.Black.copy(alpha = 0.32f),
         drawerContent = {
             ModalDrawerSheet(
+                modifier = Modifier
+                    .fillMaxHeight()
+                    .width(312.dp),
                 drawerContainerColor = Color.Transparent,
                 drawerTonalElevation = 0.dp,
-                drawerShape = RoundedCornerShape(topEnd = 28.dp, bottomEnd = 28.dp),
+                drawerShape = RoundedCornerShape(topEnd = 20.dp),
             ) {
                 ChatDrawerContent(
                     userName = currentUserName,
-                    userSubtitle = if (state.connected) localized("chat_online") else localized("chat_offline"),
+                    userSubtitle = if (drawerOnline) localized("chat_online") else localized("chat_offline"),
                     userAvatarUrl = currentUserAvatar,
-                    isOnline = state.connected,
+                    isOnline = drawerOnline,
                     isOpen = drawerOpen,
                     onAction = { action ->
                         scope.launch { drawerState.close() }
@@ -401,20 +419,16 @@ private fun ChatTab(label: String, selected: Boolean, badge: Int, onClick: () ->
             )
             if (badge > 0) {
                 Spacer(Modifier.width(6.dp))
+                val badgeText = formatBadgeCount(badge)
+                val wide = badgeText.length > 1
                 Box(
                     Modifier
-                        .height(18.dp)
+                        .then(if (wide) Modifier.height(18.dp).padding(horizontal = 5.dp) else Modifier.size(18.dp))
                         .clip(CircleShape)
-                        .background(if (selected) LiquidGlass.Blue else LiquidTheme.textMuted.copy(alpha = 0.4f))
-                        .padding(horizontal = 6.dp),
+                        .background(if (selected) LiquidGlass.Blue else LiquidTheme.textMuted.copy(alpha = 0.4f)),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Text(
-                        if (badge > 99) "99+" else badge.toString(),
-                        color = Color.White,
-                        fontSize = 11.sp,
-                        fontWeight = FontWeight.Bold,
-                    )
+                    CountBadgeLabel(text = badgeText, fontSize = 11.sp)
                 }
             }
         }
@@ -782,20 +796,16 @@ private fun TicksTinted(status: ChatMessageStatus) {
 
 @Composable
 private fun UnreadBadge(count: Int) {
+    val text = formatBadgeCount(count)
+    val wide = text.length > 1
     Box(
         Modifier
-            .height(20.dp)
+            .then(if (wide) Modifier.height(20.dp).padding(horizontal = 6.dp) else Modifier.size(20.dp))
             .clip(CircleShape)
-            .background(LiquidGlass.Blue)
-            .padding(horizontal = 7.dp),
+            .background(LiquidGlass.Blue),
         contentAlignment = Alignment.Center,
     ) {
-        Text(
-            if (count > 99) "99+" else count.toString(),
-            color = Color.White,
-            fontSize = 11.sp,
-            fontWeight = FontWeight.Bold,
-        )
+        CountBadgeLabel(text = text, fontSize = 11.sp)
     }
 }
 

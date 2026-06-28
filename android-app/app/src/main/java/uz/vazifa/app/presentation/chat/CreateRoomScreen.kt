@@ -23,7 +23,9 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.Text
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -66,6 +68,8 @@ data class CreateRoomUiState(
     val description: String = "",
     val query: String = "",
     val creating: Boolean = false,
+    val error: String? = null,
+    val createdRoomId: String? = null,
 )
 
 @HiltViewModel
@@ -111,10 +115,10 @@ class CreateRoomViewModel @Inject constructor(
         }
     }
 
-    fun create(type: ChatRoomType, onCreated: (String) -> Unit) {
+    fun create(type: ChatRoomType) {
         val st = _state.value
         if (st.title.isBlank() || st.creating) return
-        _state.update { it.copy(creating = true) }
+        _state.update { it.copy(creating = true, error = null, createdRoomId = null) }
         viewModelScope.launch {
             runCatching {
                 rooms.create(
@@ -124,13 +128,20 @@ class CreateRoomViewModel @Inject constructor(
                     memberIds = st.selected.toList(),
                 )
             }.onSuccess { room ->
-                _state.update { it.copy(creating = false) }
-                onCreated(room.id)
-            }.onFailure {
-                _state.update { it.copy(creating = false) }
+                _state.update { it.copy(creating = false, createdRoomId = room.id) }
+            }.onFailure { err ->
+                _state.update {
+                    it.copy(
+                        creating = false,
+                        error = err.message?.takeIf { m -> m.isNotBlank() } ?: "create_failed",
+                    )
+                }
             }
         }
     }
+
+    fun clearError() = _state.update { it.copy(error = null) }
+    fun consumeCreated() = _state.update { it.copy(createdRoomId = null) }
 }
 
 @Composable
@@ -142,10 +153,25 @@ fun CreateRoomScreen(
     viewModel: CreateRoomViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
     val type = ChatRoomType.from(roomTypeKey)
     val isChannel = type == ChatRoomType.CHANNEL
+    val createFailedText = localized("chat_room_create_failed")
 
     LaunchedEffect(currentUserId) { viewModel.start(currentUserId) }
+
+    LaunchedEffect(state.createdRoomId) {
+        val roomId = state.createdRoomId ?: return@LaunchedEffect
+        viewModel.consumeCreated()
+        onCreated(roomId)
+    }
+
+    LaunchedEffect(state.error) {
+        val err = state.error ?: return@LaunchedEffect
+        val message = if (err == "create_failed") createFailedText else err
+        android.widget.Toast.makeText(context, message, android.widget.Toast.LENGTH_LONG).show()
+        viewModel.clearError()
+    }
 
     val titleKey = if (isChannel) "chat_new_channel" else "chat_new_group"
     val canCreate = state.title.isNotBlank() && !state.creating
@@ -154,13 +180,13 @@ fun CreateRoomScreen(
         title = localized(titleKey),
         onBack = onBack,
         actions = {
-            Box(
-                Modifier
+            IconButton(
+                onClick = { viewModel.create(type) },
+                enabled = canCreate,
+                modifier = Modifier
                     .size(40.dp)
                     .clip(CircleShape)
-                    .background(if (canCreate) LiquidGlass.Blue else LiquidTheme.textMuted.copy(alpha = 0.3f))
-                    .clickable(enabled = canCreate) { viewModel.create(type, onCreated) },
-                contentAlignment = Alignment.Center,
+                    .background(if (canCreate) LiquidGlass.Blue else LiquidTheme.textMuted.copy(alpha = 0.3f)),
             ) {
                 if (state.creating) {
                     CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(18.dp))

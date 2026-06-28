@@ -82,7 +82,7 @@ class RoomRepository @Inject constructor(
         clientId: String,
     ): RoomMessage {
         val mergedMeta = (meta ?: ChatMessageMeta()).copy(
-            fileUrl = upload?.fileUrl ?: meta?.fileUrl,
+            fileUrl = upload?.fileUrl ?: upload?.filePath?.let { uz.vazifa.app.util.MediaUrl.fromFilePath(it) } ?: meta?.fileUrl,
             fileSize = upload?.fileSize ?: meta?.fileSize,
         )
         return api.sendRoomMessage(
@@ -132,29 +132,32 @@ fun RoomDto.toDomain(): ChatRoom = ChatRoom(
     unreadCount = unreadCount,
 )
 
-fun RoomMessageDto.toDomain(): RoomMessage = RoomMessage(
-    id = id,
-    roomId = roomId,
-    senderId = senderId,
-    senderName = sender?.fullName,
-    senderAvatarUrl = sender?.avatarUrl,
-    type = ChatMessageType.from(type),
-    body = body,
-    filePath = filePath,
-    fileName = fileName,
-    mimeType = mimeType,
-    meta = meta?.toDomain(),
-    replyToId = replyToId,
-    replyTo = replyTo?.toDomain(),
-    forwardedFrom = forwardedFrom,
-    reactions = reactions ?: emptyMap(),
-    status = ChatMessageStatus.SENT,
-    isEdited = isEdited,
-    isDeleted = isDeleted,
-    isPinned = isPinned,
-    clientId = clientId,
-    createdAt = createdAt,
-)
+fun RoomMessageDto.toDomain(): RoomMessage {
+    val resolvedMeta = meta.toDomainMessageMeta(filePath)
+    return RoomMessage(
+        id = id,
+        roomId = roomId,
+        senderId = senderId,
+        senderName = sender?.fullName,
+        senderAvatarUrl = sender?.avatarUrl,
+        type = ChatMessageType.from(type),
+        body = body,
+        filePath = filePath,
+        fileName = fileName,
+        mimeType = mimeType,
+        meta = resolvedMeta,
+        replyToId = replyToId,
+        replyTo = replyTo?.toDomain(),
+        forwardedFrom = forwardedFrom,
+        reactions = reactions ?: emptyMap(),
+        status = ChatMessageStatus.SENT,
+        isEdited = isEdited,
+        isDeleted = isDeleted,
+        isPinned = isPinned,
+        clientId = clientId,
+        createdAt = createdAt,
+    )
+}
 
 private fun RoomMemberDto.toDomain(): RoomMember = RoomMember(
     id = id,

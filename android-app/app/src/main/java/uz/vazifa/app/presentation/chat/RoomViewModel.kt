@@ -11,9 +11,12 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.ChatUploadDto
+import uz.vazifa.app.data.repository.ChatRepository
 import uz.vazifa.app.data.repository.RoomRepository
 import uz.vazifa.app.data.repository.toDomain
+import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatMessageMeta
+import uz.vazifa.app.domain.model.ChatPeer
 import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatRoom
@@ -41,13 +44,15 @@ data class RoomUiState(
 @HiltViewModel
 class RoomViewModel @Inject constructor(
     private val repo: RoomRepository,
+    private val chatRepo: ChatRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(RoomUiState())
     val state = _state.asStateFlow()
 
     private var roomId: String = ""
     private var currentUserId: String = ""
-    private var started = false
+    private var socketObserving = false
+    private val hiddenIds = mutableSetOf<String>()
     private var stopTypingJob: Job? = null
     private val typingUsers = mutableMapOf<String, Pair<String, String>>() // userId -> (name, action)
     private val typingTimers = mutableMapOf<String, Job>()
@@ -55,12 +60,18 @@ class RoomViewModel @Inject constructor(
     fun isMine(senderId: String): Boolean = senderId == currentUserId
 
     fun start(roomId: String, currentUserId: String) {
-        if (started) return
-        started = true
+        if (roomId.isBlank() || currentUserId.isBlank()) return
+        val roomChanged = this.roomId != roomId
         this.roomId = roomId
         this.currentUserId = currentUserId
+        if (roomChanged) {
+            _state.value = RoomUiState(loading = true)
+        }
         repo.connect()
-        observeSocket()
+        if (!socketObserving) {
+            socketObserving = true
+            observeSocket()
+        }
         viewModelScope.launch {
             runCatching { repo.get(roomId) }.onSuccess { r -> _state.update { it.copy(room = r) } }
             runCatching { repo.members(roomId) }.onSuccess { m -> _state.update { it.copy(members = m) } }
@@ -73,7 +84,7 @@ class RoomViewModel @Inject constructor(
             _state.update { it.copy(loading = true) }
             runCatching { repo.history(roomId, before = null) }
                 .onSuccess { list ->
-                    _state.update { it.copy(messages = list, loading = false, hasMore = list.size >= 40) }
+                    _state.update { it.copy(messages = list.filter { it.id !in hiddenIds }, loading = false, hasMore = list.size >= 40) }
                     markRead()
                 }
                 .onFailure { _state.update { it.copy(loading = false) } }
@@ -222,15 +233,17 @@ class RoomViewModel @Inject constructor(
         replyToId: String? = null,
     ) {
         val clientId = UUID.randomUUID().toString()
+        val fileUrl = upload?.fileUrl ?: upload?.filePath?.let { uz.vazifa.app.util.MediaUrl.fromFilePath(it) }
         val optimistic = RoomMessage(
             id = clientId,
             roomId = roomId,
             senderId = currentUserId,
             type = type,
             body = body,
+            filePath = upload?.filePath,
             fileName = upload?.fileName,
             mimeType = upload?.mimeType,
-            meta = (meta ?: ChatMessageMeta()).copy(fileUrl = upload?.fileUrl, fileSize = upload?.fileSize),
+            meta = (meta ?: ChatMessageMeta()).copy(fileUrl = fileUrl, fileSize = upload?.fileSize),
             replyToId = replyToId,
             replyTo = _state.value.messages.firstOrNull { it.id == replyToId },
             status = ChatMessageStatus.SENDING,
@@ -249,8 +262,19 @@ class RoomViewModel @Inject constructor(
                     replyToId = replyToId,
                     clientId = clientId,
                 )
-            }.onSuccess { sent -> upsert(sent.copy(clientId = clientId)) }
-                .onFailure {
+            }.onSuccess { sent ->
+                val mergedMeta = sent.meta?.copy(
+                    fileUrl = sent.meta?.fileUrl ?: fileUrl,
+                    fileSize = sent.meta?.fileSize ?: upload?.fileSize,
+                ) ?: optimistic.meta
+                upsert(
+                    sent.copy(
+                        clientId = clientId,
+                        meta = mergedMeta,
+                        filePath = sent.filePath ?: upload?.filePath,
+                    ),
+                )
+            }.onFailure {
                     _state.update { st ->
                         st.copy(messages = st.messages.map {
                             if (it.id == clientId) it.copy(status = ChatMessageStatus.FAILED) else it
@@ -277,8 +301,63 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch { runCatching { repo.delete(msg.id, room = true) } }
     }
 
+    fun hideForMe(msg: RoomMessage) {
+        hiddenIds.add(msg.id)
+        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id }) }
+    }
+
+    suspend fun loadForwardTargets(): List<ChatPeer> =
+        runCatching { chatRepo.getContacts() }
+            .getOrDefault(emptyList())
+            .filter { it.id != currentUserId }
+
+    fun forward(msg: RoomMessage, toPeerId: String) {
+        viewModelScope.launch {
+            runCatching {
+                val chatMsg = msg.toChatMessageForForward()
+                val upload = buildForwardUpload(chatMsg)
+                chatRepo.send(
+                    receiverId = toPeerId,
+                    type = chatMsg.type,
+                    body = chatMsg.body,
+                    upload = upload,
+                    meta = chatMsg.meta,
+                    forwardedFrom = chatMsg.id,
+                    clientId = UUID.randomUUID().toString(),
+                )
+            }
+        }
+    }
+
+    private fun buildForwardUpload(msg: ChatMessage): ChatUploadDto? {
+        if (msg.type == ChatMessageType.TEXT || msg.type == ChatMessageType.LOCATION || msg.type == ChatMessageType.CONTACT) {
+            return null
+        }
+        val path = msg.filePath ?: msg.meta?.fileUrl ?: return null
+        return ChatUploadDto(
+            filePath = path,
+            fileName = msg.fileName ?: "file",
+            mimeType = msg.mimeType ?: "application/octet-stream",
+            fileSize = msg.meta?.fileSize ?: 0L,
+            fileUrl = msg.meta?.fileUrl,
+        )
+    }
+
     override fun onCleared() {
         super.onCleared()
         repo.sendTyping(roomId, false)
     }
 }
+
+private fun RoomMessage.toChatMessageForForward(): ChatMessage = ChatMessage(
+    id = id,
+    senderId = senderId,
+    receiverId = roomId,
+    type = type,
+    body = body,
+    filePath = filePath,
+    fileName = fileName,
+    mimeType = mimeType,
+    meta = meta,
+    createdAt = createdAt,
+)

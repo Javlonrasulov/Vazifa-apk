@@ -198,6 +198,26 @@ class AuthRepository @Inject constructor(
         }
     }
 
+    /** Ilova ochilishida tez tekshiruv — tarmoq sekin bo'lsa 2.5s dan keyin kesh ishlatiladi. */
+    suspend fun restoreSessionForBoot(): UserDto? {
+        val prefs = loadPrefs()
+        val access = prefs[KEY_ACCESS]
+        if (access.isNullOrBlank()) {
+            context.dataStore.edit { it.remove(KEY_USER) }
+            return null
+        }
+
+        loadTokensFromPrefs(prefs)
+
+        return withTimeoutOrNull(2_500) {
+            try {
+                fetchUserFromServer()
+            } catch (_: IOException) {
+                loadCachedUser(prefs)
+            }
+        } ?: loadCachedUser(prefs)
+    }
+
     suspend fun restoreSession(): UserDto? {
         val prefs = loadPrefs()
         val access = prefs[KEY_ACCESS]

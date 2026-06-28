@@ -89,7 +89,23 @@ export class RoomsService {
     await this.members.save(rows);
 
     const summaries = await this.listForUser(owner.id, room.id);
-    return summaries[0];
+    if (summaries[0]) return summaries[0];
+
+    return {
+      id: room.id,
+      type: room.type,
+      title: room.title,
+      description: room.description,
+      avatarUrl: room.avatarUrl,
+      isVerified: room.isVerified,
+      ownerId: room.ownerId,
+      myRole: ChatRoomMemberRole.OWNER,
+      memberCount: rows.length,
+      muted: false,
+      canPost: this.canPost(room, ChatRoomMemberRole.OWNER),
+      lastMessage: null,
+      unreadCount: 0,
+    };
   }
 
   /** Foydalanuvchining barcha xonalari (yoki bitta roomId bo'yicha) */
@@ -146,15 +162,15 @@ export class RoomsService {
 
   private async lastMessagesFor(roomIds: string[]): Promise<Map<string, ChatRoomMessage>> {
     if (!roomIds.length) return new Map();
-    const rows = await this.messages
-      .createQueryBuilder('m')
-      .distinctOn(['m.roomId'])
-      .where('m.roomId IN (:...ids)', { ids: roomIds })
-      .andWhere('m.isDeleted = false')
-      .orderBy('m.roomId')
-      .addOrderBy('m.createdAt', 'DESC')
-      .getMany();
-    return new Map(rows.map((r) => [r.roomId, r]));
+    const map = new Map<string, ChatRoomMessage>();
+    for (const roomId of roomIds) {
+      const msg = await this.messages.findOne({
+        where: { roomId, isDeleted: false },
+        order: { createdAt: 'DESC' },
+      });
+      if (msg) map.set(roomId, msg);
+    }
+    return map;
   }
 
   private async unreadCount(roomId: string, lastReadAt: Date | null): Promise<number> {

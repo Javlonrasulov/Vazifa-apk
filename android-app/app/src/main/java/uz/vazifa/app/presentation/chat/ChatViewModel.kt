@@ -46,31 +46,64 @@ class ChatViewModel @Inject constructor(
 
     private var peerId: String = ""
     private var currentUserId: String = ""
-    private var typingJob: Job? = null
     private var stopTypingJob: Job? = null
-    private var started = false
+    private var socketObserving = false
+    private val hiddenIds = mutableSetOf<String>()
+
+    private fun applyHidden(list: List<ChatMessage>): List<ChatMessage> =
+        if (hiddenIds.isEmpty()) list else list.filter { it.id !in hiddenIds }
 
     fun isMine(msg: ChatMessage): Boolean = msg.senderId == currentUserId
 
     fun start(peerId: String, currentUserId: String, initialPeer: ChatPeer?) {
-        if (started) return
-        started = true
+        if (peerId.isBlank() || currentUserId.isBlank()) return
+
+        val peerChanged = this.peerId != peerId
         this.peerId = peerId
         this.currentUserId = currentUserId
-        if (initialPeer != null) {
-            repo.rememberPeer(initialPeer)
-            _state.update { it.copy(peer = initialPeer) }
+        if (peerChanged) {
+            _state.value = ChatUiState(loading = true)
+        }
+        initialPeer?.let {
+            repo.rememberPeer(it)
+            _state.update { st -> st.copy(peer = it) }
         }
         repo.connect()
-        observeSocket()
+        repo.ping()
+        if (!socketObserving) {
+            socketObserving = true
+            observeSocket()
+        }
         viewModelScope.launch {
             runCatching { repo.loadAliases(currentUserId) }
-            val alias = repo.aliasFor(peerId)
-            if (alias != null) {
-                _state.update { st -> st.copy(peer = st.peer?.copy(alias = alias) ?: ChatPeer(id = peerId, fullName = "", alias = alias)) }
-            }
+            resolvePeerInfo(initialPeer)
             loadHistory()
         }
+    }
+
+    private suspend fun resolvePeerInfo(initialPeer: ChatPeer?) {
+        val alias = repo.aliasFor(peerId)
+        var peer = repo.knownPeer(peerId)
+            ?: initialPeer?.takeIf { it.fullName.isNotBlank() }
+            ?: ChatPeer(id = peerId, fullName = initialPeer?.fullName.orEmpty())
+        if (peer.fullName.isBlank()) {
+            peer = repo.resolvePeer(peerId) ?: peer
+        }
+        runCatching { repo.getConversations() }.getOrNull()
+            ?.find { it.peer.id == peerId }
+            ?.peer
+            ?.let { conv ->
+                peer = peer.copy(
+                    fullName = peer.fullName.ifBlank { conv.fullName },
+                    avatarUrl = peer.avatarUrl ?: conv.avatarUrl,
+                    isOnline = conv.isOnline,
+                    lastSeenAt = conv.lastSeenAt ?: peer.lastSeenAt,
+                    position = peer.position ?: conv.position,
+                )
+            }
+        if (alias != null) peer = peer.copy(alias = alias)
+        repo.rememberPeer(peer)
+        _state.update { it.copy(peer = peer) }
     }
 
     fun renameContact(alias: String?) {
@@ -83,7 +116,7 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(loading = true) }
             runCatching { repo.getHistory(peerId, before = null) }
                 .onSuccess { list ->
-                    _state.update { it.copy(messages = list, loading = false, hasMore = list.size >= 40) }
+                    _state.update { it.copy(messages = applyHidden(list), loading = false, hasMore = list.size >= 40) }
                     markIncomingRead()
                 }
                 .onFailure { _state.update { it.copy(loading = false) } }
@@ -249,15 +282,17 @@ class ChatViewModel @Inject constructor(
         replyToId: String? = null,
     ) {
         val clientId = UUID.randomUUID().toString()
+        val fileUrl = upload?.fileUrl ?: upload?.filePath?.let { uz.vazifa.app.util.MediaUrl.fromFilePath(it) }
         val optimistic = ChatMessage(
             id = clientId,
             senderId = currentUserId,
             receiverId = peerId,
             type = type,
             body = body,
+            filePath = upload?.filePath,
             fileName = upload?.fileName,
             mimeType = upload?.mimeType,
-            meta = (meta ?: ChatMessageMeta()).copy(fileUrl = upload?.fileUrl, fileSize = upload?.fileSize),
+            meta = (meta ?: ChatMessageMeta()).copy(fileUrl = fileUrl, fileSize = upload?.fileSize),
             replyToId = replyToId,
             replyTo = _state.value.messages.firstOrNull { it.id == replyToId },
             status = ChatMessageStatus.SENDING,
@@ -276,8 +311,19 @@ class ChatViewModel @Inject constructor(
                     replyToId = replyToId,
                     clientId = clientId,
                 )
-            }.onSuccess { sent -> upsert(sent.copy(clientId = clientId)) }
-                .onFailure {
+            }.onSuccess { sent ->
+                val mergedMeta = sent.meta?.copy(
+                    fileUrl = sent.meta?.fileUrl ?: fileUrl,
+                    fileSize = sent.meta?.fileSize ?: upload?.fileSize,
+                ) ?: optimistic.meta
+                upsert(
+                    sent.copy(
+                        clientId = clientId,
+                        meta = mergedMeta,
+                        filePath = sent.filePath ?: upload?.filePath,
+                    ),
+                )
+            }.onFailure {
                     _state.update { st ->
                         st.copy(messages = st.messages.map {
                             if (it.id == clientId) it.copy(status = ChatMessageStatus.FAILED) else it
@@ -302,6 +348,47 @@ class ChatViewModel @Inject constructor(
     fun delete(msg: ChatMessage) {
         _state.update { st -> st.copy(messages = st.messages.map { if (it.id == msg.id) it.copy(isDeleted = true, body = null, meta = null) else it }) }
         viewModelScope.launch { runCatching { repo.delete(msg.id) } }
+    }
+
+    fun hideForMe(msg: ChatMessage) {
+        hiddenIds.add(msg.id)
+        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id }) }
+    }
+
+    suspend fun loadForwardTargets(): List<ChatPeer> =
+        runCatching { repo.getContacts() }
+            .getOrDefault(emptyList())
+            .filter { it.id != peerId && it.id != currentUserId }
+
+    fun forward(msg: ChatMessage, toPeerId: String) {
+        viewModelScope.launch {
+            runCatching {
+                val upload = buildForwardUpload(msg)
+                repo.send(
+                    receiverId = toPeerId,
+                    type = msg.type,
+                    body = msg.body,
+                    upload = upload,
+                    meta = msg.meta,
+                    forwardedFrom = msg.id,
+                    clientId = UUID.randomUUID().toString(),
+                )
+            }
+        }
+    }
+
+    private fun buildForwardUpload(msg: ChatMessage): ChatUploadDto? {
+        if (msg.type == ChatMessageType.TEXT || msg.type == ChatMessageType.LOCATION || msg.type == ChatMessageType.CONTACT) {
+            return null
+        }
+        val path = msg.filePath ?: msg.meta?.fileUrl ?: return null
+        return ChatUploadDto(
+            filePath = path,
+            fileName = msg.fileName ?: "file",
+            mimeType = msg.mimeType ?: "application/octet-stream",
+            fileSize = msg.meta?.fileSize ?: 0L,
+            fileUrl = msg.meta?.fileUrl,
+        )
     }
 
     override fun onCleared() {

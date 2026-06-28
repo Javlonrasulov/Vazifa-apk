@@ -104,6 +104,13 @@ class ChatRepository @Inject constructor(
 
     suspend fun getContacts(): List<ChatPeer> = api.getContacts().map { enrichPeer(it.toPeer()) }
 
+    suspend fun resolvePeer(peerId: String): ChatPeer? {
+        knownPeer(peerId)?.takeIf { it.fullName.isNotBlank() }?.let { return it }
+        getContacts().find { it.id == peerId }?.let { return enrichPeer(it) }
+        getConversations().find { it.peer.id == peerId }?.peer?.let { return enrichPeer(it) }
+        return null
+    }
+
     suspend fun send(
         receiverId: String,
         type: ChatMessageType,
@@ -115,7 +122,7 @@ class ChatRepository @Inject constructor(
         clientId: String,
     ): ChatMessage {
         val mergedMeta = (meta ?: ChatMessageMeta()).copy(
-            fileUrl = upload?.fileUrl ?: meta?.fileUrl,
+            fileUrl = upload?.fileUrl ?: upload?.filePath?.let { uz.vazifa.app.util.MediaUrl.fromFilePath(it) } ?: meta?.fileUrl,
             fileSize = upload?.fileSize ?: meta?.fileSize,
         )
         val dto = api.sendChatMessage(
@@ -152,28 +159,38 @@ class ChatRepository @Inject constructor(
     suspend fun pin(id: String): ChatMessage = api.pinChatMessage(id).toDomain()
 }
 
-fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
-    id = id,
-    senderId = senderId,
-    receiverId = receiverId,
-    type = ChatMessageType.from(type),
-    body = body,
-    filePath = filePath,
-    fileName = fileName,
-    mimeType = mimeType,
-    meta = meta?.toDomain(),
-    replyToId = replyToId,
-    replyTo = replyTo?.toDomain(),
-    forwardedFrom = forwardedFrom,
-    reactions = reactions ?: emptyMap(),
-    status = ChatMessageStatus.from(status),
-    isRead = isRead,
-    isEdited = isEdited,
-    isDeleted = isDeleted,
-    isPinned = isPinned,
-    clientId = clientId,
-    createdAt = createdAt,
-)
+fun ChatMessageDto.toDomain(): ChatMessage {
+    val resolvedMeta = meta.toDomainMessageMeta(filePath)
+    return ChatMessage(
+        id = id,
+        senderId = senderId,
+        receiverId = receiverId,
+        type = ChatMessageType.from(type),
+        body = body,
+        filePath = filePath,
+        fileName = fileName,
+        mimeType = mimeType,
+        meta = resolvedMeta,
+        replyToId = replyToId,
+        replyTo = replyTo?.toDomain(),
+        forwardedFrom = forwardedFrom,
+        reactions = reactions ?: emptyMap(),
+        status = ChatMessageStatus.from(status),
+        isRead = isRead,
+        isEdited = isEdited,
+        isDeleted = isDeleted,
+        isPinned = isPinned,
+        clientId = clientId,
+        createdAt = createdAt,
+    )
+}
+
+internal fun ChatMetaDto?.toDomainMessageMeta(filePath: String?): ChatMessageMeta? {
+    val base = this?.toDomain() ?: if (filePath.isNullOrBlank()) null else ChatMessageMeta()
+    if (base == null) return null
+    if (!base.fileUrl.isNullOrBlank() || filePath.isNullOrBlank()) return base
+    return base.copy(fileUrl = uz.vazifa.app.util.MediaUrl.fromFilePath(filePath))
+}
 
 fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
     fileUrl = fileUrl,

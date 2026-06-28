@@ -19,19 +19,37 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "1.0.0"
+    }
 
-        val localProperties = Properties()
-        val localFile = rootProject.file("local.properties")
-        if (localFile.exists()) localProperties.load(localFile.inputStream())
-        val apiScheme = localProperties.getProperty("api.scheme", "http")
-        val apiHost = localProperties.getProperty("api.host", "10.0.2.2")
-        val apiPort = localProperties.getProperty("api.port", "3000").trim()
-        val apiBase = if (apiPort.isEmpty()) {
-            "$apiScheme://$apiHost/api/v1/"
-        } else {
-            "$apiScheme://$apiHost:$apiPort/api/v1/"
+    buildTypes {
+        debug {
+            val localProperties = Properties()
+            val localFile = rootProject.file("local.properties")
+            if (localFile.exists()) localProperties.load(localFile.inputStream())
+            val apiScheme = localProperties.getProperty("api.scheme", "http")
+            val apiHost = localProperties.getProperty("api.host", "10.0.2.2")
+            val apiPort = localProperties.getProperty("api.port", "3000").trim()
+            val apiBase = if (apiPort.isEmpty()) {
+                "$apiScheme://$apiHost/api/v1/"
+            } else {
+                "$apiScheme://$apiHost:$apiPort/api/v1/"
+            }
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
         }
-        buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+        release {
+            val localProperties = Properties()
+            val localFile = rootProject.file("local.properties")
+            if (localFile.exists()) localProperties.load(localFile.inputStream())
+            val apiScheme = localProperties.getProperty("release.api.scheme", "https")
+            val apiHost = localProperties.getProperty("release.api.host", "vazifa.liderplast.uz")
+            val apiPort = localProperties.getProperty("release.api.port", "").trim()
+            val apiBase = if (apiPort.isEmpty()) {
+                "$apiScheme://$apiHost/api/v1/"
+            } else {
+                "$apiScheme://$apiHost:$apiPort/api/v1/"
+            }
+            buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+        }
     }
 
     buildFeatures {

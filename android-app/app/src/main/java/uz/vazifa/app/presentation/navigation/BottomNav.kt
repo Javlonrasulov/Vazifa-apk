@@ -66,6 +66,8 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidGlass
+import uz.vazifa.app.presentation.components.CountBadgeLabel
+import uz.vazifa.app.presentation.components.formatBadgeCount
 import uz.vazifa.app.presentation.theme.LiquidTheme
 
 val DockBarHeight = 72.dp
@@ -97,21 +99,28 @@ private data class DockTab(
 @Composable
 fun VazifaBottomNav(
     selected: AppTab,
+    canAssignTasks: Boolean,
     chatUnreadCount: Int,
     onSelect: (AppTab) -> Unit,
     onCreateClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = listOf(
-        DockTab(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")),
-        DockTab(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
-        DockTab(AppTab.CHAT, Icons.Default.Chat, localized("nav_chat")),
-        DockTab(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
-    )
+    val tabs = buildList {
+        if (canAssignTasks) {
+            add(DockTab(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")))
+        }
+        add(DockTab(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")))
+        add(DockTab(AppTab.CHAT, Icons.Default.Chat, localized("nav_chat")))
+        add(DockTab(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")))
+    }
 
     val isDark = LiquidTheme.isDark
     val inactiveTint = if (isDark) LiquidTheme.textMuted else Color(0xFF475569)
-    val navigableSelected = selected.takeIf { it != AppTab.CREATE && it != AppTab.EMPLOYEES && it != AppTab.DEPT_TASKS }
+    val navigableSelected = when (selected) {
+        AppTab.CREATE, AppTab.EMPLOYEES, AppTab.DEPT_TASKS -> null
+        AppTab.HOME -> if (canAssignTasks) AppTab.HOME else AppTab.TASKS
+        else -> selected
+    }
 
     Box(
         modifier
@@ -435,7 +444,7 @@ private fun GlassChatBadge(count: Int) {
         label = "badgeGlow",
     )
 
-    val display = if (count > 99) "99+" else count.toString()
+    val display = formatBadgeCount(count)
     val wide = display.length > 1
 
     Box(Modifier.scale(pulse)) {
@@ -449,7 +458,7 @@ private fun GlassChatBadge(count: Int) {
                         ),
                     )
                 }
-                .then(if (wide) Modifier.height(16.dp).padding(horizontal = 5.dp) else Modifier.size(16.dp))
+                .then(if (wide) Modifier.height(16.dp).padding(horizontal = 4.dp) else Modifier.size(16.dp))
                 .clip(CircleShape)
                 .background(
                     Brush.linearGradient(
@@ -466,13 +475,7 @@ private fun GlassChatBadge(count: Int) {
                 ),
             contentAlignment = Alignment.Center,
         ) {
-            Text(
-                display,
-                color = Color.White,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                lineHeight = 9.sp,
-            )
+            CountBadgeLabel(text = display, fontSize = 9.sp)
         }
     }
 }

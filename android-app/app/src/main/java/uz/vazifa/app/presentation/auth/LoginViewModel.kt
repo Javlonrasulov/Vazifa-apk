@@ -10,6 +10,7 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.util.UzPhoneFormatter
+import java.io.IOException
 import javax.inject.Inject
 
 enum class LoginMode { PHONE, LOGIN }
@@ -77,19 +78,25 @@ class LoginViewModel @Inject constructor(private val auth: AuthRepository) : Vie
                 _state.update { it.copy(loading = false, loggedIn = true) }
             } catch (e: HttpException) {
                 val key = when (e.code()) {
-                    403 -> {
-                        val code = e.response()?.errorBody()?.string()
-                            ?.let { body -> Regex(""""code"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.getOrNull(1) }
-                        when (code) {
-                            "DEVICE_LIMIT_REACHED" -> "login_device_limit"
-                            else -> "login_device_pending"
+                    401, 403 -> {
+                        if (e.code() == 403) {
+                            val code = e.response()?.errorBody()?.string()
+                                ?.let { body -> Regex(""""code"\s*:\s*"([^"]+)"""").find(body)?.groupValues?.getOrNull(1) }
+                            when (code) {
+                                "DEVICE_LIMIT_REACHED" -> "login_device_limit"
+                                else -> "login_device_pending"
+                            }
+                        } else {
+                            "login_error"
                         }
                     }
                     else -> "login_error"
                 }
                 _state.update { it.copy(loading = false, errorKey = key) }
-            } catch (_: Exception) {
+            } catch (_: IOException) {
                 _state.update { it.copy(loading = false, errorKey = "login_network_error") }
+            } catch (_: Exception) {
+                _state.update { it.copy(loading = false, errorKey = "login_error") }
             }
         }
     }

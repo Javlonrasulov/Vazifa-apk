@@ -42,7 +42,10 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import android.os.Build
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.graphics.asComposeRenderEffect
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
@@ -94,13 +97,13 @@ fun ChatDrawerContent(
         modifier
             .fillMaxHeight()
             .width(312.dp)
+            .liquidDrawerBlur()
             .drawBehind { drawDrawerBackdrop(isDark) },
     ) {
         Column(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
-                .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             DrawerHeaderCard(
@@ -134,7 +137,7 @@ fun ChatDrawerContent(
 }
 
 private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawDrawerBackdrop(isDark: Boolean) {
-    drawRect(if (isDark) LiquidGlass.BgMidDark.copy(alpha = 0.94f) else LiquidGlass.BgMidLight.copy(alpha = 0.92f))
+    drawRect(if (isDark) LiquidGlass.BgMidDark.copy(alpha = 0.55f) else Color.White.copy(alpha = 0.42f))
     drawCircle(
         brush = Brush.radialGradient(
             listOf(LiquidGlass.Blue.copy(alpha = if (isDark) 0.28f else 0.14f), Color.Transparent),
@@ -359,4 +362,15 @@ private fun DrawerFooter(isOpen: Boolean) {
             )
         }
     }
+}
+
+private fun Modifier.liquidDrawerBlur(): Modifier {
+    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+        return graphicsLayer {
+            renderEffect = android.graphics.RenderEffect
+                .createBlurEffect(24f, 24f, android.graphics.Shader.TileMode.CLAMP)
+                .asComposeRenderEffect()
+        }
+    }
+    return this
 }

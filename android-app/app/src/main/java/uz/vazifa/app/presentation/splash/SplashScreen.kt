@@ -25,7 +25,6 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -40,7 +39,6 @@ import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.delay
 import uz.vazifa.app.R
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidBackground
@@ -48,11 +46,10 @@ import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.glowEffect
 
-private const val SPLASH_MIN_MS = 1_600L
+private const val SPLASH_BAR_MS = 400
 
 @Composable
 fun SplashScreen(
-    onFinished: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val infinite = rememberInfiniteTransition(label = "splash-orbs")
@@ -84,19 +81,15 @@ fun SplashScreen(
         label = "shimmer",
     )
 
-    LaunchedEffect(Unit) {
-        delay(SPLASH_MIN_MS)
-        onFinished()
-    }
-
     val logoScale = 1f
     val logoAlpha = 1f
     val titleAlpha = 1f
     val titleOffset = 0f
     val subtitleAlpha = 1f
+
     val barProgress by animateFloatAsState(
         targetValue = 1f,
-        animationSpec = tween(SPLASH_MIN_MS.toInt(), easing = FastOutSlowInEasing),
+        animationSpec = tween(SPLASH_BAR_MS, easing = FastOutSlowInEasing),
         label = "barProgress",
     )
 

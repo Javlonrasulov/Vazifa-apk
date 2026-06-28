@@ -97,6 +97,11 @@ class ChatListViewModel @Inject constructor(
         load()
     }
 
+    fun reconnect() {
+        repo.connect()
+        repo.ping()
+    }
+
     private fun mergeConversations(
         local: List<Conversation>,
         server: List<Conversation>,
