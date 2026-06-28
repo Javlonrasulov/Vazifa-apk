@@ -18,9 +18,21 @@ sealed interface ChatEvent {
     data class Read(val by: String, val peerId: String, val messageIds: List<String>?) : ChatEvent
     data class Updated(val message: ChatMessageDto) : ChatEvent
     data class Deleted(val id: String) : ChatEvent
-    data class Typing(val userId: String, val typing: Boolean) : ChatEvent
+    data class Typing(val userId: String, val typing: Boolean, val action: String = "typing") : ChatEvent
     data class Presence(val userId: String, val online: Boolean, val lastSeenAt: String?) : ChatEvent
     data class PresenceList(val online: List<String>) : ChatEvent
+
+    data class RoomCreated(val room: RoomDto) : ChatEvent
+    data class RoomNewMessage(val message: RoomMessageDto) : ChatEvent
+    data class RoomUpdated(val message: RoomMessageDto) : ChatEvent
+    data class RoomDeleted(val roomId: String, val id: String) : ChatEvent
+    data class RoomTyping(
+        val roomId: String,
+        val userId: String,
+        val fullName: String,
+        val typing: Boolean,
+        val action: String = "typing",
+    ) : ChatEvent
 }
 
 @Singleton
@@ -83,7 +95,13 @@ class ChatSocket @Inject constructor(
         }
         s.on("message:typing") { args ->
             obj(args)?.let {
-                _events.tryEmit(ChatEvent.Typing(it.optString("userId"), it.optBoolean("typing")))
+                _events.tryEmit(
+                    ChatEvent.Typing(
+                        it.optString("userId"),
+                        it.optBoolean("typing"),
+                        it.optString("action", "typing").ifBlank { "typing" },
+                    ),
+                )
             }
         }
         s.on("presence:update") { args ->
@@ -103,6 +121,33 @@ class ChatSocket @Inject constructor(
             }
         }
 
+        s.on("room:created") { args ->
+            obj(args)?.let { o ->
+                runCatching { gson.fromJson(o.toString(), RoomDto::class.java) }
+                    .getOrNull()?.let { _events.tryEmit(ChatEvent.RoomCreated(it)) }
+            }
+        }
+        s.on("room:message:new") { args -> emitRoomMessage(args) { ChatEvent.RoomNewMessage(it) } }
+        s.on("room:message:updated") { args -> emitRoomMessage(args) { ChatEvent.RoomUpdated(it) } }
+        s.on("room:message:deleted") { args ->
+            obj(args)?.let {
+                _events.tryEmit(ChatEvent.RoomDeleted(it.optString("roomId"), it.optString("id")))
+            }
+        }
+        s.on("room:typing") { args ->
+            obj(args)?.let {
+                _events.tryEmit(
+                    ChatEvent.RoomTyping(
+                        it.optString("roomId"),
+                        it.optString("userId"),
+                        it.optString("fullName"),
+                        it.optBoolean("typing"),
+                        it.optString("action", "typing").ifBlank { "typing" },
+                    ),
+                )
+            }
+        }
+
         socket = s
         s.connect()
     }
@@ -113,12 +158,18 @@ class ChatSocket @Inject constructor(
             .getOrNull()?.let { _events.tryEmit(build(it)) }
     }
 
+    private inline fun emitRoomMessage(args: Array<Any>, build: (RoomMessageDto) -> ChatEvent) {
+        val o = obj(args) ?: return
+        runCatching { gson.fromJson(o.toString(), RoomMessageDto::class.java) }
+            .getOrNull()?.let { _events.tryEmit(build(it)) }
+    }
+
     private fun obj(args: Array<Any>): JSONObject? = args.firstOrNull() as? JSONObject
 
-    fun sendTyping(receiverId: String, typing: Boolean) {
+    fun sendTyping(receiverId: String, typing: Boolean, action: String = "typing") {
         socket?.emit(
             "message:typing",
-            JSONObject().put("receiverId", receiverId).put("typing", typing),
+            JSONObject().put("receiverId", receiverId).put("typing", typing).put("action", action),
         )
     }
 
@@ -126,6 +177,13 @@ class ChatSocket @Inject constructor(
         val payload = JSONObject().put("peerId", peerId)
         if (messageIds != null) payload.put("messageIds", org.json.JSONArray(messageIds))
         socket?.emit("message:read", payload)
+    }
+
+    fun sendRoomTyping(roomId: String, typing: Boolean, action: String = "typing") {
+        socket?.emit(
+            "room:typing",
+            JSONObject().put("roomId", roomId).put("typing", typing).put("action", action),
+        )
     }
 
     fun ping() {

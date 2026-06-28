@@ -1,18 +1,26 @@
 package uz.vazifa.app.presentation.profile
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Logout
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -20,6 +28,8 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
+import uz.vazifa.app.presentation.chat.ChatAvatar
+import uz.vazifa.app.util.ChatFiles
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.components.roleLabelKey
 import uz.vazifa.app.presentation.theme.GlassCard
@@ -33,6 +43,12 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
     val state by viewModel.state.collectAsState()
     val snackbarHostState = remember { SnackbarHostState() }
     val fieldColors = liquidGlassFieldColors()
+    val context = LocalContext.current
+    val imagePicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        if (uri != null) {
+            ChatFiles.copyToCache(context, uri)?.let { viewModel.uploadAvatar(it) }
+        }
+    }
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
@@ -57,11 +73,40 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
                     state.user?.let { u ->
                         GlassCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(16.dp)) {
-                                Text(u.fullName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 20.sp)
-                                Text("@${u.login}", color = LiquidTheme.textMuted)
-                                Text(localized(roleLabelKey(u.role)), color = LiquidGlass.BlueLight, fontSize = 13.sp)
-                                u.department?.let { Text(it, color = LiquidTheme.textMuted, fontSize = 13.sp) }
+                            Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                                Box(contentAlignment = Alignment.BottomEnd) {
+                                    ChatAvatar(u.fullName, online = false, size = 72.dp, showPresence = false, avatarUrl = u.avatarUrl)
+                                    Box(
+                                        Modifier
+                                            .size(26.dp)
+                                            .clip(CircleShape)
+                                            .background(LiquidGlass.Blue)
+                                            .clickable(enabled = !state.uploadingAvatar) { imagePicker.launch("image/*") },
+                                        contentAlignment = Alignment.Center,
+                                    ) {
+                                        if (state.uploadingAvatar) {
+                                            CircularProgressIndicator(color = Color.White, strokeWidth = 2.dp, modifier = Modifier.size(16.dp))
+                                        } else {
+                                            Icon(Icons.Default.PhotoCamera, null, tint = Color.White, modifier = Modifier.size(15.dp))
+                                        }
+                                    }
+                                }
+                                Spacer(Modifier.width(16.dp))
+                                Column(Modifier.weight(1f)) {
+                                    Text(u.fullName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 20.sp)
+                                    Text("@${u.login}", color = LiquidTheme.textMuted)
+                                    Text(localized(roleLabelKey(u.role)), color = LiquidGlass.BlueLight, fontSize = 13.sp)
+                                    u.department?.let { Text(it, color = LiquidTheme.textMuted, fontSize = 13.sp) }
+                                    if (!u.avatarUrl.isNullOrBlank()) {
+                                        Text(
+                                            localized("profile_remove_photo"),
+                                            color = LiquidGlass.Rose,
+                                            fontSize = 13.sp,
+                                            fontWeight = FontWeight.SemiBold,
+                                            modifier = Modifier.padding(top = 4.dp).clickable(enabled = !state.uploadingAvatar) { viewModel.deleteAvatar() },
+                                        )
+                                    }
+                                }
                             }
                         }
                     }

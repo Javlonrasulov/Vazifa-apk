@@ -8,6 +8,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -37,6 +38,8 @@ class MainActivity : ComponentActivity() {
         private set
     var pendingChatUserId by mutableStateOf<String?>(null)
         private set
+    var pendingRoomId by mutableStateOf<String?>(null)
+        private set
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -48,11 +51,15 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    private var keepSystemSplash = true
+
     override fun onCreate(savedInstanceState: Bundle?) {
+        installSplashScreen().setKeepOnScreenCondition { keepSystemSplash }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
+        pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -71,6 +78,9 @@ class MainActivity : ComponentActivity() {
                         onPendingTaskConsumed = { pendingTaskId = null },
                         pendingChatUserId = pendingChatUserId,
                         onPendingChatConsumed = { pendingChatUserId = null },
+                        pendingRoomId = pendingRoomId,
+                        onPendingRoomConsumed = { pendingRoomId = null },
+                        onSplashActiveChange = { active -> keepSystemSplash = active },
                     )
                 }
             }
@@ -82,5 +92,6 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
+        pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
     }
 }

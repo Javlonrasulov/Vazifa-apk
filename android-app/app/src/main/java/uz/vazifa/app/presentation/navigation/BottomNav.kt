@@ -549,10 +549,15 @@ object Routes {
     const val EDIT_TASK = "edit_task/{taskId}"
     const val CHAT_CONVERSATION = "chat_conv/{peerId}?name={name}"
     const val CHAT_NEW = "chat_new"
+    const val CHAT_CONTACTS = "chat_contacts"
+    const val CHAT_CREATE_ROOM = "chat_create_room/{type}"
+    const val ROOM_CONVERSATION = "room_conv/{roomId}"
     fun taskDetail(id: String) = "task/$id"
     fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
     fun employeeDetail(id: String) = "employee/$id"
     fun chatConversation(peerId: String, name: String) =
         "chat_conv/$peerId?name=${android.net.Uri.encode(name)}"
+    fun createRoom(type: String) = "chat_create_room/$type"
+    fun roomConversation(roomId: String) = "room_conv/$roomId"
 }

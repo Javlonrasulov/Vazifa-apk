@@ -12,8 +12,9 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Server, Socket } from 'socket.io';
 import { ChatService } from './chat.service';
+import { RoomsService } from './rooms.service';
 import { UsersService } from '../users/users.service';
-import { NotificationsService, FCM_CHANNEL_TASKS } from '../notifications/notifications.service';
+import { NotificationsService, FCM_CHANNEL_TASKS, FCM_CHANNEL_CHAT } from '../notifications/notifications.service';
 import { chatPushText } from './chat-i18n';
 import { SendMessageDto, TypingDto, MarkReadDto, ReactDto } from './dto/chat.dto';
 import { User } from '../users/entities/user.entity';
@@ -36,6 +37,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   constructor(
     private chat: ChatService,
+    private rooms: RoomsService,
     private jwt: JwtService,
     private config: ConfigService,
     private users: UsersService,
@@ -56,9 +58,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     this.emitToUser(message.senderId, 'message:new', message);
     if (this.isOnline(message.receiverId)) {
       this.emitToUser(message.senderId, 'message:status', { id: message.id, status: 'delivered' });
-    } else {
-      await this.pushOffline(sender, message.receiverId, message.type, message.body);
     }
+    await this.pushOffline(sender, message.receiverId, message.type, message.body);
   }
 
   relayRead(byUserId: string, peerId: string, messageIds?: string[]) {
@@ -116,6 +117,15 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       // Klientga onlayn foydalanuvchilar ro'yxatini yuborish
       client.emit('presence:list', { online: [...this.online.keys()] });
+
+      // Foydalanuvchining guruh/kanal xonalariga qo'shilish
+      try {
+        const roomIds = await this.rooms.listForUser(user.id);
+        for (const r of roomIds) client.join(`room:${r.id}`);
+      } catch (e) {
+        this.logger.warn(`room join failed: ${(e as Error).message}`);
+      }
+
       this.logger.log(`connected: ${user.fullName} (${client.id})`);
     } catch (e) {
       this.logger.warn(`socket auth failed: ${(e as Error).message}`);
@@ -159,9 +169,8 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
         id: message.id,
         status: 'delivered',
       });
-    } else {
-      await this.pushOffline(client.user, dto.receiverId, message.type, message.body);
     }
+    await this.pushOffline(client.user, dto.receiverId, message.type, message.body);
     return message;
   }
 
@@ -178,7 +187,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.notifications.sendToToken(receiver.fcmToken, text.title, text.body, {
         type: 'chat',
         chatUserId: sender.id,
-        channel: FCM_CHANNEL_TASKS,
+        channel: FCM_CHANNEL_CHAT,
       });
     } catch (e) {
       this.logger.error('chat push failed', e as Error);
@@ -192,6 +201,7 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
       userId: client.user.id,
       fullName: client.user.fullName,
       typing: dto.typing,
+      action: dto.action ?? 'typing',
     });
   }
 
@@ -251,5 +261,75 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   async onPing(@ConnectedSocket() client: AuthedSocket) {
     if (!client.userId) return;
     await this.users.touchLastSeen(client.userId);
+  }
+
+  // ===== Guruh / Kanal (room) realtime =====
+
+  /** Yangi xona yaratilganda a'zolarni socket xonasiga qo'shadi */
+  joinRoomSockets(roomId: string, userIds: string[]) {
+    for (const uid of userIds) {
+      const sockets = this.online.get(uid);
+      if (!sockets) continue;
+      for (const sid of sockets) this.server.in(sid).socketsJoin(`room:${roomId}`);
+    }
+  }
+
+  leaveRoomSockets(roomId: string, userId: string) {
+    const sockets = this.online.get(userId);
+    if (!sockets) return;
+    for (const sid of sockets) this.server.in(sid).socketsLeave(`room:${roomId}`);
+  }
+
+  relayRoomCreated(roomId: string, memberIds: string[], summary: unknown) {
+    this.joinRoomSockets(roomId, memberIds);
+    for (const uid of memberIds) this.emitToUser(uid, 'room:created', summary);
+  }
+
+  async relayRoomMessage(
+    sender: User,
+    roomId: string,
+    message: { id: string; type: any; body: string | null },
+    roomTitle: string,
+  ) {
+    this.server.to(`room:${roomId}`).emit('room:message:new', message);
+    // Push: mute qilmagan barcha a'zolar (klient background'da ko'rsatadi)
+    try {
+      const recipients = await this.rooms.pushRecipients(roomId, sender.id);
+      for (const r of recipients) {
+        if (!r.fcmToken) continue;
+        const text = chatPushText(sender.fullName, message.type, message.body, r.language);
+        await this.notifications.sendToToken(
+          r.fcmToken,
+          roomTitle,
+          `${sender.fullName}: ${text.body}`,
+          { type: 'room', roomId, channel: FCM_CHANNEL_CHAT },
+        );
+      }
+    } catch (e) {
+      this.logger.error('room push failed', e as Error);
+    }
+  }
+
+  relayRoomUpdated(roomId: string, message: unknown) {
+    this.server.to(`room:${roomId}`).emit('room:message:updated', message);
+  }
+
+  relayRoomDeleted(roomId: string, id: string) {
+    this.server.to(`room:${roomId}`).emit('room:message:deleted', { id, roomId });
+  }
+
+  @SubscribeMessage('room:typing')
+  onRoomTyping(
+    @ConnectedSocket() client: AuthedSocket,
+    @MessageBody() dto: { roomId: string; typing: boolean; action?: string },
+  ) {
+    if (!client.user) return;
+    client.to(`room:${dto.roomId}`).emit('room:typing', {
+      roomId: dto.roomId,
+      userId: client.user.id,
+      fullName: client.user.fullName,
+      typing: dto.typing,
+      action: dto.action ?? 'typing',
+    });
   }
 }

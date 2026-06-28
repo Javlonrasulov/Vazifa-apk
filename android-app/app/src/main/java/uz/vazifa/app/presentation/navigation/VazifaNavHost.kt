@@ -2,13 +2,12 @@ package uz.vazifa.app.presentation.navigation
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.zIndex
 import androidx.hilt.navigation.compose.hiltViewModel
@@ -21,12 +20,19 @@ import androidx.navigation.compose.*
 import androidx.navigation.navArgument
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import uz.vazifa.app.data.repository.AppSettingsRepository
 import uz.vazifa.app.data.repository.AuthRepository
+import uz.vazifa.app.data.repository.ChatRepository
 import uz.vazifa.app.data.repository.ChatUnreadRepository
 import uz.vazifa.app.data.repository.NotificationInboxRepository
+import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.UserDto
+import uz.vazifa.app.localization.AppLanguage
+import uz.vazifa.app.localization.AppStrings
+import uz.vazifa.app.util.InboxPreview
 import uz.vazifa.app.presentation.auth.LoginScreen
 import uz.vazifa.app.presentation.dashboard.DirectorDashboardScreen
 import uz.vazifa.app.presentation.dashboard.DashboardSection
@@ -34,12 +40,14 @@ import uz.vazifa.app.presentation.dashboard.DashboardSectionScreen
 import uz.vazifa.app.presentation.dashboard.EmployeesTabScreen
 import uz.vazifa.app.presentation.dashboard.EmployeeDetailScreen
 import uz.vazifa.app.presentation.notifications.NotificationGateScreen
+import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.chat.ChatListScreen
 import uz.vazifa.app.presentation.chat.ChatConversationScreen
 import uz.vazifa.app.presentation.chat.NewChatScreen
+import uz.vazifa.app.presentation.chat.CreateRoomScreen
+import uz.vazifa.app.presentation.chat.RoomConversationScreen
 import uz.vazifa.app.presentation.profile.ProfileScreen
-import uz.vazifa.app.presentation.theme.LiquidBackground
-import uz.vazifa.app.presentation.theme.LiquidGlass
+import uz.vazifa.app.presentation.splash.SplashScreen
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.tasks.*
 
@@ -48,13 +56,70 @@ import javax.inject.Inject
 @HiltViewModel
 class NavViewModel @Inject constructor(
     val auth: AuthRepository,
+    private val chat: ChatRepository,
     private val inbox: NotificationInboxRepository,
     private val chatUnread: ChatUnreadRepository,
+    private val settings: AppSettingsRepository,
 ) : ViewModel() {
     var currentUser by mutableStateOf<UserDto?>(null)
         private set
     var bootRoute by mutableStateOf<String?>(null)
         private set
+
+    init {
+        viewModelScope.launch {
+            chat.events.collect { ev ->
+                when (ev) {
+                    is ChatEvent.NewMessage -> {
+                        if (!uz.vazifa.app.AppForegroundState.isInForeground) return@collect
+                        val me = currentUser?.id ?: return@collect
+                        if (ev.message.senderId == me) return@collect
+                        chatUnread.increment()
+                        val lang = settings.language.first()
+                        val peer = chat.knownPeer(ev.message.senderId)
+                        val title = peer?.displayName
+                            ?: AppStrings.t(lang, "nav_chat")
+                        val body = InboxPreview.chatBody(
+                            ev.message.type,
+                            ev.message.body,
+                            ev.message.fileName,
+                            lang,
+                        )
+                        inbox.add(
+                            title = title,
+                            body = body,
+                            type = "chat",
+                            chatUserId = ev.message.senderId,
+                        )
+                    }
+                    is ChatEvent.RoomNewMessage -> {
+                        if (!uz.vazifa.app.AppForegroundState.isInForeground) return@collect
+                        val me = currentUser?.id ?: return@collect
+                        if (ev.message.senderId == me) return@collect
+                        chatUnread.increment()
+                        val lang = settings.language.first()
+                        val senderName = ev.message.sender?.fullName
+                            ?: AppStrings.t(lang, "nav_chat")
+                        val preview = InboxPreview.chatBody(
+                            ev.message.type,
+                            ev.message.body,
+                            ev.message.fileName,
+                            lang,
+                        )
+                        inbox.add(
+                            title = senderName,
+                            body = preview,
+                            type = "room",
+                            roomId = ev.message.roomId,
+                        )
+                    }
+                    else -> Unit
+                }
+            }
+        }
+    }
+
+    fun connectChatSocket() = chat.connect()
 
     fun markBootRoute(route: String) {
         bootRoute = route
@@ -68,6 +133,7 @@ class NavViewModel @Inject constructor(
         viewModelScope.launch {
             val user = auth.restoreSession()
             currentUser = user
+            if (user != null) connectChatSocket()
             onResult(user != null, user)
         }
     }
@@ -80,8 +146,20 @@ class NavViewModel @Inject constructor(
         }
     }
 
+    suspend fun resolveSplashDestination(): String {
+        bootRoute?.let { return it }
+        val user = auth.restoreSession()
+        currentUser = user
+        if (user != null) connectChatSocket()
+        if (user == null) return Routes.LOGIN
+        val dest = if (auth.shouldSkipNotifGate()) Routes.MAIN else Routes.NOTIFICATION_GATE
+        markBootRoute(dest)
+        return dest
+    }
+
     fun setUser(user: UserDto) {
         currentUser = user
+        connectChatSocket()
     }
 
     fun refreshUser(onSessionExpired: () -> Unit = {}) {
@@ -90,6 +168,7 @@ class NavViewModel @Inject constructor(
             val user = auth.currentUser()
             if (user != null) {
                 currentUser = user
+                connectChatSocket()
             } else if (hadSession) {
                 currentUser = null
                 onSessionExpired()
@@ -124,6 +203,9 @@ fun VazifaNavHost(
     onPendingTaskConsumed: () -> Unit = {},
     pendingChatUserId: String? = null,
     onPendingChatConsumed: () -> Unit = {},
+    pendingRoomId: String? = null,
+    onPendingRoomConsumed: () -> Unit = {},
+    onSplashActiveChange: (Boolean) -> Unit = {},
     viewModel: NavViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
@@ -138,8 +220,23 @@ fun VazifaNavHost(
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var showCreateSheet by remember { mutableStateOf(false) }
     var preselectedAssigneeIds by remember { mutableStateOf<Set<String>?>(null) }
-    val startDestination = viewModel.bootRoute ?: Routes.SPLASH
+    val skipSplash = viewModel.bootRoute != null
+    var splashDone by remember { mutableStateOf(skipSplash) }
+    var destination by remember { mutableStateOf(viewModel.bootRoute) }
     val lifecycleOwner = LocalLifecycleOwner.current
+
+    LaunchedEffect(splashDone) {
+        onSplashActiveChange(!splashDone)
+    }
+
+    LaunchedEffect(Unit) {
+        if (destination == null) {
+            destination = viewModel.resolveSplashDestination()
+        }
+    }
+
+    val showNav = destination != null
+    val startDestination = destination ?: Routes.LOGIN
 
     fun redirectToNotificationGate() {
         viewModel.markBootRoute(Routes.NOTIFICATION_GATE)
@@ -150,7 +247,7 @@ fun VazifaNavHost(
 
     fun requiresNotificationAccess(route: String?): Boolean {
         if (route == null) return false
-        return route !in setOf(Routes.SPLASH, Routes.LOGIN, Routes.NOTIFICATION_GATE)
+        return route !in setOf(Routes.LOGIN, Routes.NOTIFICATION_GATE)
     }
 
     DisposableEffect(lifecycleOwner, route) {
@@ -174,7 +271,8 @@ fun VazifaNavHost(
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
-    LaunchedEffect(startDestination) {
+    LaunchedEffect(startDestination, splashDone) {
+        if (!splashDone) return@LaunchedEffect
         if (startDestination == Routes.MAIN && !viewModel.auth.shouldSkipNotifGate()) {
             redirectToNotificationGate()
         }
@@ -183,7 +281,7 @@ fun VazifaNavHost(
     LaunchedEffect(pendingTaskId, route, user) {
         val taskId = pendingTaskId ?: return@LaunchedEffect
         if (user == null) return@LaunchedEffect
-        if (route == Routes.LOGIN || route == Routes.SPLASH || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        if (route == Routes.LOGIN || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
         viewModel.clearNotificationBadge()
         if (route != Routes.taskDetail(taskId)) {
             navController.navigate(Routes.taskDetail(taskId))
@@ -194,15 +292,39 @@ fun VazifaNavHost(
     LaunchedEffect(pendingChatUserId, route, user) {
         val chatUserId = pendingChatUserId ?: return@LaunchedEffect
         if (user == null) return@LaunchedEffect
-        if (route == Routes.LOGIN || route == Routes.SPLASH || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        if (route == Routes.LOGIN || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
         viewModel.clearChatUnread()
+        if (route == Routes.MAIN) selectedTab = AppTab.CHAT
         navController.navigate(Routes.chatConversation(chatUserId, ""))
         onPendingChatConsumed()
+    }
+
+    LaunchedEffect(pendingRoomId, route, user) {
+        val roomId = pendingRoomId ?: return@LaunchedEffect
+        if (user == null) return@LaunchedEffect
+        if (route == Routes.LOGIN || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        viewModel.clearChatUnread()
+        if (route == Routes.MAIN) selectedTab = AppTab.CHAT
+        navController.navigate(Routes.roomConversation(roomId))
+        onPendingRoomConsumed()
     }
 
     CompositionLocalProvider(
         LocalTaskNavigator provides { taskId ->
             navController.navigate(Routes.taskDetail(taskId))
+        },
+        LocalInboxNavigator provides { item ->
+            when {
+                item.roomId != null -> {
+                    if (route == Routes.MAIN) selectedTab = AppTab.CHAT
+                    navController.navigate(Routes.roomConversation(item.roomId))
+                }
+                item.chatUserId != null -> {
+                    if (route == Routes.MAIN) selectedTab = AppTab.CHAT
+                    navController.navigate(Routes.chatConversation(item.chatUserId, item.title))
+                }
+                item.taskId != null -> navController.navigate(Routes.taskDetail(item.taskId))
+            }
         },
     ) {
     Box(
@@ -210,6 +332,7 @@ fun VazifaNavHost(
             .fillMaxSize()
             .background(MaterialTheme.colorScheme.background),
     ) {
+        if (showNav) {
         NavHost(
             navController,
             startDestination = startDestination,
@@ -217,26 +340,6 @@ fun VazifaNavHost(
                 if (showBottomNav) Modifier.padding(bottom = BottomNavHeight + navigationBarPadding) else Modifier,
             ),
         ) {
-            composable(Routes.SPLASH) {
-                LaunchedEffect(Unit) {
-                    if (viewModel.bootRoute != null) return@LaunchedEffect
-                    viewModel.checkAuth { ok, u ->
-                        if (ok && u != null) {
-                            viewModel.resolveAfterAuth { dest ->
-                                selectedTab = AppTab.HOME
-                                navController.navigate(dest) { popUpTo(Routes.SPLASH) { inclusive = true } }
-                            }
-                        } else {
-                            navController.navigate(Routes.LOGIN) { popUpTo(Routes.SPLASH) { inclusive = true } }
-                        }
-                    }
-                }
-                LiquidBackground(Modifier.fillMaxSize()) {
-                    Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                        CircularProgressIndicator(color = LiquidGlass.Blue)
-                    }
-                }
-            }
             composable(Routes.LOGIN) {
                 LoginScreen(
                     onSuccess = {
@@ -311,11 +414,25 @@ fun VazifaNavHost(
                     AppTab.DEPT_TASKS -> DepartmentTasksScreen(
                         onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                     )
-                    AppTab.CHAT -> ChatListScreen(
-                        currentUserId = user?.id.orEmpty(),
-                        onOpenChat = { peerId, name -> navController.navigate(Routes.chatConversation(peerId, name)) },
-                        onNewChat = { navController.navigate(Routes.CHAT_NEW) },
-                    )
+                    AppTab.CHAT -> {
+                        val ctx = LocalContext.current
+                        val soonText = localized("chat_feature_soon")
+                        ChatListScreen(
+                            currentUserId = user?.id.orEmpty(),
+                            currentUserName = user?.fullName.orEmpty(),
+                            currentUserAvatar = user?.avatarUrl,
+                            onOpenChat = { peerId, name -> navController.navigate(Routes.chatConversation(peerId, name)) },
+                            onNewChat = { navController.navigate(Routes.CHAT_NEW) },
+                            onOpenContacts = { navController.navigate(Routes.CHAT_CONTACTS) },
+                            onOpenProfile = { selectedTab = AppTab.PROFILE },
+                            onNewGroup = { navController.navigate(Routes.createRoom("group")) },
+                            onNewChannel = { navController.navigate(Routes.createRoom("channel")) },
+                            onOpenRoom = { roomId -> navController.navigate(Routes.roomConversation(roomId)) },
+                            onComingSoon = {
+                                android.widget.Toast.makeText(ctx, soonText, android.widget.Toast.LENGTH_SHORT).show()
+                            },
+                        )
+                    }
                     AppTab.CREATE -> if (isDirector) {
                         CreateTaskScreen(
                             showBack = false,
@@ -414,9 +531,55 @@ fun VazifaNavHost(
                     },
                 )
             }
+            composable(Routes.CHAT_CONTACTS) {
+                NewChatScreen(
+                    currentUserId = user?.id.orEmpty(),
+                    titleKey = "chat_contacts",
+                    onBack = { navController.popBackStack() },
+                    onPick = { peerId, name ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.chatConversation(peerId, name))
+                    },
+                )
+            }
+            composable(
+                Routes.CHAT_CREATE_ROOM,
+                arguments = listOf(navArgument("type") { type = NavType.StringType }),
+            ) { entry ->
+                CreateRoomScreen(
+                    currentUserId = user?.id.orEmpty(),
+                    roomTypeKey = entry.arguments?.getString("type").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onCreated = { roomId ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.roomConversation(roomId))
+                    },
+                )
+            }
+            composable(
+                Routes.ROOM_CONVERSATION,
+                arguments = listOf(navArgument("roomId") { type = NavType.StringType }),
+            ) { entry ->
+                RoomConversationScreen(
+                    roomId = entry.arguments?.getString("roomId").orEmpty(),
+                    currentUserId = user?.id.orEmpty(),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+        }
         }
 
-        if (showBottomNav) {
+        if (!splashDone) {
+            SplashScreen(
+                onFinished = {
+                    if (destination == Routes.MAIN) selectedTab = AppTab.HOME
+                    splashDone = true
+                },
+                modifier = Modifier.zIndex(200f),
+            )
+        }
+
+        if (showBottomNav && showNav) {
             VazifaBottomNav(
                 selected = selectedTab,
                 chatUnreadCount = chatUnreadCount,

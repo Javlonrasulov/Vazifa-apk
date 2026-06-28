@@ -9,6 +9,8 @@ import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import com.google.firebase.messaging.FirebaseMessaging
 import com.google.gson.Gson
+import okhttp3.MediaType.Companion.toMediaTypeOrNull
+import okhttp3.RequestBody.Companion.asRequestBody
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -236,6 +238,20 @@ class AuthRepository @Inject constructor(
 
     suspend fun changePassword(currentPassword: String, newPassword: String) {
         api.api.changePassword(ChangePasswordRequest(currentPassword, newPassword))
+    }
+
+    suspend fun uploadAvatar(file: java.io.File): UserDto {
+        val body = file.asRequestBody("image/*".toMediaTypeOrNull())
+        val part = okhttp3.MultipartBody.Part.createFormData("file", file.name, body)
+        val user = api.api.uploadAvatar(part)
+        saveUserJson(user)
+        return user
+    }
+
+    suspend fun deleteAvatar(): UserDto {
+        val user = api.api.deleteAvatar()
+        saveUserJson(user)
+        return user
     }
 
     suspend fun sendPresenceHeartbeat() {

@@ -110,6 +110,7 @@ export class ChatService {
           peer: {
             id: peer.id,
             fullName: peer.fullName,
+            avatarUrl: peer.avatarUrl ?? null,
             position: peer.position,
             department: peer.department,
             isOnline: isUserOnline(peer),
@@ -270,6 +271,7 @@ export class ChatService {
       peers: peers.map((p) => ({
         id: p.id,
         fullName: p.fullName,
+        avatarUrl: p.avatarUrl ?? null,
         position: p.position,
         department: p.department,
         isOnline: isUserOnline(p),

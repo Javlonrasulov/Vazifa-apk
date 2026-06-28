@@ -71,14 +71,89 @@ data class ChatMessage(
 data class ChatPeer(
     val id: String,
     val fullName: String,
+    val avatarUrl: String? = null,
     val position: String? = null,
     val department: String? = null,
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
-)
+    /** Lokal o'zgartirilgan nom (faqat shu akkauntda ko'rinadi) */
+    val alias: String? = null,
+) {
+    /** Ko'rsatish uchun nom: alias bo'lsa o'shani, aks holda asl ismni qaytaradi */
+    val displayName: String get() = alias?.takeIf { it.isNotBlank() } ?: fullName
+}
 
 data class Conversation(
     val peer: ChatPeer,
     val lastMessage: ChatMessage?,
     val unreadCount: Int,
+)
+
+enum class ChatRoomType(val key: String) {
+    GROUP("group"),
+    CHANNEL("channel");
+
+    companion object {
+        fun from(key: String?): ChatRoomType =
+            entries.firstOrNull { it.key == key } ?: GROUP
+    }
+}
+
+enum class ChatRoomRole(val key: String) {
+    OWNER("owner"),
+    ADMIN("admin"),
+    MEMBER("member");
+
+    companion object {
+        fun from(key: String?): ChatRoomRole =
+            entries.firstOrNull { it.key == key } ?: MEMBER
+    }
+}
+
+data class RoomMessage(
+    val id: String,
+    val roomId: String,
+    val senderId: String,
+    val senderName: String? = null,
+    val senderAvatarUrl: String? = null,
+    val type: ChatMessageType = ChatMessageType.TEXT,
+    val body: String? = null,
+    val filePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val meta: ChatMessageMeta? = null,
+    val replyToId: String? = null,
+    val replyTo: RoomMessage? = null,
+    val forwardedFrom: String? = null,
+    val reactions: Map<String, String> = emptyMap(),
+    val status: ChatMessageStatus = ChatMessageStatus.SENT,
+    val isEdited: Boolean = false,
+    val isDeleted: Boolean = false,
+    val isPinned: Boolean = false,
+    val clientId: String? = null,
+    val createdAt: String,
+)
+
+data class ChatRoom(
+    val id: String,
+    val type: ChatRoomType,
+    val title: String,
+    val description: String? = null,
+    val avatarUrl: String? = null,
+    val isVerified: Boolean = false,
+    val ownerId: String,
+    val myRole: ChatRoomRole = ChatRoomRole.MEMBER,
+    val memberCount: Int = 0,
+    val muted: Boolean = false,
+    val canPost: Boolean = true,
+    val lastMessage: RoomMessage? = null,
+    val unreadCount: Int = 0,
+)
+
+data class RoomMember(
+    val id: String,
+    val fullName: String,
+    val avatarUrl: String? = null,
+    val position: String? = null,
+    val role: ChatRoomRole = ChatRoomRole.MEMBER,
 )

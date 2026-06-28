@@ -75,6 +75,7 @@ fun ChatInputArea(
     onSendText: () -> Unit,
     onCancelReplyEdit: () -> Unit,
     onPickMedia: (Uri, ChatMessageType) -> Unit,
+    onRecordingChange: (Boolean) -> Unit = {},
     onSendVoice: (File, Int, List<Int>) -> Unit,
     onSendLocation: (Double, Double) -> Unit,
     onSendContact: (String, String) -> Unit,
@@ -221,16 +222,18 @@ fun ChatInputArea(
                             currentFile = recorder.start()
                             recording = true
                             cancelHint = false
+                            onRecordingChange(true)
                         }
                     },
                     onStop = {
                         recording = false
+                        onRecordingChange(false)
                         val file = recorder.stop()
                         if (file != null && recordSeconds >= 1) {
                             onSendVoice(file, recordSeconds, downsample(amplitudes.toList()))
                         } else file?.delete()
                     },
-                    onCancel = { recording = false; cancelHint = false; recorder.cancel() },
+                    onCancel = { recording = false; cancelHint = false; onRecordingChange(false); recorder.cancel() },
                     onDragCancel = { cancelHint = it },
                 )
             }

@@ -19,6 +19,7 @@ data class UserDto(
     val id: String,
     val login: String,
     val fullName: String,
+    val avatarUrl: String? = null,
     val role: String,
     val canAssignTasks: Boolean = false,
     val position: String? = null,
@@ -129,6 +130,13 @@ interface ApiService {
     @GET("users/mobile/contacts")
     suspend fun getContacts(): List<UserDto>
 
+    @Multipart
+    @POST("users/mobile/avatar")
+    suspend fun uploadAvatar(@Part file: MultipartBody.Part): UserDto
+
+    @DELETE("users/mobile/avatar")
+    suspend fun deleteAvatar(): UserDto
+
     @GET("users/mobile/departments")
     suspend fun getDepartments(): List<DepartmentDto>
 
@@ -169,6 +177,55 @@ interface ApiService {
 
     @POST("chat/{id}/pin")
     suspend fun pinChatMessage(@Path("id") id: String): ChatMessageDto
+
+    @GET("rooms")
+    suspend fun getRooms(): List<RoomDto>
+
+    @POST("rooms")
+    suspend fun createRoom(@Body body: CreateRoomBody): RoomDto
+
+    @GET("rooms/{id}")
+    suspend fun getRoom(@Path("id") id: String): RoomDto
+
+    @PATCH("rooms/{id}")
+    suspend fun updateRoom(@Path("id") id: String, @Body body: UpdateRoomBody): RoomDto
+
+    @DELETE("rooms/{id}")
+    suspend fun deleteRoom(@Path("id") id: String): Map<String, Any>
+
+    @GET("rooms/{id}/members")
+    suspend fun getRoomMembers(@Path("id") id: String): List<RoomMemberDto>
+
+    @POST("rooms/{id}/members")
+    suspend fun addRoomMembers(@Path("id") id: String, @Body body: AddMembersBody): Map<String, Any>
+
+    @DELETE("rooms/{id}/members/{userId}")
+    suspend fun removeRoomMember(@Path("id") id: String, @Path("userId") userId: String): Map<String, Any>
+
+    @GET("rooms/{id}/messages")
+    suspend fun getRoomHistory(
+        @Path("id") id: String,
+        @Query("before") before: String? = null,
+        @Query("limit") limit: Int = 40,
+    ): List<RoomMessageDto>
+
+    @POST("rooms/{id}/messages")
+    suspend fun sendRoomMessage(@Path("id") id: String, @Body body: SendRoomMessageBody): RoomMessageDto
+
+    @POST("rooms/{id}/read")
+    suspend fun markRoomRead(@Path("id") id: String): Map<String, Boolean>
+
+    @PATCH("rooms/messages/{msgId}")
+    suspend fun editRoomMessage(@Path("msgId") msgId: String, @Body body: EditMessageBody): RoomMessageDto
+
+    @DELETE("rooms/messages/{msgId}")
+    suspend fun deleteRoomMessage(@Path("msgId") msgId: String): Map<String, Any>
+
+    @POST("rooms/messages/{msgId}/react")
+    suspend fun reactRoomMessage(@Path("msgId") msgId: String, @Body body: ReactBody): RoomMessageDto
+
+    @POST("rooms/messages/{msgId}/pin")
+    suspend fun pinRoomMessage(@Path("msgId") msgId: String): RoomMessageDto
 }
 
 data class ChatMetaDto(
@@ -211,6 +268,7 @@ data class ChatMessageDto(
 data class ChatPeerDto(
     val id: String,
     val fullName: String,
+    val avatarUrl: String? = null,
     val position: String? = null,
     val department: String? = null,
     val isOnline: Boolean = false,
@@ -254,6 +312,86 @@ data class SendMessageBody(
 data class MarkReadBody(val peerId: String, val messageIds: List<String>? = null)
 data class EditMessageBody(val body: String)
 data class ReactBody(val emoji: String?)
+
+data class RoomMessageDto(
+    val id: String,
+    val roomId: String,
+    val senderId: String,
+    val sender: ChatRoomSenderDto? = null,
+    val type: String = "text",
+    val body: String? = null,
+    val filePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val meta: ChatMetaDto? = null,
+    val replyToId: String? = null,
+    val replyTo: RoomMessageDto? = null,
+    val forwardedFrom: String? = null,
+    val reactions: Map<String, String>? = null,
+    val isEdited: Boolean = false,
+    val isDeleted: Boolean = false,
+    val isPinned: Boolean = false,
+    val clientId: String? = null,
+    val createdAt: String,
+)
+
+data class ChatRoomSenderDto(
+    val id: String,
+    val fullName: String? = null,
+    val avatarUrl: String? = null,
+)
+
+data class RoomDto(
+    val id: String,
+    val type: String,
+    val title: String,
+    val description: String? = null,
+    val avatarUrl: String? = null,
+    val isVerified: Boolean = false,
+    val ownerId: String,
+    val myRole: String = "member",
+    val memberCount: Int = 0,
+    val muted: Boolean = false,
+    val canPost: Boolean = true,
+    val lastMessage: RoomMessageDto? = null,
+    val unreadCount: Int = 0,
+)
+
+data class RoomMemberDto(
+    val id: String,
+    val fullName: String,
+    val avatarUrl: String? = null,
+    val position: String? = null,
+    val role: String = "member",
+)
+
+data class CreateRoomBody(
+    val type: String,
+    val title: String,
+    val description: String? = null,
+    val avatarUrl: String? = null,
+    val memberIds: List<String>? = null,
+)
+
+data class UpdateRoomBody(
+    val title: String? = null,
+    val description: String? = null,
+    val avatarUrl: String? = null,
+)
+
+data class AddMembersBody(val memberIds: List<String>)
+
+data class SendRoomMessageBody(
+    val type: String? = null,
+    val body: String? = null,
+    val filePath: String? = null,
+    val fileName: String? = null,
+    val mimeType: String? = null,
+    val meta: ChatMetaDto? = null,
+    val replyToId: String? = null,
+    val forwardedFrom: String? = null,
+    val clientId: String? = null,
+)
 
 data class TaskDto(
     val id: String,

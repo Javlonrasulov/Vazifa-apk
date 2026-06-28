@@ -17,6 +17,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.layout.ContentScale
+import coil.compose.AsyncImage
+import uz.vazifa.app.util.MediaUrl
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
@@ -36,6 +39,14 @@ import java.time.format.DateTimeFormatter
 private val zone: ZoneId = ZoneId.of("Asia/Tashkent")
 private val timeFmt = DateTimeFormatter.ofPattern("HH:mm")
 private val dateFmt = DateTimeFormatter.ofPattern("dd.MM.yyyy")
+
+data class LastSeenLabels(
+    val prefix: String = "",
+    val justNow: String = "",
+    val minutesAgo: String = "",
+    val todayAt: String = "",
+    val yesterdayAt: String = "",
+)
 
 object ChatFormat {
     fun parse(raw: String?): Instant? =
@@ -70,14 +81,24 @@ object ChatFormat {
         return "%d:%02d".format(s / 60, s % 60)
     }
 
-    fun lastSeen(raw: String?, prefix: String, online: String, justNow: String): String {
+    fun lastSeen(raw: String?, prefix: String, online: String, justNow: String): String =
+        lastSeen(raw, LastSeenLabels(prefix = prefix, justNow = justNow))
+
+    fun lastSeen(raw: String?, labels: LastSeenLabels): String {
         val inst = parse(raw) ?: return ""
-        val minutes = Duration.between(inst.atZone(zone), java.time.ZonedDateTime.now(zone)).toMinutes()
+        val zoned = inst.atZone(zone)
+        val now = java.time.ZonedDateTime.now(zone)
+        val minutes = Duration.between(zoned, now).toMinutes()
+        val date = zoned.toLocalDate()
+        val today = LocalDate.now(zone)
+        val time = zoned.format(timeFmt)
+        val p = labels.prefix
         return when {
-            minutes < 1 -> "$prefix $justNow"
-            minutes < 60 -> "$prefix ${minutes}m"
-            minutes < 24 * 60 -> "$prefix ${inst.atZone(zone).format(timeFmt)}"
-            else -> "$prefix ${inst.atZone(zone).format(dateFmt)}"
+            minutes < 1 -> "$p ${labels.justNow}".trim()
+            minutes < 60 -> "$p $minutes ${labels.minutesAgo}".trim()
+            date == today -> "$p ${labels.todayAt} $time".trim()
+            date == today.minusDays(1) -> "$p ${labels.yesterdayAt} $time".trim()
+            else -> "$p ${zoned.format(dateFmt)}".trim()
         }
     }
 }
@@ -111,21 +132,31 @@ fun ChatAvatar(
     online: Boolean,
     size: Dp = 50.dp,
     showPresence: Boolean = true,
+    avatarUrl: String? = null,
 ) {
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        Box(
-            Modifier
-                .size(size)
-                .clip(CircleShape)
-                .background(avatarBrush(name)),
-            contentAlignment = Alignment.Center,
-        ) {
-            Text(
-                initials(name),
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = (size.value * 0.36f).sp,
+        if (!avatarUrl.isNullOrBlank()) {
+            AsyncImage(
+                model = MediaUrl.resolve(avatarUrl),
+                contentDescription = name,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.size(size).clip(CircleShape).background(avatarBrush(name)),
             )
+        } else {
+            Box(
+                Modifier
+                    .size(size)
+                    .clip(CircleShape)
+                    .background(avatarBrush(name)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    initials(name),
+                    color = Color.White,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = (size.value * 0.36f).sp,
+                )
+            }
         }
         if (showPresence && online) {
             Box(
@@ -190,6 +221,19 @@ fun messagePreview(msg: ChatMessage?, strings: (String) -> String): String {
     }
 }
 
+fun messagePreviewType(type: ChatMessageType, strings: (String) -> String): String = when (type) {
+    ChatMessageType.TEXT -> ""
+    ChatMessageType.IMAGE -> "📷 " + strings("chat_photo")
+    ChatMessageType.VIDEO -> "🎬 " + strings("chat_video")
+    ChatMessageType.VOICE -> "🎤 " + strings("chat_voice_message")
+    ChatMessageType.AUDIO -> "🎵 Audio"
+    ChatMessageType.FILE -> "📎 " + strings("chat_attachment")
+    ChatMessageType.LOCATION -> "📍 " + strings("chat_attach_location")
+    ChatMessageType.CONTACT -> "👤 " + strings("chat_attach_contact")
+    ChatMessageType.STICKER -> "Sticker"
+    ChatMessageType.GIF -> "GIF"
+}
+
 val ReactionEmojis = listOf("👍", "❤️", "🔥", "👏", "😁", "😢", "😡")
 
 /** Composable kontekstda til bo'yicha matn yechimini qaytaradi (messagePreview uchun) */
@@ -197,4 +241,16 @@ val ReactionEmojis = listOf("👍", "❤️", "🔥", "👏", "😁", "😢", "�
 fun rememberStringResolver(): (String) -> String {
     val lang = LocalAppLanguage.current
     return { AppStrings.t(lang, it) }
+}
+
+@Composable
+fun rememberLastSeenLabels(): LastSeenLabels {
+    val r = rememberStringResolver()
+    return LastSeenLabels(
+        prefix = r("chat_last_seen_prefix"),
+        justNow = r("emp_last_seen_just_now"),
+        minutesAgo = r("chat_min_ago"),
+        todayAt = r("chat_today_at"),
+        yesterdayAt = r("chat_yesterday_at"),
+    )
 }

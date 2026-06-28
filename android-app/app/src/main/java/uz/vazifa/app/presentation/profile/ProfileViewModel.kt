@@ -27,6 +27,7 @@ data class ProfileUiState(
     val changingPassword: Boolean = false,
     val changePasswordErrorKey: String? = null,
     val changePasswordSuccess: Boolean = false,
+    val uploadingAvatar: Boolean = false,
 )
 
 @HiltViewModel
@@ -125,6 +126,24 @@ class ProfileViewModel @Inject constructor(
 
     fun clearChangePasswordSuccess() {
         _state.update { it.copy(changePasswordSuccess = false) }
+    }
+
+    fun uploadAvatar(file: java.io.File) {
+        viewModelScope.launch {
+            _state.update { it.copy(uploadingAvatar = true) }
+            runCatching { auth.uploadAvatar(file) }
+                .onSuccess { u -> _state.update { it.copy(user = u, uploadingAvatar = false) } }
+                .onFailure { _state.update { it.copy(uploadingAvatar = false) } }
+        }
+    }
+
+    fun deleteAvatar() {
+        viewModelScope.launch {
+            _state.update { it.copy(uploadingAvatar = true) }
+            runCatching { auth.deleteAvatar() }
+                .onSuccess { u -> _state.update { it.copy(user = u, uploadingAvatar = false) } }
+                .onFailure { _state.update { it.copy(uploadingAvatar = false) } }
+        }
     }
 
     fun logout(onDone: () -> Unit) = viewModelScope.launch {

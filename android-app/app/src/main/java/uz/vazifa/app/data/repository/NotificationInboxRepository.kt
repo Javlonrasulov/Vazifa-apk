@@ -32,10 +32,12 @@ class NotificationInboxRepository @Inject constructor(
     val unreadCount: Flow<Int> = items.map { it.size }
 
     suspend fun add(
-        taskId: String?,
+        taskId: String? = null,
         title: String,
         body: String,
-        type: String?,
+        type: String? = null,
+        chatUserId: String? = null,
+        roomId: String? = null,
     ) {
         context.inboxDataStore.edit { prefs ->
             val current = parseItems(prefs[inboxKey]).toMutableList()
@@ -44,6 +46,8 @@ class NotificationInboxRepository @Inject constructor(
                 InboxNotification(
                     id = UUID.randomUUID().toString(),
                     taskId = taskId,
+                    chatUserId = chatUserId,
+                    roomId = roomId,
                     title = title,
                     body = body,
                     type = type,

@@ -31,21 +31,62 @@ import javax.inject.Singleton
 class ChatRepository @Inject constructor(
     private val client: ApiClient,
     private val socket: ChatSocket,
+    private val aliases: ContactAliasRepository,
 ) {
     private val api get() = client.api
+
+    suspend fun loadAliases(userId: String) = aliases.load(userId)
+    fun aliasFor(peerId: String): String? = aliases.aliasFor(peerId)
+    suspend fun setAlias(userId: String, peerId: String, alias: String?) =
+        aliases.setAlias(userId, peerId, alias)
 
     val events: SharedFlow<ChatEvent> get() = socket.events
     val connected: StateFlow<Boolean> get() = socket.connected
 
+    private val peerCache = mutableMapOf<String, ChatPeer>()
+
+    fun rememberPeer(peer: ChatPeer) {
+        if (peer.id.isBlank() || peer.fullName.isBlank()) return
+        val cached = peerCache[peer.id]
+        peerCache[peer.id] = if (cached == null) peer else peer.copy(
+            position = peer.position ?: cached.position,
+            department = peer.department ?: cached.department,
+            isOnline = peer.isOnline || cached.isOnline,
+            lastSeenAt = peer.lastSeenAt ?: cached.lastSeenAt,
+        )
+    }
+
+    fun knownPeer(id: String): ChatPeer? = peerCache[id]
+
+    private fun enrichPeer(peer: ChatPeer): ChatPeer {
+        val known = peerCache[peer.id]
+        val enriched = if (known == null) {
+            peer
+        } else {
+            peer.copy(
+                fullName = peer.fullName.ifBlank { known.fullName },
+                position = peer.position ?: known.position,
+                department = peer.department ?: known.department,
+                isOnline = peer.isOnline || known.isOnline,
+                lastSeenAt = peer.lastSeenAt ?: known.lastSeenAt,
+            )
+        }
+        if (enriched.fullName.isNotBlank()) rememberPeer(enriched)
+        return enriched.copy(alias = aliases.aliasFor(enriched.id))
+    }
+
     fun connect() = socket.connect()
     fun disconnect() = socket.disconnect()
-    fun sendTyping(receiverId: String, typing: Boolean) = socket.sendTyping(receiverId, typing)
+    fun sendTyping(receiverId: String, typing: Boolean, action: String = "typing") =
+        socket.sendTyping(receiverId, typing, action)
+    fun sendRoomTyping(roomId: String, typing: Boolean, action: String = "typing") =
+        socket.sendRoomTyping(roomId, typing, action)
     fun ping() = socket.ping()
 
     suspend fun getConversations(): List<Conversation> =
         api.getConversations().map { dto ->
             Conversation(
-                peer = dto.peer.toDomain(),
+                peer = enrichPeer(dto.peer.toDomain()),
                 lastMessage = dto.lastMessage?.toDomain(),
                 unreadCount = dto.unreadCount,
             )
@@ -58,10 +99,10 @@ class ChatRepository @Inject constructor(
 
     suspend fun search(q: String): Pair<List<ChatMessage>, List<ChatPeer>> {
         val res = api.searchChat(q)
-        return res.messages.map { it.toDomain() } to res.peers.map { it.toDomain() }
+        return res.messages.map { it.toDomain() } to res.peers.map { enrichPeer(it.toDomain()) }
     }
 
-    suspend fun getContacts(): List<ChatPeer> = api.getContacts().map { it.toPeer() }
+    suspend fun getContacts(): List<ChatPeer> = api.getContacts().map { enrichPeer(it.toPeer()) }
 
     suspend fun send(
         receiverId: String,
@@ -134,7 +175,7 @@ fun ChatMessageDto.toDomain(): ChatMessage = ChatMessage(
     createdAt = createdAt,
 )
 
-private fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
+fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
     fileUrl = fileUrl,
     fileSize = fileSize,
     durationSec = durationSec,
@@ -148,7 +189,7 @@ private fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
     contactPhone = contactPhone,
 )
 
-private fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
+fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
     fileUrl = fileUrl,
     fileSize = fileSize,
     durationSec = durationSec,
@@ -165,6 +206,7 @@ private fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
 private fun ChatPeerDto.toDomain(): ChatPeer = ChatPeer(
     id = id,
     fullName = fullName,
+    avatarUrl = avatarUrl,
     position = position,
     department = department,
     isOnline = isOnline,
@@ -174,6 +216,7 @@ private fun ChatPeerDto.toDomain(): ChatPeer = ChatPeer(
 private fun UserDto.toPeer(): ChatPeer = ChatPeer(
     id = id,
     fullName = fullName,
+    avatarUrl = avatarUrl,
     position = position,
     department = department,
     isOnline = isOnline,

@@ -78,6 +78,10 @@ export class TypingDto {
 
   @IsBoolean()
   typing: boolean;
+
+  @IsOptional()
+  @IsString()
+  action?: string;
 }
 
 export class HistoryQueryDto {

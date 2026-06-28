@@ -64,6 +64,7 @@ class ChatContactsViewModel @Inject constructor(
 
     private var excludeId: String = ""
     private var loaded = false
+    private var onlineIds: Set<String> = emptySet()
 
     fun start(currentUserId: String) {
         excludeId = currentUserId
@@ -72,10 +73,31 @@ class ChatContactsViewModel @Inject constructor(
             return
         }
         loaded = true
+        repo.connect()
+        observePresence()
         viewModelScope.launch {
+            runCatching { repo.loadAliases(currentUserId) }
             runCatching { repo.getContacts() }.onSuccess {
                 _contacts.value = it
                 recompute()
+            }
+        }
+    }
+
+    private fun observePresence() {
+        viewModelScope.launch {
+            repo.events.collect { ev ->
+                when (ev) {
+                    is uz.vazifa.app.data.remote.ChatEvent.PresenceList -> {
+                        onlineIds = ev.online.toSet()
+                        recompute()
+                    }
+                    is uz.vazifa.app.data.remote.ChatEvent.Presence -> {
+                        onlineIds = if (ev.online) onlineIds + ev.userId else onlineIds - ev.userId
+                        recompute()
+                    }
+                    else -> Unit
+                }
             }
         }
     }
@@ -87,13 +109,17 @@ class ChatContactsViewModel @Inject constructor(
 
     private fun recompute() {
         val q = _query.value
-        _state.value = _contacts.value.filter { p ->
-            p.id != excludeId && (
-                q.isBlank() ||
-                    p.fullName.contains(q, ignoreCase = true) ||
-                    p.position?.contains(q, true) == true
-                )
-        }
+        _state.value = _contacts.value
+            .filter { p ->
+                p.id != excludeId && (
+                    q.isBlank() ||
+                        p.displayName.contains(q, ignoreCase = true) ||
+                        p.fullName.contains(q, ignoreCase = true) ||
+                        p.position?.contains(q, true) == true
+                    )
+            }
+            .map { if (it.id in onlineIds) it.copy(isOnline = true) else it }
+            .sortedWith(compareByDescending<ChatPeer> { it.isOnline }.thenBy { it.displayName.lowercase() })
     }
 }
 
@@ -102,14 +128,16 @@ fun NewChatScreen(
     currentUserId: String,
     onBack: () -> Unit,
     onPick: (peerId: String, peerName: String) -> Unit,
+    titleKey: String = "chat_new",
     viewModel: ChatContactsViewModel = hiltViewModel(),
 ) {
     val contacts by viewModel.state.collectAsState()
     val query by viewModel.query.collectAsState()
+    val lastSeenLabels = rememberLastSeenLabels()
 
     LaunchedEffect(currentUserId) { viewModel.start(currentUserId) }
 
-    VazifaStackScaffold(title = localized("chat_new"), onBack = onBack) { padding ->
+    VazifaStackScaffold(title = localized(titleKey), onBack = onBack) { padding ->
         Column(Modifier.fillMaxSize().padding(padding)) {
             Box(
                 Modifier
@@ -142,12 +170,17 @@ fun NewChatScreen(
                 items(contacts, key = { it.id }) { peer ->
                     GlassCard(modifier = Modifier.fillMaxWidth().clickable { onPick(peer.id, peer.fullName) }, radius = 18.dp) {
                         Row(Modifier.fillMaxWidth().padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-                            ChatAvatar(peer.fullName, peer.isOnline, size = 46.dp)
+                            ChatAvatar(peer.displayName, peer.isOnline, size = 46.dp, avatarUrl = peer.avatarUrl)
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
-                                Text(peer.fullName, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                Text(peer.displayName, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                val subtitle = when {
+                                    peer.isOnline -> localized("chat_online")
+                                    peer.lastSeenAt != null -> ChatFormat.lastSeen(peer.lastSeenAt, lastSeenLabels)
+                                    else -> peer.position ?: peer.department ?: ""
+                                }
                                 Text(
-                                    if (peer.isOnline) localized("chat_online") else (peer.position ?: peer.department ?: ""),
+                                    subtitle,
                                     color = if (peer.isOnline) LiquidGlass.Blue else LiquidTheme.textMuted,
                                     fontSize = 13.sp,
                                     maxLines = 1,

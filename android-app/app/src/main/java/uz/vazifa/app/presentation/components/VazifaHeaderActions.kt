@@ -47,7 +47,7 @@ import uz.vazifa.app.data.repository.NotificationInboxRepository
 import uz.vazifa.app.data.repository.ThemeMode
 import uz.vazifa.app.domain.model.InboxNotification
 import uz.vazifa.app.localization.AppLanguage
-import uz.vazifa.app.presentation.navigation.LocalTaskNavigator
+import uz.vazifa.app.presentation.navigation.LocalInboxNavigator
 import uz.vazifa.app.presentation.notifications.NotificationInboxSheet
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
@@ -100,7 +100,7 @@ fun VazifaHeaderActions(
     val themeMode by viewModel.themeMode.collectAsState()
     val language by viewModel.language.collectAsState()
     val unreadCount by viewModel.unreadCount.collectAsState()
-    val openTask = LocalTaskNavigator.current
+    val openInboxItem = LocalInboxNavigator.current
     var showThemeMenu by remember { mutableStateOf(false) }
     var showLangMenu by remember { mutableStateOf(false) }
     val themeIcon = when (themeMode) {
@@ -177,7 +177,7 @@ fun VazifaHeaderActions(
         onDismiss = { viewModel.dismissInbox() },
         onItemClick = { item ->
             viewModel.dismissInbox()
-            item.taskId?.let(openTask)
+            openInboxItem(item)
         },
     )
 }

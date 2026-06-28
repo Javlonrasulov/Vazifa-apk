@@ -11,80 +11,70 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.ChatUploadDto
-import uz.vazifa.app.data.repository.ChatRepository
+import uz.vazifa.app.data.repository.RoomRepository
 import uz.vazifa.app.data.repository.toDomain
-import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatMessageMeta
 import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatMessageType
-import uz.vazifa.app.domain.model.ChatPeer
+import uz.vazifa.app.domain.model.ChatRoom
+import uz.vazifa.app.domain.model.RoomMember
+import uz.vazifa.app.domain.model.RoomMessage
 import java.io.File
 import java.time.Instant
 import java.util.UUID
 import javax.inject.Inject
 
-data class ChatUiState(
-    val peer: ChatPeer? = null,
-    val messages: List<ChatMessage> = emptyList(),
+data class RoomUiState(
+    val room: ChatRoom? = null,
+    val members: List<RoomMember> = emptyList(),
+    val messages: List<RoomMessage> = emptyList(),
     val loading: Boolean = true,
     val loadingMore: Boolean = false,
     val hasMore: Boolean = true,
     val input: String = "",
-    val replyTo: ChatMessage? = null,
-    val editing: ChatMessage? = null,
-    /** null | "typing" | "recording" | "uploading" */
-    val peerActivity: String? = null,
-    val sending: Boolean = false,
+    val replyTo: RoomMessage? = null,
+    val editing: RoomMessage? = null,
+    /** "<fullName> action" yoki null */
+    val typingLabel: String? = null,
 )
 
 @HiltViewModel
-class ChatViewModel @Inject constructor(
-    private val repo: ChatRepository,
+class RoomViewModel @Inject constructor(
+    private val repo: RoomRepository,
 ) : ViewModel() {
-    private val _state = MutableStateFlow(ChatUiState())
+    private val _state = MutableStateFlow(RoomUiState())
     val state = _state.asStateFlow()
 
-    private var peerId: String = ""
+    private var roomId: String = ""
     private var currentUserId: String = ""
-    private var typingJob: Job? = null
-    private var stopTypingJob: Job? = null
     private var started = false
+    private var stopTypingJob: Job? = null
+    private val typingUsers = mutableMapOf<String, Pair<String, String>>() // userId -> (name, action)
+    private val typingTimers = mutableMapOf<String, Job>()
 
-    fun isMine(msg: ChatMessage): Boolean = msg.senderId == currentUserId
+    fun isMine(senderId: String): Boolean = senderId == currentUserId
 
-    fun start(peerId: String, currentUserId: String, initialPeer: ChatPeer?) {
+    fun start(roomId: String, currentUserId: String) {
         if (started) return
         started = true
-        this.peerId = peerId
+        this.roomId = roomId
         this.currentUserId = currentUserId
-        if (initialPeer != null) {
-            repo.rememberPeer(initialPeer)
-            _state.update { it.copy(peer = initialPeer) }
-        }
         repo.connect()
         observeSocket()
         viewModelScope.launch {
-            runCatching { repo.loadAliases(currentUserId) }
-            val alias = repo.aliasFor(peerId)
-            if (alias != null) {
-                _state.update { st -> st.copy(peer = st.peer?.copy(alias = alias) ?: ChatPeer(id = peerId, fullName = "", alias = alias)) }
-            }
+            runCatching { repo.get(roomId) }.onSuccess { r -> _state.update { it.copy(room = r) } }
+            runCatching { repo.members(roomId) }.onSuccess { m -> _state.update { it.copy(members = m) } }
             loadHistory()
         }
-    }
-
-    fun renameContact(alias: String?) {
-        _state.update { st -> st.copy(peer = st.peer?.copy(alias = alias?.trim()?.takeIf { it.isNotBlank() })) }
-        viewModelScope.launch { runCatching { repo.setAlias(currentUserId, peerId, alias) } }
     }
 
     private fun loadHistory() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
-            runCatching { repo.getHistory(peerId, before = null) }
+            runCatching { repo.history(roomId, before = null) }
                 .onSuccess { list ->
                     _state.update { it.copy(messages = list, loading = false, hasMore = list.size >= 40) }
-                    markIncomingRead()
+                    markRead()
                 }
                 .onFailure { _state.update { it.copy(loading = false) } }
         }
@@ -96,7 +86,7 @@ class ChatViewModel @Inject constructor(
         val oldest = st.messages.first().createdAt
         viewModelScope.launch {
             _state.update { it.copy(loadingMore = true) }
-            runCatching { repo.getHistory(peerId, before = oldest) }
+            runCatching { repo.history(roomId, before = oldest) }
                 .onSuccess { older ->
                     _state.update {
                         it.copy(
@@ -114,40 +104,19 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             repo.events.collect { ev ->
                 when (ev) {
-                    is ChatEvent.NewMessage -> {
-                        val m = ev.message.toDomain()
-                        if (involvesPeer(m)) {
-                            upsert(m)
-                            if (m.senderId == peerId) markIncomingRead()
-                        }
+                    is ChatEvent.RoomNewMessage -> if (ev.message.roomId == roomId) {
+                        clearTyping(ev.message.senderId)
+                        upsert(ev.message.toDomain())
+                        markRead()
                     }
-                    is ChatEvent.Updated -> {
-                        val m = ev.message.toDomain()
-                        if (involvesPeer(m)) upsert(m)
-                    }
-                    is ChatEvent.Deleted -> _state.update { st ->
+                    is ChatEvent.RoomUpdated -> if (ev.message.roomId == roomId) upsert(ev.message.toDomain())
+                    is ChatEvent.RoomDeleted -> if (ev.roomId == roomId) _state.update { st ->
                         st.copy(messages = st.messages.map {
                             if (it.id == ev.id) it.copy(isDeleted = true, body = null, meta = null) else it
                         })
                     }
-                    is ChatEvent.Status -> _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (it.id == ev.id) it.copy(status = ChatMessageStatus.from(ev.status)) else it
-                        })
-                    }
-                    is ChatEvent.Read -> if (ev.by == peerId) _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (isMine(it)) it.copy(status = ChatMessageStatus.READ, isRead = true) else it
-                        })
-                    }
-                    is ChatEvent.Typing -> if (ev.userId == peerId) {
-                        _state.update { it.copy(peerActivity = if (ev.typing) ev.action else null) }
-                    }
-                    is ChatEvent.Presence -> if (ev.userId == peerId) _state.update {
-                        it.copy(peer = it.peer?.copy(isOnline = ev.online, lastSeenAt = ev.lastSeenAt ?: it.peer.lastSeenAt))
-                    }
-                    is ChatEvent.PresenceList -> _state.update {
-                        it.copy(peer = it.peer?.copy(isOnline = peerId in ev.online))
+                    is ChatEvent.RoomTyping -> if (ev.roomId == roomId && ev.userId != currentUserId) {
+                        if (ev.typing) onTyping(ev.userId, ev.fullName, ev.action) else clearTyping(ev.userId)
                     }
                     else -> Unit
                 }
@@ -155,11 +124,27 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun involvesPeer(m: ChatMessage): Boolean =
-        (m.senderId == peerId && m.receiverId == currentUserId) ||
-            (m.senderId == currentUserId && m.receiverId == peerId)
+    private fun onTyping(userId: String, name: String, action: String) {
+        typingTimers.remove(userId)?.cancel()
+        typingUsers[userId] = name to action
+        recomputeTyping()
+        typingTimers[userId] = viewModelScope.launch {
+            delay(5_000)
+            clearTyping(userId)
+        }
+    }
 
-    private fun upsert(msg: ChatMessage) {
+    private fun clearTyping(userId: String) {
+        typingTimers.remove(userId)?.cancel()
+        if (typingUsers.remove(userId) != null) recomputeTyping()
+    }
+
+    private fun recomputeTyping() {
+        val first = typingUsers.values.firstOrNull()
+        _state.update { it.copy(typingLabel = first?.let { (name, action) -> "${name.substringBefore(' ')}|$action" }) }
+    }
+
+    private fun upsert(msg: RoomMessage) {
         _state.update { st ->
             val list = st.messages.toMutableList()
             val byId = list.indexOfFirst { it.id == msg.id }
@@ -176,41 +161,29 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun markIncomingRead() {
-        val unread = _state.value.messages.filter { it.senderId == peerId && !it.isRead }
-        if (unread.isEmpty()) return
-        _state.update { st ->
-            st.copy(messages = st.messages.map {
-                if (it.senderId == peerId) it.copy(isRead = true, status = ChatMessageStatus.READ) else it
-            })
-        }
-        viewModelScope.launch { runCatching { repo.markRead(peerId) } }
+    private fun markRead() {
+        viewModelScope.launch { runCatching { repo.markRead(roomId) } }
     }
 
     fun onInputChange(text: String) {
         _state.update { it.copy(input = text) }
         if (text.isNotBlank()) {
-            repo.sendTyping(peerId, true, "typing")
+            repo.sendTyping(roomId, true, "typing")
             stopTypingJob?.cancel()
             stopTypingJob = viewModelScope.launch {
                 delay(2_000)
-                repo.sendTyping(peerId, false, "typing")
+                repo.sendTyping(roomId, false, "typing")
             }
         } else {
-            repo.sendTyping(peerId, false, "typing")
+            repo.sendTyping(roomId, false, "typing")
         }
     }
 
-    fun setRecording(active: Boolean) {
-        if (peerId.isNotBlank()) repo.sendTyping(peerId, active, "recording")
-    }
+    fun setRecording(active: Boolean) = repo.sendTyping(roomId, active, "recording")
+    fun setUploading(active: Boolean) = repo.sendTyping(roomId, active, "uploading")
 
-    fun setUploading(active: Boolean) {
-        if (peerId.isNotBlank()) repo.sendTyping(peerId, active, "uploading")
-    }
-
-    fun setReplyTo(msg: ChatMessage?) = _state.update { it.copy(replyTo = msg, editing = null) }
-    fun startEdit(msg: ChatMessage) = _state.update { it.copy(editing = msg, input = msg.body.orEmpty(), replyTo = null) }
+    fun setReplyTo(msg: RoomMessage?) = _state.update { it.copy(replyTo = msg, editing = null) }
+    fun startEdit(msg: RoomMessage) = _state.update { it.copy(editing = msg, input = msg.body.orEmpty(), replyTo = null) }
     fun cancelEdit() = _state.update { it.copy(editing = null, input = "") }
 
     fun sendText() {
@@ -225,7 +198,7 @@ class ChatViewModel @Inject constructor(
         }
         val replyId = st.replyTo?.id
         _state.update { it.copy(input = "", replyTo = null) }
-        repo.sendTyping(peerId, false)
+        repo.sendTyping(roomId, false)
         dispatchSend(ChatMessageType.TEXT, body = text, replyToId = replyId)
     }
 
@@ -249,10 +222,10 @@ class ChatViewModel @Inject constructor(
         replyToId: String? = null,
     ) {
         val clientId = UUID.randomUUID().toString()
-        val optimistic = ChatMessage(
+        val optimistic = RoomMessage(
             id = clientId,
+            roomId = roomId,
             senderId = currentUserId,
-            receiverId = peerId,
             type = type,
             body = body,
             fileName = upload?.fileName,
@@ -268,7 +241,7 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching {
                 repo.send(
-                    receiverId = peerId,
+                    roomId = roomId,
                     type = type,
                     body = body,
                     upload = upload,
@@ -289,23 +262,23 @@ class ChatViewModel @Inject constructor(
 
     suspend fun upload(file: File, mime: String): ChatUploadDto = repo.uploadFile(file, mime)
 
-    fun react(msg: ChatMessage, emoji: String) {
+    fun react(msg: RoomMessage, emoji: String) {
         val current = msg.reactions[currentUserId]
         val next = if (current == emoji) null else emoji
         viewModelScope.launch { runCatching { repo.react(msg.id, next) }.onSuccess { upsert(it) } }
     }
 
-    fun pin(msg: ChatMessage) {
+    fun pin(msg: RoomMessage) {
         viewModelScope.launch { runCatching { repo.pin(msg.id) }.onSuccess { upsert(it) } }
     }
 
-    fun delete(msg: ChatMessage) {
+    fun delete(msg: RoomMessage) {
         _state.update { st -> st.copy(messages = st.messages.map { if (it.id == msg.id) it.copy(isDeleted = true, body = null, meta = null) else it }) }
-        viewModelScope.launch { runCatching { repo.delete(msg.id) } }
+        viewModelScope.launch { runCatching { repo.delete(msg.id, room = true) } }
     }
 
     override fun onCleared() {
         super.onCleared()
-        repo.sendTyping(peerId, false)
+        repo.sendTyping(roomId, false)
     }
 }

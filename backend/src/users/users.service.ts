@@ -15,6 +15,7 @@ import { CreateUserDto, UpdateUserDto } from '../auth/dto/auth.dto';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../common/enums';
 import { phonesMatch } from '../common/utils/phone';
+import { mediaUrl } from '../common/utils/media-url';
 import { Task } from '../tasks/entities/task.entity';
 import { TaskComment } from '../tasks/entities/task-comment.entity';
 import { TaskAttachment } from '../tasks/entities/task-attachment.entity';
@@ -356,6 +357,14 @@ export class UsersService implements OnModuleInit {
 
   async saveUser(user: User) {
     return this.repo.save(user);
+  }
+
+  async setAvatar(userId: string, filePath: string | null) {
+    const user = await this.findById(userId);
+    if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');
+    user.avatarUrl = filePath ? mediaUrl(filePath) : null;
+    await this.repo.save(user);
+    return this.sanitizeWithPresence(user);
   }
 
   sanitize(user: User, options?: { includePasswordPlain?: boolean }) {

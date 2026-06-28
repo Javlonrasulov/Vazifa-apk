@@ -44,6 +44,10 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.compose.ui.window.Dialog
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
+import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
@@ -55,8 +59,11 @@ import uz.vazifa.app.domain.model.ChatMessageMeta
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatPeer
 import uz.vazifa.app.presentation.components.localized
+import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
 import uz.vazifa.app.util.ChatAudioPlayer
@@ -83,13 +90,15 @@ fun ChatConversationScreen(
     }
 
     var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
+    var showRename by remember { mutableStateOf(false) }
 
     LiquidBackground(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             ChatHeader(
                 peer = state.peer ?: ChatPeer(id = peerId, fullName = peerName),
-                typing = state.peerTyping,
+                activity = state.peerActivity,
                 onBack = onBack,
+                onRename = { showRename = true },
             )
 
             MessageList(
@@ -109,10 +118,17 @@ fun ChatConversationScreen(
                     viewModel.cancelEdit()
                 },
                 onPickMedia = { uri, type ->
-                    scope.launch { sendPicked(context, viewModel, uri, type) }
+                    scope.launch {
+                        viewModel.setUploading(true)
+                        runCatching { sendPicked(context, viewModel, uri, type) }
+                        viewModel.setUploading(false)
+                    }
                 },
+                onRecordingChange = { active -> viewModel.setRecording(active) },
                 onSendVoice = { file, dur, wave ->
                     scope.launch {
+                        viewModel.setRecording(false)
+                        viewModel.setUploading(true)
                         runCatching {
                             val upload = viewModel.upload(file, "audio/mp4")
                             viewModel.sendUpload(
@@ -121,12 +137,26 @@ fun ChatConversationScreen(
                                 ChatMessageMeta(durationSec = dur, waveform = wave),
                             )
                         }
+                        viewModel.setUploading(false)
                     }
                 },
                 onSendLocation = { lat, lng -> viewModel.sendLocation(lat, lng) },
                 onSendContact = { name, phone -> viewModel.sendContact(name, phone) },
             )
         }
+    }
+
+    if (showRename) {
+        val peer = state.peer ?: ChatPeer(id = peerId, fullName = peerName)
+        RenameContactDialog(
+            originalName = peer.fullName.ifBlank { peerName },
+            currentAlias = peer.alias,
+            onDismiss = { showRename = false },
+            onSave = { newAlias ->
+                viewModel.renameContact(newAlias)
+                showRename = false
+            },
+        )
     }
 
     actionTarget?.let { target ->
@@ -148,11 +178,14 @@ fun ChatConversationScreen(
 }
 
 @Composable
-private fun ChatHeader(peer: ChatPeer, typing: Boolean, onBack: () -> Unit) {
+private fun ChatHeader(peer: ChatPeer, activity: String?, onBack: () -> Unit, onRename: () -> Unit) {
+    val active = activity != null
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
+            .statusBarsPadding()
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -162,23 +195,107 @@ private fun ChatHeader(peer: ChatPeer, typing: Boolean, onBack: () -> Unit) {
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, localized("com_back"), tint = LiquidGlass.Blue)
         }
-        ChatAvatar(peer.fullName, peer.isOnline, size = 42.dp)
+        ChatAvatar(peer.displayName, peer.isOnline, size = 42.dp, avatarUrl = peer.avatarUrl)
         Spacer(Modifier.width(10.dp))
         Column(Modifier.weight(1f)) {
-            Text(peer.fullName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val sub = when {
-                typing -> localized("chat_typing")
-                peer.isOnline -> localized("chat_online")
-                else -> ChatFormat.lastSeen(peer.lastSeenAt, localized("chat_last_seen_prefix"), localized("chat_online"), localized("emp_last_seen_just_now"))
+            Text(peer.displayName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            val sub = when (activity) {
+                "recording" -> localized("chat_recording")
+                "uploading" -> localized("chat_sending_file")
+                "typing" -> localized("chat_typing")
+                else -> if (peer.isOnline) {
+                    localized("chat_online")
+                } else {
+                    ChatFormat.lastSeen(peer.lastSeenAt, rememberLastSeenLabels())
+                }
             }
             Text(
                 sub,
-                color = if (typing || peer.isOnline) LiquidGlass.Blue else LiquidTheme.textMuted,
+                color = if (active || peer.isOnline) LiquidGlass.Blue else LiquidTheme.textMuted,
                 fontSize = 12.sp,
             )
         }
-        HeaderIcon(Icons.Default.Call) { /* audio call (placeholder) */ }
-        HeaderIcon(Icons.Default.Videocam) { /* video call (placeholder) */ }
+        Box {
+            HeaderIcon(Icons.Default.MoreVert) { showMenu = true }
+            LiquidGlassDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                LiquidGlassDropdownItem(
+                    text = localized("chat_rename_contact"),
+                    selected = false,
+                    onClick = { showMenu = false; onRename() },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenameContactDialog(
+    originalName: String,
+    currentAlias: String?,
+    onDismiss: () -> Unit,
+    onSave: (String?) -> Unit,
+) {
+    var text by remember { mutableStateOf(currentAlias.orEmpty()) }
+    Dialog(onDismissRequest = onDismiss) {
+        GlassCard(radius = 24.dp, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(20.dp)) {
+                Text(localized("chat_rename_contact"), color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 17.sp)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    localized("chat_rename_original") + ": " + originalName,
+                    color = LiquidTheme.textMuted,
+                    fontSize = 13.sp,
+                )
+                Spacer(Modifier.height(14.dp))
+                Box(
+                    Modifier
+                        .fillMaxWidth()
+                        .height(46.dp)
+                        .liquidGlassThemed(radius = 14.dp),
+                    contentAlignment = Alignment.CenterStart,
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp)) {
+                        Box(Modifier.weight(1f)) {
+                            if (text.isEmpty()) Text(originalName, color = LiquidTheme.textMuted, fontSize = 15.sp)
+                            BasicTextField(
+                                value = text,
+                                onValueChange = { text = it },
+                                singleLine = true,
+                                textStyle = TextStyle(color = LiquidTheme.text, fontSize = 15.sp),
+                                cursorBrush = SolidColor(LiquidGlass.Blue),
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(18.dp))
+                Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
+                    if (!currentAlias.isNullOrBlank()) {
+                        Text(
+                            localized("chat_rename_reset"),
+                            color = LiquidGlass.Rose,
+                            fontSize = 14.sp,
+                            fontWeight = FontWeight.SemiBold,
+                            modifier = Modifier.clickable { onSave(null) }.padding(8.dp),
+                        )
+                        Spacer(Modifier.weight(1f))
+                    }
+                    Text(
+                        localized("com_cancel"),
+                        color = LiquidTheme.textMuted,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable(onClick = onDismiss).padding(8.dp),
+                    )
+                    Spacer(Modifier.width(12.dp))
+                    Text(
+                        localized("com_save"),
+                        color = LiquidGlass.Blue,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = 14.sp,
+                        modifier = Modifier.clickable { onSave(text) }.padding(8.dp),
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -558,6 +675,284 @@ private fun copyToClipboard(context: Context, text: String) {
 private suspend fun sendPicked(
     context: Context,
     viewModel: ChatViewModel,
+    uri: Uri,
+    type: ChatMessageType,
+) {
+    runCatching {
+        if (type == ChatMessageType.IMAGE) {
+            val file = ImageCompress.compressToFile(context, uri)
+            val upload = viewModel.upload(file, "image/jpeg")
+            viewModel.sendUpload(ChatMessageType.IMAGE, upload)
+        } else {
+            val file = ChatFiles.copyToCache(context, uri) ?: return
+            val mime = ChatFiles.mimeType(context, uri)
+            val upload = viewModel.upload(file, mime)
+            viewModel.sendUpload(type, upload, ChatMessageMeta(fileSize = file.length()))
+        }
+    }
+}
+
+// ====================== GURUH / KANAL (ROOM) EKRANI ======================
+
+private fun uz.vazifa.app.domain.model.RoomMessage.toChatMessage(): ChatMessage = ChatMessage(
+    id = id,
+    senderId = senderId,
+    receiverId = roomId,
+    type = type,
+    body = body,
+    filePath = filePath,
+    fileName = fileName,
+    mimeType = mimeType,
+    meta = meta,
+    replyToId = replyToId,
+    replyTo = replyTo?.toChatMessage(),
+    forwardedFrom = forwardedFrom,
+    reactions = reactions,
+    status = status,
+    isEdited = isEdited,
+    isDeleted = isDeleted,
+    isPinned = isPinned,
+    clientId = clientId,
+    createdAt = createdAt,
+)
+
+@Composable
+fun RoomConversationScreen(
+    roomId: String,
+    currentUserId: String,
+    onBack: () -> Unit,
+    viewModel: RoomViewModel = hiltViewModel(),
+) {
+    val state by viewModel.state.collectAsState()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+
+    LaunchedEffect(roomId) { viewModel.start(roomId, currentUserId) }
+
+    var actionTarget by remember { mutableStateOf<uz.vazifa.app.domain.model.RoomMessage?>(null) }
+
+    val inputState = ChatUiState(
+        input = state.input,
+        replyTo = state.replyTo?.toChatMessage(),
+        editing = state.editing?.toChatMessage(),
+    )
+
+    LiquidBackground(Modifier.fillMaxSize()) {
+        Column(Modifier.fillMaxSize().statusBarsPadding()) {
+            RoomHeader(room = state.room, roomId = roomId, typingLabel = state.typingLabel, onBack = onBack)
+
+            RoomMessageList(
+                state = state,
+                isMine = viewModel::isMine,
+                onLoadMore = viewModel::loadMore,
+                onLongPress = { actionTarget = it },
+                modifier = Modifier.weight(1f),
+            )
+
+            val canPost = state.room?.canPost ?: true
+            if (canPost) {
+                ChatInputArea(
+                    state = inputState,
+                    onInputChange = viewModel::onInputChange,
+                    onSendText = viewModel::sendText,
+                    onCancelReplyEdit = {
+                        viewModel.setReplyTo(null)
+                        viewModel.cancelEdit()
+                    },
+                    onPickMedia = { uri, type ->
+                        scope.launch {
+                            viewModel.setUploading(true)
+                            runCatching { sendPickedRoom(context, viewModel, uri, type) }
+                            viewModel.setUploading(false)
+                        }
+                    },
+                    onRecordingChange = { active -> viewModel.setRecording(active) },
+                    onSendVoice = { file, dur, wave ->
+                        scope.launch {
+                            viewModel.setRecording(false)
+                            viewModel.setUploading(true)
+                            runCatching {
+                                val upload = viewModel.upload(file, "audio/mp4")
+                                viewModel.sendUpload(
+                                    ChatMessageType.VOICE,
+                                    upload,
+                                    ChatMessageMeta(durationSec = dur, waveform = wave),
+                                )
+                            }
+                            viewModel.setUploading(false)
+                        }
+                    },
+                    onSendLocation = { lat, lng -> viewModel.sendLocation(lat, lng) },
+                    onSendContact = { name, phone -> viewModel.sendContact(name, phone) },
+                )
+            } else {
+                ChannelReadOnlyBar()
+            }
+        }
+    }
+
+    actionTarget?.let { target ->
+        MessageActionSheet(
+            message = target.toChatMessage(),
+            isMine = viewModel.isMine(target.senderId),
+            onDismiss = { actionTarget = null },
+            onReact = { emoji -> viewModel.react(target, emoji); actionTarget = null },
+            onReply = { viewModel.setReplyTo(target); actionTarget = null },
+            onCopy = {
+                copyToClipboard(context, target.body.orEmpty())
+                actionTarget = null
+            },
+            onEdit = { viewModel.startEdit(target); actionTarget = null },
+            onDelete = { viewModel.delete(target); actionTarget = null },
+            onPin = { viewModel.pin(target); actionTarget = null },
+        )
+    }
+}
+
+@Composable
+private fun RoomHeader(
+    room: uz.vazifa.app.domain.model.ChatRoom?,
+    roomId: String,
+    typingLabel: String?,
+    onBack: () -> Unit,
+) {
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
+            .statusBarsPadding()
+            .padding(horizontal = 8.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier.size(40.dp).clip(CircleShape).clickable(onClick = onBack),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.AutoMirrored.Filled.ArrowBack, localized("com_back"), tint = LiquidGlass.Blue)
+        }
+        ChatAvatar(room?.title ?: "?", online = false, size = 42.dp, showPresence = false, avatarUrl = room?.avatarUrl)
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    room?.title ?: "",
+                    color = LiquidTheme.text,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 16.sp,
+                    maxLines = 1,
+                    overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f, fill = false),
+                )
+                if (room?.isVerified == true) {
+                    Spacer(Modifier.width(4.dp))
+                    Icon(Icons.Default.Verified, null, tint = LiquidGlass.Cyan, modifier = Modifier.size(15.dp))
+                }
+            }
+            val sub = when {
+                typingLabel != null -> {
+                    val (name, action) = typingLabel.split("|").let { it[0] to it.getOrElse(1) { "typing" } }
+                    val verb = when (action) {
+                        "recording" -> localized("chat_recording")
+                        "uploading" -> localized("chat_sending_file")
+                        else -> localized("chat_typing")
+                    }
+                    "$name $verb"
+                }
+                room != null -> localized("chat_members_count").replace("%d", room.memberCount.toString())
+                else -> ""
+            }
+            Text(sub, color = if (typingLabel != null) LiquidGlass.Blue else LiquidTheme.textMuted, fontSize = 12.sp)
+        }
+    }
+}
+
+@Composable
+private fun ChannelReadOnlyBar() {
+    Box(
+        Modifier
+            .fillMaxWidth()
+            .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
+            .navigationBarsPadding()
+            .padding(vertical = 16.dp),
+        contentAlignment = Alignment.Center,
+    ) {
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Default.Campaign, null, tint = LiquidTheme.textMuted, modifier = Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(localized("chat_channel_readonly"), color = LiquidTheme.textMuted, fontSize = 14.sp)
+        }
+    }
+}
+
+@Composable
+private fun RoomMessageList(
+    state: RoomUiState,
+    isMine: (String) -> Boolean,
+    onLoadMore: () -> Unit,
+    onLongPress: (uz.vazifa.app.domain.model.RoomMessage) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    val listState = rememberLazyListState()
+    val reversed = remember(state.messages) { state.messages.asReversed() }
+
+    LaunchedEffect(state.messages.size) {
+        if (state.messages.isNotEmpty()) {
+            val firstVisible = listState.firstVisibleItemIndex
+            if (firstVisible <= 2) listState.animateScrollToItem(0)
+        }
+    }
+
+    val shouldLoadMore by remember {
+        derivedStateOf {
+            val layout = listState.layoutInfo
+            val last = layout.visibleItemsInfo.lastOrNull()?.index ?: 0
+            last >= reversed.size - 3
+        }
+    }
+    LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) onLoadMore() }
+
+    LazyColumn(
+        modifier = modifier.fillMaxSize(),
+        state = listState,
+        reverseLayout = true,
+        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
+    ) {
+        items(reversed.size, key = { reversed[it].id }) { i ->
+            val msg = reversed[i]
+            val ascendingIndex = state.messages.size - 1 - i
+            val prev = state.messages.getOrNull(ascendingIndex - 1)
+            val showDate = prev == null ||
+                ChatFormat.dateHeaderKeyOrDate(prev.createdAt) != ChatFormat.dateHeaderKeyOrDate(msg.createdAt)
+            val mine = isMine(msg.senderId)
+            val showSender = !mine && (prev == null || prev.senderId != msg.senderId)
+            Column {
+                if (showDate) DateChip(msg.createdAt)
+                if (showSender && !msg.senderName.isNullOrBlank()) {
+                    Text(
+                        msg.senderName,
+                        color = LiquidGlass.Cyan,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.SemiBold,
+                        modifier = Modifier.padding(start = 12.dp, top = 2.dp),
+                    )
+                }
+                MessageBubble(
+                    msg = msg.toChatMessage(),
+                    mine = mine,
+                    onLongPress = { onLongPress(msg) },
+                )
+            }
+        }
+        if (state.loadingMore) {
+            item { Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) { Text("...", color = LiquidTheme.textMuted) } }
+        }
+    }
+}
+
+private suspend fun sendPickedRoom(
+    context: Context,
+    viewModel: RoomViewModel,
     uri: Uri,
     type: ChatMessageType,
 ) {

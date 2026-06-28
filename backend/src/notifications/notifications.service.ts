@@ -3,6 +3,7 @@ import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
 
 export const FCM_CHANNEL_TASKS = 'vazifa_tasks';
+export const FCM_CHANNEL_CHAT = 'vazifa_chat';
 
 @Injectable()
 export class NotificationsService {

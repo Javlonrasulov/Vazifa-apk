@@ -7,10 +7,16 @@ import {
   Patch,
   Post,
   Query,
+  UploadedFile,
   UseGuards,
+  UseInterceptors,
   Request,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
+import { FileInterceptor } from '@nestjs/platform-express';
+import { diskStorage } from 'multer';
+import { extname } from 'path';
+import { v4 as uuid } from 'uuid';
 import { UsersService } from './users.service';
 import {
   ApproveDeviceDto,
@@ -42,6 +48,30 @@ export class UsersController {
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   getMobileDepartments() {
     return this.usersService.getMobileDepartments();
+  }
+
+  @Post('mobile/avatar')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE, UserRole.ADMIN)
+  @UseInterceptors(
+    FileInterceptor('file', {
+      limits: { fileSize: 10 * 1024 * 1024 },
+      storage: diskStorage({
+        destination: process.env.UPLOAD_DIR || 'uploads',
+        filename: (_r, f, cb) => cb(null, `${uuid()}${extname(f.originalname)}`),
+      }),
+    }),
+  )
+  uploadAvatar(
+    @UploadedFile() file: Express.Multer.File,
+    @Request() req: { user: { id: string } },
+  ) {
+    return this.usersService.setAvatar(req.user.id, file.path);
+  }
+
+  @Delete('mobile/avatar')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE, UserRole.ADMIN)
+  deleteAvatar(@Request() req: { user: { id: string } }) {
+    return this.usersService.setAvatar(req.user.id, null);
   }
 
   @Get('options/positions')

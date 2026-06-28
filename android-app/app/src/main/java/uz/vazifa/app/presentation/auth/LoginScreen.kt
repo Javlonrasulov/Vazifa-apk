@@ -8,7 +8,6 @@ import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.material.icons.filled.Person
@@ -91,20 +90,13 @@ fun LoginScreen(
             Modifier.align(Alignment.Center).fillMaxWidth().padding(24.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            Box(
-                Modifier
-                    .size(80.dp)
-                    .glowEffect(color = LiquidGlass.Blue, radius = 180f)
-                    .clip(RoundedCornerShape(LiquidGlass.RadiusCard))
-                    .background(LiquidGlass.GradientPrimary),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.Assignment, null, tint = Color.White, modifier = Modifier.size(36.dp))
-            }
-            Spacer(Modifier.height(16.dp))
-            Text(localized("app_name"), color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 28.sp)
-            Text(localized("app_subtitle"), color = LiquidTheme.textMuted, fontSize = 14.sp)
-            Spacer(Modifier.height(32.dp))
+            Text(
+                localized("login_btn"),
+                color = LiquidTheme.text,
+                fontWeight = FontWeight.Bold,
+                fontSize = 24.sp,
+            )
+            Spacer(Modifier.height(24.dp))
 
             Row(
                 Modifier
