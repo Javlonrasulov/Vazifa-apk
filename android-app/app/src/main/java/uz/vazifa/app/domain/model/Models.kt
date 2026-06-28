@@ -31,6 +31,7 @@ data class User(
     val canAssignTasks: Boolean = false,
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
+    val avatarUrl: String? = null,
 )
 
 fun User.isTaskAssignable(): Boolean = login != "xodim1"

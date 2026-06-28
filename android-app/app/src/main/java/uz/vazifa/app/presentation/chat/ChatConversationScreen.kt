@@ -35,6 +35,7 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
@@ -114,6 +115,13 @@ fun ChatConversationScreen(
                 onBack = onBack,
                 onRename = { showRename = true },
             )
+
+            state.messages.lastOrNull { it.isPinned && !it.isDeleted }?.let { pinned ->
+                PinnedMessageBanner(
+                    preview = messagePreview(pinned, strings),
+                    onUnpin = { viewModel.pin(pinned) },
+                )
+            }
 
             MessageList(
                 state = state,
@@ -236,10 +244,26 @@ fun ChatConversationScreen(
 private fun ChatHeader(peer: ChatPeer, activity: String?, onBack: () -> Unit, onRename: () -> Unit) {
     val active = activity != null
     var showMenu by remember { mutableStateOf(false) }
+    val dark = LiquidTheme.isDark
     Row(
         Modifier
             .fillMaxWidth()
-            .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = if (dark) 0.10f else 0.45f),
+                        Color.White.copy(alpha = if (dark) 0.03f else 0.22f),
+                    ),
+                ),
+            )
+            .drawBehind {
+                drawLine(
+                    color = Color.White.copy(alpha = if (dark) 0.12f else 0.30f),
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1f,
+                )
+            }
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
@@ -349,6 +373,58 @@ private fun RenameContactDialog(
                     )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun PinnedMessageBanner(preview: String, onUnpin: () -> Unit) {
+    val dark = LiquidTheme.isDark
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .background(Color.White.copy(alpha = if (dark) 0.06f else 0.32f))
+            .drawBehind {
+                drawLine(
+                    color = Color.White.copy(alpha = if (dark) 0.10f else 0.25f),
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1f,
+                )
+            }
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(
+            Modifier
+                .width(3.dp)
+                .height(34.dp)
+                .clip(RoundedCornerShape(2.dp))
+                .background(LiquidGlass.Blue),
+        )
+        Spacer(Modifier.width(10.dp))
+        Column(Modifier.weight(1f)) {
+            Text(
+                localized("chat_pinned_title"),
+                color = LiquidGlass.Blue,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text(
+                preview,
+                color = LiquidTheme.textMuted,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        }
+        Box(
+            Modifier.size(32.dp).clip(CircleShape).clickable(onClick = onUnpin),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(Icons.Default.Close, localized("chat_unpin"), tint = LiquidTheme.textMuted, modifier = Modifier.size(18.dp))
         }
     }
 }
@@ -856,6 +932,13 @@ fun RoomConversationScreen(
         ) {
             RoomHeader(room = state.room, roomId = roomId, typingLabel = state.typingLabel, onBack = onBack)
 
+            state.messages.lastOrNull { it.isPinned && !it.isDeleted }?.let { pinned ->
+                PinnedMessageBanner(
+                    preview = messagePreview(pinned.toChatMessage(), strings),
+                    onUnpin = { viewModel.pin(pinned) },
+                )
+            }
+
             RoomMessageList(
                 state = state,
                 isMine = viewModel::isMine,
@@ -973,10 +1056,26 @@ private fun RoomHeader(
     typingLabel: String?,
     onBack: () -> Unit,
 ) {
+    val dark = LiquidTheme.isDark
     Row(
         Modifier
             .fillMaxWidth()
-            .background(LiquidTheme.bgMid.copy(alpha = 0.85f))
+            .background(
+                Brush.verticalGradient(
+                    listOf(
+                        Color.White.copy(alpha = if (dark) 0.10f else 0.45f),
+                        Color.White.copy(alpha = if (dark) 0.03f else 0.22f),
+                    ),
+                ),
+            )
+            .drawBehind {
+                drawLine(
+                    color = Color.White.copy(alpha = if (dark) 0.12f else 0.30f),
+                    start = Offset(0f, size.height),
+                    end = Offset(size.width, size.height),
+                    strokeWidth = 1f,
+                )
+            }
             .padding(horizontal = 8.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {

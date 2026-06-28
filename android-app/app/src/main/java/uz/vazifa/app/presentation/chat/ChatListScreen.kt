@@ -1,5 +1,7 @@
 package uz.vazifa.app.presentation.chat
 
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.tween
@@ -14,6 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -59,6 +62,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -115,6 +119,20 @@ fun ChatListScreen(
     val state by viewModel.state.collectAsState()
     var drawerOpen by remember { mutableStateOf(false) }
     var appActive by remember { mutableStateOf(true) }
+    val context = LocalContext.current
+    var avatarOverride by remember { mutableStateOf<String?>(null) }
+    var uploadingAvatar by remember { mutableStateOf(false) }
+    val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        uri?.let {
+            uploadingAvatar = true
+            uz.vazifa.app.util.ChatFiles.copyToCache(context, it)?.let { file ->
+                viewModel.uploadAvatar(file) { url ->
+                    uploadingAvatar = false
+                    if (url != null) avatarOverride = url
+                }
+            } ?: run { uploadingAvatar = false }
+        }
+    }
 
     LaunchedEffect(currentUserId) {
         if (currentUserId.isNotBlank()) {
@@ -194,9 +212,11 @@ fun ChatListScreen(
                                 .width(312.dp),
                             userName = currentUserName,
                             userSubtitle = if (drawerOnline) localized("chat_online") else localized("chat_offline"),
-                            userAvatarUrl = currentUserAvatar,
+                            userAvatarUrl = avatarOverride ?: currentUserAvatar,
                             isOnline = drawerOnline,
                             isOpen = drawerOpen,
+                            uploadingAvatar = uploadingAvatar,
+                            onAvatarClick = { avatarPicker.launch("image/*") },
                             onAction = { action ->
                                 drawerOpen = false
                                 when (action) {
@@ -228,7 +248,6 @@ private fun ChatListContent(
     onNewGroup: () -> Unit,
     onNewChannel: () -> Unit,
 ) {
-    var searchActive by remember { mutableStateOf(false) }
     val folders = remember { ChatFolder.entries.toList() }
     val pagerState = rememberPagerState(pageCount = { folders.size })
     val scope = rememberCoroutineScope()
@@ -241,32 +260,20 @@ private fun ChatListContent(
         ChatFolder.CHANNELS to state.channels.count { it.unreadCount > 0 },
     )
 
-    LaunchedEffect(searchActive) {
-        if (!searchActive && state.query.isNotBlank()) onQueryChange("")
-    }
-
     LiquidBackground(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize()) {
             ChatTopBar(
                 onMenu = onMenu,
-                searchActive = searchActive,
-                onToggleSearch = { searchActive = !searchActive },
                 onNewChat = onNewChat,
             )
 
-            AnimatedVisibility(
-                visible = searchActive,
-                enter = fadeIn() + expandVertically(),
-                exit = fadeOut() + shrinkVertically(),
-            ) {
-                ChatSearchField(
-                    query = state.query,
-                    onChange = onQueryChange,
-                    modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
-                )
-            }
+            ChatSearchField(
+                query = state.query,
+                onChange = onQueryChange,
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp),
+            )
 
-            if (searchActive && state.query.isNotBlank()) {
+            if (state.query.isNotBlank()) {
                 SearchResults(state, currentUserId, onRememberPeer, onOpenChat)
                 return@Column
             }
@@ -322,8 +329,6 @@ private fun ChatListContent(
 @Composable
 private fun ChatTopBar(
     onMenu: () -> Unit,
-    searchActive: Boolean,
-    onToggleSearch: () -> Unit,
     onNewChat: () -> Unit,
 ) {
     Box(
@@ -366,20 +371,6 @@ private fun ChatTopBar(
                         ) {
                             Icon(Icons.Default.EditNote, localized("chat_new"), tint = LiquidGlass.Blue, modifier = Modifier.size(20.dp))
                         }
-                        Box(
-                            Modifier
-                                .size(36.dp)
-                                .liquidGlassThemed(radius = LiquidGlass.RadiusChip)
-                                .clickable(onClick = onToggleSearch),
-                            contentAlignment = Alignment.Center,
-                        ) {
-                            Icon(
-                                Icons.Default.Search,
-                                localized("chat_search"),
-                                tint = if (searchActive) LiquidGlass.Cyan else LiquidGlass.Blue,
-                                modifier = Modifier.size(20.dp),
-                            )
-                        }
                     },
                 )
             }
@@ -394,77 +385,61 @@ private fun ChatTabsRow(
     badges: Map<ChatFolder, Int>,
     onSelect: (ChatFolder) -> Unit,
 ) {
-    Box(
+    Row(
         Modifier
             .fillMaxWidth()
-            .background(LiquidTheme.bgMid.copy(alpha = 0.92f)),
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 12.dp, vertical = 6.dp),
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
     ) {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .horizontalScroll(rememberScrollState())
-                .padding(horizontal = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            folders.forEach { folder ->
-                ChatTab(
-                    label = localized(folder.labelKey),
-                    selected = folder == selected,
-                    badge = badges[folder] ?: 0,
-                    onClick = { onSelect(folder) },
-                )
-            }
+        folders.forEach { folder ->
+            ChatTab(
+                label = localized(folder.labelKey),
+                selected = folder == selected,
+                badge = badges[folder] ?: 0,
+                onClick = { onSelect(folder) },
+            )
         }
-        Box(
-            Modifier
-                .align(Alignment.BottomStart)
-                .fillMaxWidth()
-                .height(1.dp)
-                .background(LiquidTheme.textMuted.copy(alpha = 0.12f)),
-        )
     }
 }
 
 @Composable
 private fun ChatTab(label: String, selected: Boolean, badge: Int, onClick: () -> Unit) {
-    val indicatorWidth by animateDpAsState(if (selected) 22.dp else 0.dp, tween(220), label = "tabIndicator")
-    Column(
+    Row(
         Modifier
-            .clip(RoundedCornerShape(12.dp))
-            .clickable(onClick = onClick)
-            .padding(horizontal = 14.dp, vertical = 9.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-    ) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Text(
-                label,
-                color = if (selected) LiquidGlass.Blue else LiquidTheme.textMuted,
-                fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
-                fontSize = 15.sp,
+            .clip(RoundedCornerShape(50))
+            .background(
+                if (selected) LiquidGlass.Blue
+                else LiquidTheme.text.copy(alpha = 0.07f),
             )
-            if (badge > 0) {
-                Spacer(Modifier.width(6.dp))
-                val badgeText = formatBadgeCount(badge)
-                val wide = badgeText.length > 1
-                Box(
-                    Modifier
-                        .then(if (wide) Modifier.height(18.dp).padding(horizontal = 5.dp) else Modifier.size(18.dp))
-                        .clip(CircleShape)
-                        .background(if (selected) LiquidGlass.Blue else LiquidTheme.textMuted.copy(alpha = 0.4f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    CountBadgeLabel(text = badgeText, fontSize = 11.sp)
-                }
+            .clickable(onClick = onClick)
+            .padding(horizontal = 16.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(
+            label,
+            color = if (selected) Color.White else LiquidTheme.textMuted,
+            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+            fontSize = 14.sp,
+        )
+        if (badge > 0) {
+            Spacer(Modifier.width(7.dp))
+            val badgeText = formatBadgeCount(badge)
+            val wide = badgeText.length > 1
+            Box(
+                Modifier
+                    .then(if (wide) Modifier.height(18.dp).widthIn(min = 18.dp).padding(horizontal = 5.dp) else Modifier.size(18.dp))
+                    .clip(CircleShape)
+                    .background(
+                        if (selected) Color.White.copy(alpha = 0.28f)
+                        else LiquidTheme.textMuted.copy(alpha = 0.35f),
+                    ),
+                contentAlignment = Alignment.Center,
+            ) {
+                CountBadgeLabel(text = badgeText, fontSize = 11.sp)
             }
         }
-        Spacer(Modifier.height(6.dp))
-        Box(
-            Modifier
-                .height(3.dp)
-                .width(indicatorWidth)
-                .clip(RoundedCornerShape(3.dp))
-                .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
-        )
     }
 }
 
@@ -654,7 +629,7 @@ private fun ChatSearchField(query: String, onChange: (String) -> Unit, modifier:
             Spacer(Modifier.width(8.dp))
             Box(Modifier.weight(1f)) {
                 if (query.isEmpty()) {
-                    Text(localized("chat_search"), color = LiquidTheme.textMuted, fontSize = 15.sp)
+                    Text(localized("chat_search_chats"), color = LiquidTheme.textMuted, fontSize = 15.sp)
                 }
                 BasicTextField(
                     value = query,

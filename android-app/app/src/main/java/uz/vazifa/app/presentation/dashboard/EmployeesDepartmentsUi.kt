@@ -283,22 +283,13 @@ fun EmployeeRow(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box(Modifier.size(42.dp)) {
-                Box(
-                    Modifier
-                        .matchParentSize()
-                        .clip(CircleShape)
-                        .background(
-                            androidx.compose.ui.graphics.Brush.linearGradient(style.gradient),
-                        ),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Text(
-                        employeeInitials(user.fullName),
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 14.sp,
-                    )
-                }
+                uz.vazifa.app.presentation.chat.ChatAvatar(
+                    name = user.fullName,
+                    online = false,
+                    size = 42.dp,
+                    showPresence = false,
+                    avatarUrl = user.avatarUrl,
+                )
                 Box(
                     Modifier
                         .size(11.dp)

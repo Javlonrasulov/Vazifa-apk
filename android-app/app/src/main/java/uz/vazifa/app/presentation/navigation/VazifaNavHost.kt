@@ -53,6 +53,7 @@ import uz.vazifa.app.presentation.profile.ProfileScreen
 import uz.vazifa.app.presentation.splash.SplashScreen
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.tasks.*
+import uz.vazifa.app.util.SecureScreenEffect
 
 import javax.inject.Inject
 
@@ -232,6 +233,7 @@ fun VazifaNavHost(
 
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
     var showCreateSheet by remember { mutableStateOf(false) }
+    var showSupportSheet by remember { mutableStateOf(false) }
     var preselectedAssigneeIds by remember { mutableStateOf<Set<String>?>(null) }
     val skipSplash = viewModel.bootRoute != null
     var splashDone by remember { mutableStateOf(skipSplash) }
@@ -257,6 +259,18 @@ fun VazifaNavHost(
 
     val showNav = destination != null
     val startDestination = destination ?: Routes.LOGIN
+
+    val secureChatScreen = when (route) {
+        Routes.CHAT_CONVERSATION,
+        Routes.ROOM_CONVERSATION,
+        Routes.CHAT_NEW,
+        Routes.CHAT_CONTACTS,
+        Routes.CHAT_CREATE_ROOM,
+        -> true
+        Routes.MAIN -> selectedTab == AppTab.CHAT
+        else -> false
+    }
+    SecureScreenEffect(secureChatScreen || isTaskRelatedScreen(route, selectedTab))
 
     fun redirectToNotificationGate() {
         viewModel.markBootRoute(Routes.NOTIFICATION_GATE)
@@ -634,12 +648,14 @@ fun VazifaNavHost(
                 when (action) {
                     CreateAction.NEW_TASK -> navController.navigate(Routes.createTask())
                     CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
-                    CreateAction.SUPPORT -> {
-                        selectedTab = AppTab.CHAT
-                        viewModel.clearChatUnread()
-                    }
+                    CreateAction.SUPPORT -> showSupportSheet = true
                 }
             },
+        )
+
+        SupportContactSheet(
+            visible = showSupportSheet,
+            onDismiss = { showSupportSheet = false },
         )
     }
     }

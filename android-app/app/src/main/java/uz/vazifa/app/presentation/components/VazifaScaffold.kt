@@ -87,10 +87,12 @@ fun VazifaStackScaffold(
     title: String,
     onBack: () -> Unit,
     actions: @Composable () -> Unit = {},
+    snackbarHost: @Composable () -> Unit = {},
     content: @Composable (PaddingValues) -> Unit,
 ) {
     Scaffold(
         containerColor = LiquidTheme.bg,
+        snackbarHost = snackbarHost,
         topBar = {
             TopAppBar(
                 modifier = Modifier.drawBehind {

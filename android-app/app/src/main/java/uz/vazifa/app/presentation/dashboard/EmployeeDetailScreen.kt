@@ -173,20 +173,13 @@ private fun EmployeeProfileCard(employee: User) {
         horizontalArrangement = Arrangement.spacedBy(14.dp),
     ) {
         Box(Modifier.size(56.dp)) {
-            Box(
-                Modifier
-                    .matchParentSize()
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
-                contentAlignment = Alignment.Center,
-            ) {
-                Text(
-                    employeeInitials(employee.fullName),
-                    color = Color.White,
-                    fontWeight = FontWeight.Bold,
-                    fontSize = 18.sp,
-                )
-            }
+            uz.vazifa.app.presentation.chat.ChatAvatar(
+                name = employee.fullName,
+                online = false,
+                size = 56.dp,
+                showPresence = false,
+                avatarUrl = employee.avatarUrl,
+            )
             Box(
                 Modifier
                     .size(13.dp)

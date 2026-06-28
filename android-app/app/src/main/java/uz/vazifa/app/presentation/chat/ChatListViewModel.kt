@@ -41,6 +41,7 @@ class ChatListViewModel @Inject constructor(
     private val repo: ChatRepository,
     private val rooms: RoomRepository,
     private val chatUnread: ChatUnreadRepository,
+    private val auth: uz.vazifa.app.data.repository.AuthRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChatListUiState())
     val state = _state.asStateFlow()
@@ -230,6 +231,13 @@ class ChatListViewModel @Inject constructor(
 
     fun clearTabBadge() {
         viewModelScope.launch { chatUnread.clear() }
+    }
+
+    fun uploadAvatar(file: java.io.File, onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val url = runCatching { auth.uploadAvatar(file).avatarUrl }.getOrNull()
+            onResult(url)
+        }
     }
 
     fun onQueryChange(q: String) {

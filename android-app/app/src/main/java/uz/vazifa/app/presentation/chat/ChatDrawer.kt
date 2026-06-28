@@ -31,6 +31,7 @@ import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Contacts
 import androidx.compose.material.icons.filled.GroupAdd
 import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -88,6 +89,8 @@ fun ChatDrawerContent(
     isOpen: Boolean,
     onAction: (ChatDrawerAction) -> Unit,
     modifier: Modifier = Modifier,
+    uploadingAvatar: Boolean = false,
+    onAvatarClick: (() -> Unit)? = null,
 ) {
     val isDark = LiquidTheme.isDark
     Box(
@@ -109,6 +112,8 @@ fun ChatDrawerContent(
                 avatarUrl = userAvatarUrl,
                 isOnline = isOnline,
                 isOpen = isOpen,
+                uploadingAvatar = uploadingAvatar,
+                onAvatarClick = onAvatarClick,
             )
 
             Spacer(Modifier.height(14.dp))
@@ -171,6 +176,8 @@ private fun DrawerHeaderCard(
     avatarUrl: String?,
     isOnline: Boolean,
     isOpen: Boolean,
+    uploadingAvatar: Boolean = false,
+    onAvatarClick: (() -> Unit)? = null,
 ) {
     val slide by animateFloatAsState(
         targetValue = if (isOpen) 0f else -28f,
@@ -207,7 +214,13 @@ private fun DrawerHeaderCard(
                     .padding(16.dp),
             ) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Box {
+                    Box(
+                        Modifier.then(
+                            if (onAvatarClick != null) {
+                                Modifier.clip(CircleShape).clickable(enabled = !uploadingAvatar) { onAvatarClick() }
+                            } else Modifier,
+                        ),
+                    ) {
                         ChatAvatar(
                             name.ifBlank { "?" },
                             online = false,
@@ -215,7 +228,47 @@ private fun DrawerHeaderCard(
                             showPresence = false,
                             avatarUrl = avatarUrl,
                         )
-                        if (isOnline) {
+                        if (uploadingAvatar) {
+                            Box(
+                                Modifier
+                                    .matchParentSize()
+                                    .clip(CircleShape)
+                                    .background(Color.Black.copy(alpha = 0.4f)),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    modifier = Modifier.size(24.dp),
+                                    color = Color.White,
+                                    strokeWidth = 2.dp,
+                                )
+                            }
+                        } else if (onAvatarClick != null) {
+                            Box(
+                                Modifier
+                                    .align(Alignment.BottomEnd)
+                                    .size(22.dp)
+                                    .clip(CircleShape)
+                                    .background(LiquidTheme.bgMid)
+                                    .padding(2.dp),
+                                contentAlignment = Alignment.Center,
+                            ) {
+                                Box(
+                                    Modifier
+                                        .fillMaxSize()
+                                        .clip(CircleShape)
+                                        .background(LiquidGlass.Blue),
+                                    contentAlignment = Alignment.Center,
+                                ) {
+                                    Icon(
+                                        Icons.Default.PhotoCamera,
+                                        contentDescription = null,
+                                        tint = Color.White,
+                                        modifier = Modifier.size(12.dp),
+                                    )
+                                }
+                            }
+                        }
+                        if (isOnline && !uploadingAvatar && onAvatarClick == null) {
                             Box(
                                 Modifier
                                     .align(Alignment.BottomEnd)
@@ -338,25 +391,32 @@ private fun DrawerFooter(isOpen: Boolean) {
     )
     Box(
         Modifier
+            .fillMaxWidth()
             .alpha(alpha)
-            .clip(RoundedCornerShape(50))
-            .liquidGlassThemed(radius = 50.dp)
-            .padding(horizontal = 14.dp, vertical = 8.dp),
+            .padding(top = 8.dp, bottom = 12.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
-            )
-            Spacer(Modifier.width(8.dp))
-            Text(
-                "Vazifa Chat",
-                color = LiquidTheme.textMuted,
-                fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-            )
+        Box(
+            Modifier
+                .clip(RoundedCornerShape(50))
+                .liquidGlassThemed(radius = 50.dp)
+                .padding(horizontal = 16.dp, vertical = 9.dp),
+        ) {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.Center) {
+                Box(
+                    Modifier
+                        .size(8.dp)
+                        .clip(CircleShape)
+                        .background(Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))),
+                )
+                Spacer(Modifier.width(8.dp))
+                Text(
+                    "Vazifa Chat",
+                    color = LiquidTheme.text,
+                    fontSize = 13.sp,
+                    fontWeight = FontWeight.SemiBold,
+                )
+            }
         }
     }
 }

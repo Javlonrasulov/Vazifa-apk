@@ -15,6 +15,7 @@ import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -255,6 +256,14 @@ fun TaskDetailScreen(
                                 val assignee = a.assignee
                                 val dept = assignee?.department?.takeIf { it.isNotBlank() }
                                 val name = assignee?.fullName ?: a.assigneeId
+                                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                                uz.vazifa.app.presentation.chat.ChatAvatar(
+                                    name = assignee?.fullName ?: "?",
+                                    online = assignee?.isOnline ?: false,
+                                    size = 32.dp,
+                                    showPresence = false,
+                                    avatarUrl = assignee?.avatarUrl,
+                                )
                                 Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
                                     Text(
                                         "${localized("dept_task_to")}: $name${dept?.let { " ($it)" } ?: ""} — ${localizedStatus(a.status)}",
@@ -268,6 +277,7 @@ fun TaskDetailScreen(
                                             fontSize = 12.sp,
                                         )
                                     }
+                                }
                                 }
                             }
                             TaskDeadlineCountdown.durationBetween(task.startAt, task.deadlineAt)?.let { duration ->
@@ -293,9 +303,18 @@ fun TaskDetailScreen(
                     Text(localized("task_comments"), color = LiquidTheme.textMuted, fontSize = 13.sp)
                     task.comments.forEach { c ->
                         GlassCard(Modifier.fillMaxWidth()) {
-                            Column(Modifier.padding(12.dp)) {
-                                Text(c.author?.fullName ?: "", color = LiquidGlass.BlueLight, fontSize = 12.sp)
-                                Text(c.body, color = LiquidTheme.text)
+                            Row(Modifier.padding(12.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                                uz.vazifa.app.presentation.chat.ChatAvatar(
+                                    name = c.author?.fullName ?: "?",
+                                    online = false,
+                                    size = 36.dp,
+                                    showPresence = false,
+                                    avatarUrl = c.author?.avatarUrl,
+                                )
+                                Column(Modifier.weight(1f)) {
+                                    Text(c.author?.fullName ?: "", color = LiquidGlass.BlueLight, fontSize = 12.sp)
+                                    Text(c.body, color = LiquidTheme.text)
+                                }
                             }
                         }
                     }
@@ -418,14 +437,28 @@ fun CreateTaskScreen(
         }
     }
 
+    val submitCreate: () -> Unit = submit@{
+        when {
+            state.title.isBlank() -> viewModel.showTitleError()
+            !state.isEditMode && state.selectedIds.isEmpty() -> viewModel.showAssigneeError()
+            state.isEditMode -> viewModel.update()
+            else -> viewModel.create(createImageUri)
+        }
+    }
+
     val formContent: @Composable (PaddingValues) -> Unit = { padding ->
         Column(
             Modifier
-                .padding(padding)
-                .padding(16.dp)
-                .verticalScroll(rememberScrollState()),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
+                .fillMaxSize()
+                .padding(padding),
         ) {
+            Column(
+                Modifier
+                    .weight(1f)
+                    .padding(horizontal = 16.dp)
+                    .verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(12.dp),
+            ) {
             OutlinedTextField(
                 state.title, viewModel::onTitle,
                 label = { Text(localized("task_name")) },
@@ -546,35 +579,24 @@ fun CreateTaskScreen(
                     label = localized("task_add_photo"),
                 )
             }
-            Button(
-                onClick = {
-                    if (state.title.isBlank()) {
-                        viewModel.showTitleError()
-                        return@Button
-                    }
-                    if (state.isEditMode) viewModel.update() else viewModel.create(createImageUri)
-                },
-                enabled = state.canCreate,
-                modifier = Modifier.fillMaxWidth().height(52.dp),
-                shape = RoundedCornerShape(LiquidGlass.RadiusChip),
-                colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-            ) {
-                if (state.loading) {
-                    CircularProgressIndicator(
-                        modifier = Modifier.size(22.dp),
-                        color = androidx.compose.ui.graphics.Color.White,
-                        strokeWidth = 2.dp,
-                    )
-                } else {
-                    Text(localized(if (state.isEditMode) "com_save" else "task_create_btn"))
-                }
+                Spacer(Modifier.height(8.dp))
             }
+            CreateTaskSubmitBar(
+                isEditMode = state.isEditMode,
+                loading = state.loading,
+                onSubmit = submitCreate,
+            )
         }
     }
 
     val screenTitle = localized(if (state.isEditMode) "task_edit" else "task_create")
     if (showBack) {
-        VazifaStackScaffold(title = screenTitle, onBack = onBack, content = formContent)
+        VazifaStackScaffold(
+            title = screenTitle,
+            onBack = onBack,
+            snackbarHost = { SnackbarHost(snackbarHostState) },
+            content = formContent,
+        )
     } else {
         VazifaTabScaffold(
             title = screenTitle,
@@ -653,6 +675,38 @@ private fun CompletedTaskTiming(
 }
 
 @Composable
+private fun CreateTaskSubmitBar(
+    isEditMode: Boolean,
+    loading: Boolean,
+    onSubmit: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding()
+            .padding(horizontal = 16.dp, vertical = 12.dp),
+    ) {
+        Button(
+            onClick = onSubmit,
+            enabled = !loading,
+            modifier = Modifier.fillMaxWidth().height(52.dp),
+            shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+            colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
+        ) {
+            if (loading) {
+                CircularProgressIndicator(
+                    modifier = Modifier.size(22.dp),
+                    color = androidx.compose.ui.graphics.Color.White,
+                    strokeWidth = 2.dp,
+                )
+            } else {
+                Text(localized(if (isEditMode) "com_save" else "task_create_btn"))
+            }
+        }
+    }
+}
+
+@Composable
 private fun EmployeeSelectRow(
     contact: uz.vazifa.app.domain.model.User,
     checked: Boolean,
@@ -661,6 +715,14 @@ private fun EmployeeSelectRow(
     GlassCard(Modifier.fillMaxWidth().clickable(onClick = onToggle)) {
         Row(Modifier.padding(12.dp), verticalAlignment = Alignment.CenterVertically) {
             Checkbox(checked, onCheckedChange = { onToggle() })
+            uz.vazifa.app.presentation.chat.ChatAvatar(
+                name = contact.fullName,
+                online = contact.isOnline,
+                size = 40.dp,
+                showPresence = false,
+                avatarUrl = contact.avatarUrl,
+            )
+            androidx.compose.foundation.layout.Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(contact.fullName, color = LiquidTheme.text)
                 contact.phone?.takeIf { it.isNotBlank() }?.let { phone ->

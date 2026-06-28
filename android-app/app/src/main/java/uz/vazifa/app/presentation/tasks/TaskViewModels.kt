@@ -209,6 +209,7 @@ class CreateTaskViewModel @Inject constructor(
         _state.update { it.copy(voiceFile = null) }
     }
     fun showTitleError() = _state.update { it.copy(titleError = true) }
+    fun showAssigneeError() = _state.update { it.copy(errorKey = "task_assignee_required") }
     fun onDeadlineHours(v: String) {
         val filtered = filterDeadlineHoursInput(v)
         _state.update { current ->

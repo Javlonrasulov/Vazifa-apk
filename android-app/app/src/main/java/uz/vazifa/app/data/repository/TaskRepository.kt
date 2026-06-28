@@ -116,7 +116,7 @@ class TaskRepository @Inject constructor(
 
     private fun UserDto.toUser() = User(
         id, login, fullName, role, position, department, phone, notificationsEnabled, canAssignTasks,
-        isOnline, lastSeenAt,
+        isOnline, lastSeenAt, avatarUrl,
     )
 
     private fun TaskDto.toDomain() = Task(
