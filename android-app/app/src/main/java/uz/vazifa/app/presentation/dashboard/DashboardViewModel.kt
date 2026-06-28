@@ -11,6 +11,10 @@ import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.DashboardStats
 import uz.vazifa.app.domain.model.Task
+import uz.vazifa.app.domain.model.hasActiveAssignment
+import uz.vazifa.app.domain.model.hasCompletedAssignment
+import uz.vazifa.app.domain.model.isOverdue
+import uz.vazifa.app.domain.model.isTaskAssignable
 import javax.inject.Inject
 
 data class DashboardUiState(
@@ -33,9 +37,26 @@ class DashboardViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             runCatching {
-                val stats = tasks.getDashboardStats()
-                val list = tasks.getTasks()
                 val user = auth.currentUser()
+                val list = runCatching { tasks.getTasks() }.getOrDefault(emptyList())
+                val contacts = runCatching {
+                    tasks.getContacts().filter { it.isTaskAssignable() }
+                }.getOrDefault(emptyList())
+                val apiStats = runCatching { tasks.getDashboardStats() }.getOrNull()
+                val stats = apiStats?.let { s ->
+                    DashboardStats(
+                        totalEmployees = s.totalEmployees.takeIf { it > 0 } ?: contacts.size,
+                        activeTasks = s.activeTasks,
+                        completedTasks = s.completedTasks,
+                        overdueTasks = s.overdueTasks,
+                        todayTasks = s.todayTasks,
+                    )
+                } ?: DashboardStats(
+                    totalEmployees = contacts.size,
+                    activeTasks = list.count { it.hasActiveAssignment() },
+                    completedTasks = list.count { it.hasCompletedAssignment() },
+                    overdueTasks = list.count { it.isOverdue() },
+                )
                 _state.update {
                     it.copy(
                         stats = stats,

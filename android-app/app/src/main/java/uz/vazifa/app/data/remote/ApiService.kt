@@ -262,7 +262,7 @@ data class ChatMessageDto(
     val isDeleted: Boolean = false,
     val isPinned: Boolean = false,
     val clientId: String? = null,
-    val createdAt: String,
+    val createdAt: String? = null,
 )
 
 data class ChatPeerDto(
@@ -332,7 +332,7 @@ data class RoomMessageDto(
     val isDeleted: Boolean = false,
     val isPinned: Boolean = false,
     val clientId: String? = null,
-    val createdAt: String,
+    val createdAt: String? = null,
 )
 
 data class ChatRoomSenderDto(

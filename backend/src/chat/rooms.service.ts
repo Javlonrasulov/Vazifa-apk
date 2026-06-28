@@ -304,6 +304,7 @@ export class RoomsService {
       .leftJoinAndSelect('m.replyTo', 'replyTo')
       .leftJoinAndSelect('m.sender', 'sender')
       .where('m.roomId = :roomId', { roomId })
+      .andWhere('m.isDeleted = false')
       .orderBy('m.createdAt', 'DESC')
       .take(Math.min(limit, 100));
     if (before) qb.andWhere('m.createdAt < :before', { before: new Date(before) });

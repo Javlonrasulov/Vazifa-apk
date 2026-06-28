@@ -49,9 +49,16 @@ fun NotificationGateScreen(
             statusMessage = msgStillOff
             return
         }
-        // Bildirishnoma yoqilgan — darhol kiramiz, token fonda ro'yxatdan o'tadi.
-        authRepository.registerPushTokenAsync()
-        onGranted()
+        checking = true
+        scope.launch {
+            if (!authRepository.hasStoredSessionAsync()) {
+                checking = false
+                return@launch
+            }
+            authRepository.registerPushTokenAsync()
+            checking = false
+            onGranted()
+        }
     }
 
     LaunchedEffect(Unit) { checkAndProceed() }

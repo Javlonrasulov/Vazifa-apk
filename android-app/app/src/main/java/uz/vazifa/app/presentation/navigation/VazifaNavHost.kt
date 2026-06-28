@@ -150,11 +150,22 @@ class NavViewModel @Inject constructor(
     }
 
     suspend fun resolveSplashDestination(): String {
-        bootRoute?.let { return it }
+        bootRoute?.let { route ->
+            if (route == Routes.LOGIN) return route
+            val user = auth.restoreSessionForBoot()
+            if (user == null) {
+                bootRoute = null
+                currentUser = null
+                return Routes.LOGIN
+            }
+            currentUser = user
+            connectChatSocket()
+            return route
+        }
         val user = auth.restoreSessionForBoot()
         currentUser = user
-        if (user != null) connectChatSocket()
         if (user == null) return Routes.LOGIN
+        connectChatSocket()
         val dest = if (auth.shouldSkipNotifGate()) Routes.MAIN else Routes.NOTIFICATION_GATE
         markBootRoute(dest)
         return dest
@@ -167,12 +178,11 @@ class NavViewModel @Inject constructor(
 
     fun refreshUser(onSessionExpired: () -> Unit = {}) {
         viewModelScope.launch {
-            val hadSession = auth.hasStoredSessionAsync()
             val user = auth.currentUser()
             if (user != null) {
                 currentUser = user
                 connectChatSocket()
-            } else if (hadSession) {
+            } else {
                 currentUser = null
                 onSessionExpired()
             }
@@ -239,9 +249,7 @@ fun VazifaNavHost(
             val minWait = async { delay(350) }
             val resolved = boot.await()
             destination = resolved
-            if (resolved == Routes.MAIN) {
-                selectedTab = if (viewModel.currentUser?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
-            }
+            if (resolved == Routes.MAIN) selectedTab = AppTab.HOME
             minWait.await()
             splashDone = true
         }
@@ -281,12 +289,6 @@ fun VazifaNavHost(
         }
         lifecycleOwner.lifecycle.addObserver(observer)
         onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(canAssignTasks, selectedTab) {
-        if (!canAssignTasks && selectedTab == AppTab.HOME) {
-            selectedTab = AppTab.TASKS
-        }
     }
 
     LaunchedEffect(startDestination, splashDone) {
@@ -367,7 +369,7 @@ fun VazifaNavHost(
                         viewModel.checkAuth { _, u ->
                             u?.let { viewModel.setUser(it) }
                             viewModel.resolveAfterAuth { dest ->
-                                selectedTab = if (u?.canAssignTasks == true) AppTab.HOME else AppTab.TASKS
+                                selectedTab = AppTab.HOME
                                 navController.navigate(dest) { popUpTo(Routes.LOGIN) { inclusive = true } }
                             }
                         }
@@ -378,17 +380,25 @@ fun VazifaNavHost(
                 NotificationGateScreen(
                     authRepository = viewModel.auth,
                     onGranted = {
-                        viewModel.markBootRoute(Routes.MAIN)
-                        selectedTab = if (viewModel.currentUser?.canAssignTasks == true) {
-                            AppTab.HOME
-                        } else {
-                            AppTab.TASKS
+                        if (viewModel.currentUser == null) {
+                            viewModel.clearBootRoute()
+                            navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                            return@NotificationGateScreen
                         }
+                        viewModel.markBootRoute(Routes.MAIN)
+                        selectedTab = AppTab.HOME
                         navController.navigate(Routes.MAIN) { popUpTo(0) { inclusive = true } }
                     },
                 )
             }
             composable(Routes.MAIN) {
+                if (user == null) {
+                    LaunchedEffect(Unit) {
+                        viewModel.clearBootRoute()
+                        navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
+                    }
+                    return@composable
+                }
                 val goLogin = {
                     viewModel.clearBootRoute()
                     navController.navigate(Routes.LOGIN) { popUpTo(0) { inclusive = true } }
@@ -401,24 +411,14 @@ fun VazifaNavHost(
                 }
                 key(selectedTab) {
                 when (selectedTab) {
-                    AppTab.HOME -> if (canAssignTasks) {
-                        DirectorDashboardScreen(
-                            onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
-                            onCreateTask = { selectedTab = AppTab.CREATE },
-                            onEditTask = { navController.navigate(Routes.editTask(it)) },
-                            onSectionClick = { section ->
-                                when (section) {
-                                    DashboardSection.EMPLOYEES -> selectedTab = AppTab.EMPLOYEES
-                                    else -> navController.navigate(Routes.dashSection(section.route))
-                                }
-                            },
-                        )
-                    } else {
-                        TasksScreen(
-                            onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
-                            onEditTask = { navController.navigate(Routes.editTask(it)) },
-                        )
-                    }
+                    AppTab.HOME -> DirectorDashboardScreen(
+                        onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
+                        onCreateTask = { selectedTab = AppTab.CREATE },
+                        onEditTask = { navController.navigate(Routes.editTask(it)) },
+                        onSectionClick = { section ->
+                            navController.navigate(Routes.dashSection(section.route))
+                        },
+                    )
                     AppTab.EMPLOYEES -> if (canAssignTasks) {
                         EmployeesTabScreen(
                             onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
@@ -603,13 +603,9 @@ fun VazifaNavHost(
         if (showBottomNav && showNav) {
             VazifaBottomNav(
                 selected = selectedTab,
-                canAssignTasks = canAssignTasks,
                 chatUnreadCount = chatUnreadCount,
                 onSelect = { tab ->
-                    selectedTab = when (tab) {
-                        AppTab.HOME -> if (canAssignTasks) AppTab.HOME else AppTab.TASKS
-                        else -> tab
-                    }
+                    selectedTab = tab
                     if (tab == AppTab.CHAT) viewModel.clearChatUnread()
                     if (tab == AppTab.HOME) viewModel.refreshUser()
                 },

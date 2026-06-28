@@ -204,9 +204,28 @@ fun MessageTicks(status: ChatMessageStatus, modifier: Modifier = Modifier) {
     }
 }
 
+/** Server tarixini yuborilayotgan (optimistik) xabarlar bilan birlashtiradi */
+fun mergeChatHistory(server: List<ChatMessage>, local: List<ChatMessage>): List<ChatMessage> {
+    if (local.isEmpty()) return server
+    val serverIds = server.map { it.id }.toSet()
+    val serverClientIds = server.mapNotNull { it.clientId }.toSet()
+    val merged = server.toMutableList()
+    for (msg in local) {
+        if (msg.id in serverIds) continue
+        if (msg.clientId != null && msg.clientId in serverClientIds) continue
+        val pending = msg.status == ChatMessageStatus.SENDING ||
+            msg.status == ChatMessageStatus.FAILED ||
+            (msg.clientId != null && msg.id == msg.clientId)
+        if (pending) merged.add(msg)
+    }
+    return merged.sortedBy {
+        runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH
+    }
+}
+
 fun messagePreview(msg: ChatMessage?, strings: (String) -> String): String {
     if (msg == null) return ""
-    if (msg.isDeleted) return strings("chat_deleted_message")
+    if (msg.isDeleted) return ""
     return when (msg.type) {
         ChatMessageType.TEXT -> msg.body.orEmpty()
         ChatMessageType.IMAGE -> "📷 " + strings("chat_photo")

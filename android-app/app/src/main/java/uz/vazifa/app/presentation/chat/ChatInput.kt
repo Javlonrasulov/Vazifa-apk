@@ -15,6 +15,7 @@ import androidx.compose.animation.fadeOut
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.layout.*
@@ -46,6 +47,7 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
@@ -87,6 +89,7 @@ fun ChatInputArea(
     val sendFailedText = localized("chat_send_failed")
     val recorder = remember { VoiceRecorder(context) }
     var recording by remember { mutableStateOf(false) }
+    var recordLocked by remember { mutableStateOf(false) }
     var recordSeconds by remember { mutableStateOf(0) }
     var cancelHint by remember { mutableStateOf(false) }
     val amplitudes = remember { mutableStateListOf<Int>() }
@@ -114,14 +117,37 @@ fun ChatInputArea(
     }
 
     fun beginRecording() {
+        if (recording) return
         runCatching {
             currentFile = recorder.start()
             recording = true
+            recordLocked = false
             cancelHint = false
             onRecordingChange(true)
         }.onFailure {
             android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
         }
+    }
+
+    fun finishRecording() {
+        recording = false
+        recordLocked = false
+        cancelHint = false
+        onRecordingChange(false)
+        val file = recorder.stop()
+        if (file != null && recordSeconds >= 1) {
+            onSendVoice(file, recordSeconds, downsample(amplitudes.toList()))
+        } else {
+            file?.delete()
+        }
+    }
+
+    fun cancelRecording() {
+        recording = false
+        recordLocked = false
+        cancelHint = false
+        onRecordingChange(false)
+        recorder.cancel()
     }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -205,7 +231,7 @@ fun ChatInputArea(
         }
 
         if (recording) {
-            RecordingBar(seconds = recordSeconds, cancelHint = cancelHint, amplitudes = amplitudes)
+            RecordingBar(seconds = recordSeconds, cancelHint = cancelHint, locked = recordLocked)
         }
 
         Row(
@@ -255,19 +281,15 @@ fun ChatInputArea(
 
             if (state.input.isNotBlank()) {
                 SendButton(onClick = onSendText)
+            } else if (recording && recordLocked) {
+                SendButton(onClick = { finishRecording() })
             } else {
                 VoiceButton(
                     recording = recording,
                     onStart = { requestRecording() },
-                    onStop = {
-                        recording = false
-                        onRecordingChange(false)
-                        val file = recorder.stop()
-                        if (file != null && recordSeconds >= 1) {
-                            onSendVoice(file, recordSeconds, downsample(amplitudes.toList()))
-                        } else file?.delete()
-                    },
-                    onCancel = { recording = false; cancelHint = false; onRecordingChange(false); recorder.cancel() },
+                    onStop = { finishRecording() },
+                    onCancel = { cancelRecording() },
+                    onLock = { recordLocked = true },
                     onDragCancel = { cancelHint = it },
                 )
             }
@@ -347,19 +369,24 @@ private fun EmojiPanel(onEmoji: (String) -> Unit) {
 }
 
 @Composable
-private fun RecordingBar(seconds: Int, cancelHint: Boolean, amplitudes: List<Int>) {
+private fun RecordingBar(seconds: Int, cancelHint: Boolean, locked: Boolean) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Box(Modifier.size(10.dp).clip(CircleShape).background(LiquidGlass.Rose))
+        Box(Modifier.size(10.dp).clip(CircleShape).background(if (locked) LiquidGlass.Blue else LiquidGlass.Rose))
         Spacer(Modifier.width(8.dp))
         Text(ChatFormat.durationLabel(seconds), color = LiquidTheme.text, fontWeight = FontWeight.Bold)
         Spacer(Modifier.width(12.dp))
         Text(
-            if (cancelHint) localized("chat_voice_cancel") else localized("chat_voice_slide_cancel"),
+            when {
+                locked -> localized("chat_voice_locked")
+                cancelHint -> localized("chat_voice_cancel")
+                else -> localized("chat_voice_slide_cancel")
+            },
             color = if (cancelHint) LiquidGlass.Rose else LiquidTheme.textMuted,
             fontSize = 13.sp,
+            maxLines = 1,
         )
     }
 }
@@ -387,6 +414,7 @@ private fun VoiceButton(
     onStart: () -> Unit,
     onStop: () -> Unit,
     onCancel: () -> Unit,
+    onLock: () -> Unit,
     onDragCancel: (Boolean) -> Unit,
 ) {
     Box(
@@ -397,19 +425,26 @@ private fun VoiceButton(
                 if (recording) Brush.linearGradient(listOf(LiquidGlass.Rose, LiquidGlass.Rose.copy(alpha = 0.7f)))
                 else Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan)),
             )
-            .pointerInput(Unit) {
+            .pointerInput(recording) {
                 awaitEachGesture {
                     val down = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
                     onStart()
+                    val downAt = System.currentTimeMillis()
+                    var locked = false
                     var cancelled = false
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: break
                         val dx = change.position.x - down.position.x
-                        cancelled = dx < -120f
+                        if (!locked) cancelled = dx < -120f
                         onDragCancel(cancelled)
+                        if (!locked && System.currentTimeMillis() - downAt >= 2_000L) {
+                            locked = true
+                            onLock()
+                        }
                         if (change.changedToUp()) break
                     }
+                    if (locked) return@awaitEachGesture
                     if (cancelled) onCancel() else onStop()
                 }
             },
@@ -442,30 +477,39 @@ fun MessageActionSheet(
                 ) {
                     items(ReactionEmojis.size) { i ->
                         Box(
-                            Modifier.size(40.dp).clip(CircleShape).clickable { onReact(ReactionEmojis[i]) },
+                            Modifier
+                                .size(42.dp)
+                                .clip(CircleShape)
+                                .background(LiquidTheme.textMuted.copy(alpha = 0.08f))
+                                .clickable { onReact(ReactionEmojis[i]) },
                             contentAlignment = Alignment.Center,
                         ) {
-                            Text(ReactionEmojis[i], fontSize = 24.sp)
+                            Text(ReactionEmojis[i], fontSize = 22.sp)
                         }
                     }
                 }
             }
             Spacer(Modifier.height(10.dp))
-            GlassCard(radius = 20.dp, modifier = Modifier.width(220.dp)) {
-                Column(Modifier.padding(vertical = 6.dp)) {
-                    ActionItem(Icons.AutoMirrored.Filled.Reply, localized("chat_reply"), onReply)
+            GlassCard(radius = 20.dp, modifier = Modifier.width(268.dp)) {
+                Column(Modifier.padding(vertical = 8.dp)) {
+                    ActionItem(Icons.AutoMirrored.Filled.Reply, localized("chat_reply"), LiquidGlass.Blue, onReply)
                     if (canCopy) {
-                        ActionItem(Icons.Default.ContentCopy, localized("chat_copy"), onCopy)
+                        ActionItem(Icons.Default.ContentCopy, localized("chat_copy"), LiquidGlass.Violet, onCopy)
                     }
                     if (!message.isDeleted) {
-                        ActionItem(Icons.AutoMirrored.Filled.Forward, localized("chat_forward"), onForward)
+                        ActionItem(Icons.AutoMirrored.Filled.Forward, localized("chat_forward"), LiquidGlass.Cyan, onForward)
                     }
                     if (isMine && message.type == ChatMessageType.TEXT && !message.isDeleted) {
-                        ActionItem(Icons.Default.Edit, localized("chat_edit"), onEdit)
+                        ActionItem(Icons.Default.Edit, localized("chat_edit"), LiquidGlass.Amber, onEdit)
                     }
-                    ActionItem(Icons.Default.PushPin, localized(if (message.isPinned) "chat_unpin" else "chat_pin"), onPin)
+                    ActionItem(
+                        Icons.Default.PushPin,
+                        localized(if (message.isPinned) "chat_unpin" else "chat_pin"),
+                        LiquidGlass.Emerald,
+                        onPin,
+                    )
                     if (!message.isDeleted) {
-                        ActionItem(Icons.Default.Delete, localized("chat_delete"), onDelete, danger = true)
+                        ActionItem(Icons.Default.Delete, localized("chat_delete"), LiquidGlass.Rose, onDelete, danger = true)
                     }
                 }
             }
@@ -474,14 +518,41 @@ fun MessageActionSheet(
 }
 
 @Composable
-private fun ActionItem(icon: ImageVector, label: String, onClick: () -> Unit, danger: Boolean = false) {
+private fun ActionItem(
+    icon: ImageVector,
+    label: String,
+    accent: Color,
+    onClick: () -> Unit,
+    danger: Boolean = false,
+) {
+    val iconBg = accent.copy(alpha = if (LiquidTheme.isDark) 0.20f else 0.10f)
+    val iconBorder = accent.copy(alpha = if (LiquidTheme.isDark) 0.35f else 0.22f)
     Row(
-        Modifier.fillMaxWidth().clickable(onClick = onClick).padding(horizontal = 16.dp, vertical = 12.dp),
+        Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(14.dp))
+            .clickable(onClick = onClick)
+            .padding(horizontal = 14.dp, vertical = 11.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
-        Icon(icon, null, tint = if (danger) LiquidGlass.Rose else LiquidGlass.Blue, modifier = Modifier.size(20.dp))
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(iconBg)
+                .border(1.dp, iconBorder, CircleShape),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, null, tint = accent, modifier = Modifier.size(20.dp))
+        }
         Spacer(Modifier.width(14.dp))
-        Text(label, color = if (danger) LiquidGlass.Rose else LiquidTheme.text, fontSize = 15.sp)
+        Text(
+            label,
+            color = if (danger) LiquidGlass.Rose else LiquidTheme.text,
+            fontSize = 15.sp,
+            fontWeight = FontWeight.Medium,
+            modifier = Modifier.weight(1f),
+        )
     }
 }
 

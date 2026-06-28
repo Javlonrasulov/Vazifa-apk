@@ -169,6 +169,7 @@ class AuthRepository @Inject constructor(
      * vaqtincha tayyor bo'lmasa ham foydalanuvchi ilovaga kira oladi.
      */
     suspend fun shouldSkipNotifGate(): Boolean {
+        if (!hasStoredSessionAsync()) return false
         if (!areNotificationsEnabled()) {
             setNotifRegistered(false)
             return false
@@ -198,24 +199,31 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /** Ilova ochilishida tez tekshiruv — tarmoq sekin bo'lsa 2.5s dan keyin kesh ishlatiladi. */
+    /**
+     * Ilova ochilishi: faqat server tasdiqlagan yoki offline rejimda
+     * to'liq token + kesh bo'lsa sessiya qabul qilinadi.
+     * Vaqt tugasa yoki sessiya yaroqsiz bo'lsa — login ekrani.
+     */
     suspend fun restoreSessionForBoot(): UserDto? {
         val prefs = loadPrefs()
         val access = prefs[KEY_ACCESS]
-        if (access.isNullOrBlank()) {
-            context.dataStore.edit { it.remove(KEY_USER) }
+        val refresh = prefs[KEY_REFRESH]
+        if (access.isNullOrBlank() || refresh.isNullOrBlank()) {
+            if (!access.isNullOrBlank() || prefs[KEY_USER] != null) {
+                logout()
+            }
             return null
         }
 
         loadTokensFromPrefs(prefs)
 
-        return withTimeoutOrNull(2_500) {
-            try {
+        return try {
+            withTimeoutOrNull(5_000) {
                 fetchUserFromServer()
-            } catch (_: IOException) {
-                loadCachedUser(prefs)
             }
-        } ?: loadCachedUser(prefs)
+        } catch (_: IOException) {
+            loadCachedUser(prefs)?.takeIf { it.id.isNotBlank() }
+        }
     }
 
     suspend fun restoreSession(): UserDto? {

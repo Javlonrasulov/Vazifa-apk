@@ -60,6 +60,7 @@ export class ChatService {
           );
         }),
       )
+      .andWhere('m.isDeleted = false')
       .orderBy('m.createdAt', 'DESC')
       .take(Math.min(limit, 100));
 

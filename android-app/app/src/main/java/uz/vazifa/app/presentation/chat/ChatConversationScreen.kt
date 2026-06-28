@@ -372,7 +372,7 @@ private fun MessageList(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val reversed = remember(state.messages) { state.messages.asReversed() }
+    val reversed = remember(state.messages) { state.messages.filter { !it.isDeleted }.asReversed() }
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {
@@ -479,10 +479,7 @@ private fun BubbleContent(msg: ChatMessage, mine: Boolean) {
             ReplyPreview(reply, mine)
             Spacer(Modifier.height(4.dp))
         }
-        if (msg.isDeleted) {
-            Text(localized("chat_deleted_message"), color = mutedColor, fontStyle = androidx.compose.ui.text.font.FontStyle.Italic, fontSize = 14.sp)
-        } else {
-            when (msg.type) {
+        when (msg.type) {
                 ChatMessageType.IMAGE -> ImageContent(msg)
                 ChatMessageType.VIDEO -> VideoContent(msg)
                 ChatMessageType.VOICE -> VoiceContent(msg, mine)
@@ -495,7 +492,6 @@ private fun BubbleContent(msg: ChatMessage, mine: Boolean) {
                 if (msg.type != ChatMessageType.TEXT) Spacer(Modifier.height(4.dp))
                 Text(it, color = textColor, fontSize = 15.sp, lineHeight = 20.sp)
             }
-        }
         Spacer(Modifier.height(2.dp))
         Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.align(Alignment.End)) {
             if (msg.isEdited) {
@@ -503,7 +499,7 @@ private fun BubbleContent(msg: ChatMessage, mine: Boolean) {
                 Spacer(Modifier.width(4.dp))
             }
             Text(ChatFormat.time(msg.createdAt), color = mutedColor, fontSize = 11.sp)
-            if (mine && !msg.isDeleted) {
+            if (mine) {
                 Spacer(Modifier.width(4.dp))
                 MessageTicks(msg.status)
             }
@@ -585,12 +581,24 @@ private fun VideoContent(msg: ChatMessage) {
 @Composable
 private fun VoiceContent(msg: ChatMessage, mine: Boolean) {
     val context = LocalContext.current
+    val scope = rememberCoroutineScope()
     val player = remember { ChatAudioPlayer() }
-    val url = msg.meta?.fileUrl?.let { MediaUrl.fromFilePath(it) } ?: msg.filePath?.let { MediaUrl.fromFilePath(it) } ?: return
+    val remoteUrl = remember(msg.id, msg.filePath, msg.meta?.fileUrl) {
+        val path = msg.filePath?.takeIf { it.isNotBlank() }
+        val url = msg.meta?.fileUrl?.takeIf { it.isNotBlank() }
+        when {
+            !url.isNullOrBlank() && url.startsWith("http") -> url
+            !path.isNullOrBlank() -> MediaUrl.resolve(path, url)
+            !url.isNullOrBlank() -> MediaUrl.fromFilePath(url)
+            else -> null
+        }
+    } ?: return
     var playing by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
     var speed by remember { mutableStateOf(1f) }
     val tint = if (mine) Color.White else LiquidGlass.Blue
+    val playFailedText = localized("chat_voice_play_failed")
 
     DisposableEffect(Unit) { onDispose { player.release() } }
     LaunchedEffect(playing) {
@@ -602,12 +610,36 @@ private fun VoiceContent(msg: ChatMessage, mine: Boolean) {
 
     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.padding(2.dp)) {
         Box(
-            Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.18f)).clickable {
-                playing = player.toggle(url, speed, onProgress = { progress = it }, onComplete = { playing = false; progress = 0f })
+            Modifier.size(40.dp).clip(CircleShape).background(tint.copy(alpha = 0.18f)).clickable(enabled = !loading) {
+                if (playing) {
+                    player.pause()
+                    playing = false
+                    return@clickable
+                }
+                loading = true
+                scope.launch {
+                    val started = player.toggleRemote(
+                        context = context,
+                        remoteUrl = remoteUrl,
+                        speed = speed,
+                        onProgress = { progress = it },
+                        onComplete = { playing = false; progress = 0f },
+                        onError = {
+                            playing = false
+                            android.widget.Toast.makeText(context, playFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                    )
+                    playing = started
+                    loading = false
+                }
             },
             contentAlignment = Alignment.Center,
         ) {
-            Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = tint, modifier = Modifier.size(24.dp))
+            if (loading) {
+                Text("...", color = tint, fontSize = 12.sp)
+            } else {
+                Icon(if (playing) Icons.Default.Pause else Icons.Default.PlayArrow, null, tint = tint, modifier = Modifier.size(24.dp))
+            }
         }
         Spacer(Modifier.width(8.dp))
         Waveform(
@@ -1017,7 +1049,7 @@ private fun RoomMessageList(
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
-    val reversed = remember(state.messages) { state.messages.asReversed() }
+    val reversed = remember(state.messages) { state.messages.filter { !it.isDeleted }.asReversed() }
 
     LaunchedEffect(state.messages.size) {
         if (state.messages.isNotEmpty()) {

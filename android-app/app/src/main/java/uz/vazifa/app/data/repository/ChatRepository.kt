@@ -24,6 +24,7 @@ import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatPeer
 import uz.vazifa.app.domain.model.Conversation
 import java.io.File
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -181,7 +182,7 @@ fun ChatMessageDto.toDomain(): ChatMessage {
         isDeleted = isDeleted,
         isPinned = isPinned,
         clientId = clientId,
-        createdAt = createdAt,
+        createdAt = createdAt?.takeIf { it.isNotBlank() } ?: Instant.now().toString(),
     )
 }
 

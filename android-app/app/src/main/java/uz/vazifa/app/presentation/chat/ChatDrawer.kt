@@ -104,6 +104,7 @@ fun ChatDrawerContent(
             Modifier
                 .fillMaxSize()
                 .statusBarsPadding()
+                .navigationBarsPadding()
                 .padding(horizontal = 14.dp, vertical = 12.dp),
         ) {
             DrawerHeaderCard(

@@ -47,11 +47,17 @@ class ChatViewModel @Inject constructor(
     private var peerId: String = ""
     private var currentUserId: String = ""
     private var stopTypingJob: Job? = null
+    private var historyJob: Job? = null
     private var socketObserving = false
     private val hiddenIds = mutableSetOf<String>()
 
-    private fun applyHidden(list: List<ChatMessage>): List<ChatMessage> =
-        if (hiddenIds.isEmpty()) list else list.filter { it.id !in hiddenIds }
+    private fun applyHidden(list: List<ChatMessage>): List<ChatMessage> {
+        val filtered = list.filter { !it.isDeleted }
+        if (hiddenIds.isEmpty()) return filtered
+        return filtered.filter {
+            it.id !in hiddenIds && (it.clientId == null || it.clientId !in hiddenIds)
+        }
+    }
 
     fun isMine(msg: ChatMessage): Boolean = msg.senderId == currentUserId
 
@@ -62,6 +68,7 @@ class ChatViewModel @Inject constructor(
         this.peerId = peerId
         this.currentUserId = currentUserId
         if (peerChanged) {
+            hiddenIds.clear()
             _state.value = ChatUiState(loading = true)
         }
         initialPeer?.let {
@@ -77,7 +84,9 @@ class ChatViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repo.loadAliases(currentUserId) }
             resolvePeerInfo(initialPeer)
-            loadHistory()
+            if (peerChanged || _state.value.messages.isEmpty()) {
+                loadHistory()
+            }
         }
     }
 
@@ -112,11 +121,15 @@ class ChatViewModel @Inject constructor(
     }
 
     private fun loadHistory() {
-        viewModelScope.launch {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             runCatching { repo.getHistory(peerId, before = null) }
                 .onSuccess { list ->
-                    _state.update { it.copy(messages = applyHidden(list), loading = false, hasMore = list.size >= 40) }
+                    _state.update { st ->
+                        val merged = mergeChatHistory(applyHidden(list), st.messages)
+                        st.copy(messages = merged, loading = false, hasMore = list.size >= 40)
+                    }
                     markIncomingRead()
                 }
                 .onFailure { _state.update { it.copy(loading = false) } }
@@ -158,10 +171,10 @@ class ChatViewModel @Inject constructor(
                         val m = ev.message.toDomain()
                         if (involvesPeer(m)) upsert(m)
                     }
-                    is ChatEvent.Deleted -> _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (it.id == ev.id) it.copy(isDeleted = true, body = null, meta = null) else it
-                        })
+                    is ChatEvent.Deleted -> {
+                        val target = _state.value.messages.find { it.id == ev.id } ?: return@collect
+                        if (!involvesPeer(target)) return@collect
+                        _state.update { st -> st.copy(messages = st.messages.filter { it.id != ev.id }) }
                     }
                     is ChatEvent.Status -> _state.update { st ->
                         st.copy(messages = st.messages.map {
@@ -193,6 +206,7 @@ class ChatViewModel @Inject constructor(
             (m.senderId == currentUserId && m.receiverId == peerId)
 
     private fun upsert(msg: ChatMessage) {
+        if (msg.id in hiddenIds || (msg.clientId != null && msg.clientId in hiddenIds)) return
         _state.update { st ->
             val list = st.messages.toMutableList()
             val byId = list.indexOfFirst { it.id == msg.id }
@@ -346,13 +360,14 @@ class ChatViewModel @Inject constructor(
     }
 
     fun delete(msg: ChatMessage) {
-        _state.update { st -> st.copy(messages = st.messages.map { if (it.id == msg.id) it.copy(isDeleted = true, body = null, meta = null) else it }) }
+        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id }) }
         viewModelScope.launch { runCatching { repo.delete(msg.id) } }
     }
 
     fun hideForMe(msg: ChatMessage) {
         hiddenIds.add(msg.id)
-        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id }) }
+        msg.clientId?.let { hiddenIds.add(it) }
+        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id && it.clientId != msg.id }) }
     }
 
     suspend fun loadForwardTargets(): List<ChatPeer> =

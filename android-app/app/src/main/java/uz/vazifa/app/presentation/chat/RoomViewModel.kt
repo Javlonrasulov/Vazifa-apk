@@ -52,6 +52,7 @@ class RoomViewModel @Inject constructor(
     private var roomId: String = ""
     private var currentUserId: String = ""
     private var socketObserving = false
+    private var historyJob: Job? = null
     private val hiddenIds = mutableSetOf<String>()
     private var stopTypingJob: Job? = null
     private val typingUsers = mutableMapOf<String, Pair<String, String>>() // userId -> (name, action)
@@ -65,6 +66,7 @@ class RoomViewModel @Inject constructor(
         this.roomId = roomId
         this.currentUserId = currentUserId
         if (roomChanged) {
+            hiddenIds.clear()
             _state.value = RoomUiState(loading = true)
         }
         repo.connect()
@@ -75,19 +77,44 @@ class RoomViewModel @Inject constructor(
         viewModelScope.launch {
             runCatching { repo.get(roomId) }.onSuccess { r -> _state.update { it.copy(room = r) } }
             runCatching { repo.members(roomId) }.onSuccess { m -> _state.update { it.copy(members = m) } }
-            loadHistory()
+            if (roomChanged || _state.value.messages.isEmpty()) {
+                loadHistory()
+            }
         }
     }
 
     private fun loadHistory() {
-        viewModelScope.launch {
+        historyJob?.cancel()
+        historyJob = viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             runCatching { repo.history(roomId, before = null) }
                 .onSuccess { list ->
-                    _state.update { it.copy(messages = list.filter { it.id !in hiddenIds }, loading = false, hasMore = list.size >= 40) }
+                    _state.update { st ->
+                        val visible = list.filter { !it.isDeleted && it.id !in hiddenIds && (it.clientId == null || it.clientId !in hiddenIds) }
+                        val merged = mergeRoomHistory(visible, st.messages)
+                        st.copy(messages = merged, loading = false, hasMore = list.size >= 40)
+                    }
                     markRead()
                 }
                 .onFailure { _state.update { it.copy(loading = false) } }
+        }
+    }
+
+    private fun mergeRoomHistory(server: List<RoomMessage>, local: List<RoomMessage>): List<RoomMessage> {
+        if (local.isEmpty()) return server
+        val serverIds = server.map { it.id }.toSet()
+        val serverClientIds = server.mapNotNull { it.clientId }.toSet()
+        val merged = server.toMutableList()
+        for (msg in local) {
+            if (msg.id in serverIds) continue
+            if (msg.clientId != null && msg.clientId in serverClientIds) continue
+            val pending = msg.status == ChatMessageStatus.SENDING ||
+                msg.status == ChatMessageStatus.FAILED ||
+                (msg.clientId != null && msg.id == msg.clientId)
+            if (pending) merged.add(msg)
+        }
+        return merged.sortedBy {
+            runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH
         }
     }
 
@@ -122,9 +149,7 @@ class RoomViewModel @Inject constructor(
                     }
                     is ChatEvent.RoomUpdated -> if (ev.message.roomId == roomId) upsert(ev.message.toDomain())
                     is ChatEvent.RoomDeleted -> if (ev.roomId == roomId) _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (it.id == ev.id) it.copy(isDeleted = true, body = null, meta = null) else it
-                        })
+                        st.copy(messages = st.messages.filter { it.id != ev.id })
                     }
                     is ChatEvent.RoomTyping -> if (ev.roomId == roomId && ev.userId != currentUserId) {
                         if (ev.typing) onTyping(ev.userId, ev.fullName, ev.action) else clearTyping(ev.userId)
@@ -297,7 +322,7 @@ class RoomViewModel @Inject constructor(
     }
 
     fun delete(msg: RoomMessage) {
-        _state.update { st -> st.copy(messages = st.messages.map { if (it.id == msg.id) it.copy(isDeleted = true, body = null, meta = null) else it }) }
+        _state.update { st -> st.copy(messages = st.messages.filter { it.id != msg.id }) }
         viewModelScope.launch { runCatching { repo.delete(msg.id, room = true) } }
     }
 

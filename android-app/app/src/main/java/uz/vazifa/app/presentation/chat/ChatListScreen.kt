@@ -6,8 +6,11 @@ import androidx.compose.animation.core.tween
 import androidx.compose.animation.expandVertically
 import androidx.compose.animation.fadeIn
 import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.shrinkVertically
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -22,6 +25,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
@@ -43,12 +47,9 @@ import androidx.compose.material.icons.filled.Menu
 import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.Verified
-import androidx.compose.material3.DrawerValue
 import androidx.compose.material3.Icon
-import androidx.compose.material3.ModalDrawerSheet
-import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.rememberDrawerState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -63,6 +64,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.window.Dialog
+import androidx.compose.ui.window.DialogProperties
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
@@ -110,9 +113,7 @@ fun ChatListScreen(
     viewModel: ChatListViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val scope = rememberCoroutineScope()
-    val drawerState = rememberDrawerState(DrawerValue.Closed)
-    val drawerOpen = drawerState.isOpen
+    var drawerOpen by remember { mutableStateOf(false) }
     var appActive by remember { mutableStateOf(true) }
 
     LaunchedEffect(currentUserId) {
@@ -143,42 +144,11 @@ fun ChatListScreen(
 
     val drawerOnline = state.connected || appActive
 
-    ModalNavigationDrawer(
-        drawerState = drawerState,
-        scrimColor = Color.Black.copy(alpha = 0.32f),
-        drawerContent = {
-            ModalDrawerSheet(
-                modifier = Modifier
-                    .fillMaxHeight()
-                    .width(312.dp),
-                drawerContainerColor = Color.Transparent,
-                drawerTonalElevation = 0.dp,
-                drawerShape = RoundedCornerShape(topEnd = 20.dp),
-            ) {
-                ChatDrawerContent(
-                    userName = currentUserName,
-                    userSubtitle = if (drawerOnline) localized("chat_online") else localized("chat_offline"),
-                    userAvatarUrl = currentUserAvatar,
-                    isOnline = drawerOnline,
-                    isOpen = drawerOpen,
-                    onAction = { action ->
-                        scope.launch { drawerState.close() }
-                        when (action) {
-                            ChatDrawerAction.PROFILE, ChatDrawerAction.SETTINGS -> onOpenProfile()
-                            ChatDrawerAction.CONTACTS -> onOpenContacts()
-                            ChatDrawerAction.NEW_GROUP -> onNewGroup()
-                            ChatDrawerAction.NEW_CHANNEL -> onNewChannel()
-                            ChatDrawerAction.SAVED -> onComingSoon()
-                        }
-                    },
-                )
-            }
-        },
-    ) {
+    Box(Modifier.fillMaxSize()) {
         ChatListContent(
             state = state,
             currentUserId = currentUserId,
-            onMenu = { scope.launch { drawerState.open() } },
+            onMenu = { drawerOpen = true },
             onNewChat = onNewChat,
             onQueryChange = viewModel::onQueryChange,
             onRememberPeer = viewModel::rememberPeer,
@@ -187,6 +157,61 @@ fun ChatListScreen(
             onNewGroup = onNewGroup,
             onNewChannel = onNewChannel,
         )
+    }
+
+    if (drawerOpen) {
+        Dialog(
+            onDismissRequest = { drawerOpen = false },
+            properties = DialogProperties(
+                usePlatformDefaultWidth = false,
+                decorFitsSystemWindows = false,
+            ),
+        ) {
+            Surface(
+                modifier = Modifier.fillMaxSize(),
+                color = Color.Transparent,
+            ) {
+                Box(Modifier.fillMaxSize()) {
+                    Box(
+                        Modifier
+                            .fillMaxSize()
+                            .background(Color.Black.copy(alpha = 0.32f))
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { drawerOpen = false },
+                            ),
+                    )
+                    AnimatedVisibility(
+                        visible = true,
+                        enter = slideInHorizontally(tween(320)) { -it },
+                        exit = slideOutHorizontally(tween(280)) { -it },
+                        modifier = Modifier.align(Alignment.CenterStart),
+                    ) {
+                        ChatDrawerContent(
+                            modifier = Modifier
+                                .fillMaxHeight()
+                                .width(312.dp),
+                            userName = currentUserName,
+                            userSubtitle = if (drawerOnline) localized("chat_online") else localized("chat_offline"),
+                            userAvatarUrl = currentUserAvatar,
+                            isOnline = drawerOnline,
+                            isOpen = drawerOpen,
+                            onAction = { action ->
+                                drawerOpen = false
+                                when (action) {
+                                    ChatDrawerAction.PROFILE, ChatDrawerAction.SETTINGS -> onOpenProfile()
+                                    ChatDrawerAction.CONTACTS -> onOpenContacts()
+                                    ChatDrawerAction.NEW_GROUP -> onNewGroup()
+                                    ChatDrawerAction.NEW_CHANNEL -> onNewChannel()
+                                    ChatDrawerAction.SAVED -> onComingSoon()
+                                }
+                            },
+                        )
+                    }
+                }
+            }
+        }
     }
 }
 

@@ -16,8 +16,10 @@ import { RoomsService } from './rooms.service';
 import { UsersService } from '../users/users.service';
 import { NotificationsService, FCM_CHANNEL_TASKS, FCM_CHANNEL_CHAT } from '../notifications/notifications.service';
 import { chatPushText } from './chat-i18n';
+import { chatMessageToPayload } from './chat-message.util';
 import { SendMessageDto, TypingDto, MarkReadDto, ReactDto } from './dto/chat.dto';
 import { User } from '../users/entities/user.entity';
+import { ChatMessage } from './entities/chat-message.entity';
 
 interface AuthedSocket extends Socket {
   userId?: string;
@@ -54,8 +56,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   async relayMessage(sender: User, message: { id: string; receiverId: string; senderId: string; type: any; body: string | null }) {
-    this.emitToUser(message.receiverId, 'message:new', message);
-    this.emitToUser(message.senderId, 'message:new', message);
+    const payload = chatMessageToPayload(message as ChatMessage);
+    this.emitToUser(message.receiverId, 'message:new', payload);
+    this.emitToUser(message.senderId, 'message:new', payload);
     if (this.isOnline(message.receiverId)) {
       this.emitToUser(message.senderId, 'message:status', { id: message.id, status: 'delivered' });
     }
@@ -71,8 +74,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   relayUpdated(message: { senderId: string; receiverId: string }) {
-    this.emitToUser(message.senderId, 'message:updated', message);
-    this.emitToUser(message.receiverId, 'message:updated', message);
+    const payload = chatMessageToPayload(message as ChatMessage);
+    this.emitToUser(message.senderId, 'message:updated', payload);
+    this.emitToUser(message.receiverId, 'message:updated', payload);
   }
 
   relayDeleted(senderId: string, receiverId: string, id: string) {
@@ -159,10 +163,10 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const message = await this.chat.createMessage(client.user, dto, receiverOnline);
     if (!message) return;
 
-    this.emitToUser(dto.receiverId, 'message:new', message);
-    // Jo'natuvchiga server idsi bilan tasdiq (optimistik UI dedup uchun clientId)
-    client.emit('message:sent', message);
-    this.emitToUser(client.user.id, 'message:new', message);
+    const payload = chatMessageToPayload(message);
+    this.emitToUser(dto.receiverId, 'message:new', payload);
+    client.emit('message:sent', payload);
+    this.emitToUser(client.user.id, 'message:new', payload);
 
     if (receiverOnline) {
       this.emitToUser(client.user.id, 'message:status', {
@@ -224,8 +228,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.userId) return;
     const msg = await this.chat.react(client.userId, dto.id, dto.emoji);
     if (!msg) return;
-    this.emitToUser(msg.senderId, 'message:updated', msg);
-    this.emitToUser(msg.receiverId, 'message:updated', msg);
+    const payload = chatMessageToPayload(msg);
+    this.emitToUser(msg.senderId, 'message:updated', payload);
+    this.emitToUser(msg.receiverId, 'message:updated', payload);
   }
 
   @SubscribeMessage('message:edit')
@@ -236,8 +241,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.userId) return;
     const msg = await this.chat.editMessage(client.userId, dto.id, dto.body);
     if (!msg) return;
-    this.emitToUser(msg.senderId, 'message:updated', msg);
-    this.emitToUser(msg.receiverId, 'message:updated', msg);
+    const payload = chatMessageToPayload(msg);
+    this.emitToUser(msg.senderId, 'message:updated', payload);
+    this.emitToUser(msg.receiverId, 'message:updated', payload);
   }
 
   @SubscribeMessage('message:delete')
@@ -253,8 +259,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     if (!client.userId) return;
     const msg = await this.chat.pin(client.userId, dto.id);
     if (!msg) return;
-    this.emitToUser(msg.senderId, 'message:updated', msg);
-    this.emitToUser(msg.receiverId, 'message:updated', msg);
+    const payload = chatMessageToPayload(msg);
+    this.emitToUser(msg.senderId, 'message:updated', payload);
+    this.emitToUser(msg.receiverId, 'message:updated', payload);
   }
 
   @SubscribeMessage('presence:ping')

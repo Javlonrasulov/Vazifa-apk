@@ -99,28 +99,21 @@ private data class DockTab(
 @Composable
 fun VazifaBottomNav(
     selected: AppTab,
-    canAssignTasks: Boolean,
     chatUnreadCount: Int,
     onSelect: (AppTab) -> Unit,
     onCreateClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
-    val tabs = buildList {
-        if (canAssignTasks) {
-            add(DockTab(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")))
-        }
-        add(DockTab(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")))
-        add(DockTab(AppTab.CHAT, Icons.Default.Chat, localized("nav_chat")))
-        add(DockTab(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")))
-    }
+    val tabs = listOf(
+        DockTab(AppTab.HOME, Icons.Default.Dashboard, localized("nav_home")),
+        DockTab(AppTab.TASKS, Icons.Default.Assignment, localized("nav_tasks")),
+        DockTab(AppTab.CHAT, Icons.Default.Chat, localized("nav_chat")),
+        DockTab(AppTab.PROFILE, Icons.Default.Person, localized("nav_profile")),
+    )
 
     val isDark = LiquidTheme.isDark
     val inactiveTint = if (isDark) LiquidTheme.textMuted else Color(0xFF475569)
-    val navigableSelected = when (selected) {
-        AppTab.CREATE, AppTab.EMPLOYEES, AppTab.DEPT_TASKS -> null
-        AppTab.HOME -> if (canAssignTasks) AppTab.HOME else AppTab.TASKS
-        else -> selected
-    }
+    val navigableSelected = selected.takeIf { it != AppTab.CREATE && it != AppTab.EMPLOYEES && it != AppTab.DEPT_TASKS }
 
     Box(
         modifier

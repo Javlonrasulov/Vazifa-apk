@@ -326,6 +326,8 @@ export class TasksService {
       const qb = this.assignRepo.createQueryBuilder('a');
       if (ownedOnly) {
         qb.innerJoin('a.task', 't', 't.createdById = :uid', { uid: user.id });
+      } else {
+        qb.where('a.assigneeId = :uid', { uid: user.id });
       }
       return qb;
     };
@@ -333,28 +335,30 @@ export class TasksService {
     const [totalEmployees, activeTasks, completedTasks, overdueTasks, todayTasks] =
       await Promise.all([
         this.usersService.findEmployeesAndDirectors().then(
-          (u) => u.filter((x) => x.role === UserRole.EMPLOYEE).length,
+          (u) => u.filter((x) => x.login !== 'xodim1').length,
         ),
         assignmentQb()
-          .where('a.status NOT IN (:...statuses)', {
+          .andWhere('a.status NOT IN (:...statuses)', {
             statuses: [TaskStatus.COMPLETED, TaskStatus.CANCELLED],
           })
           .getCount(),
         assignmentQb()
-          .where('a.status = :status', { status: TaskStatus.COMPLETED })
+          .andWhere('a.status = :status', { status: TaskStatus.COMPLETED })
           .getCount(),
         this.getOverdueAssignments()
           .then((items) =>
             ownedOnly
               ? items.filter((a) => a.task.createdById === user.id)
-              : items,
+              : items.filter((a) => a.assigneeId === user.id),
           )
           .then((a) => a.length),
         (ownedOnly
           ? this.taskRepo
               .createQueryBuilder('t')
               .where('t.createdById = :uid', { uid: user.id })
-          : this.taskRepo.createQueryBuilder('t')
+          : this.taskRepo
+              .createQueryBuilder('t')
+              .innerJoin('t.assignments', 'a', 'a.assigneeId = :uid', { uid: user.id })
         )
           .andWhere('t.deadlineAt >= :start', { start: startOfDay })
           .andWhere('t.deadlineAt <= :end', { end: now })

@@ -1,7 +1,6 @@
 import {
   Body,
   Controller,
-  ForbiddenException,
   Get,
   NotFoundException,
   Param,
@@ -61,7 +60,6 @@ export class TasksController {
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)
   dashboardStats(@Request() req: { user: User }) {
-    if (!req.user.canAssignTasks) throw new ForbiddenException();
     return this.tasksService.getDashboardStats(req.user);
   }
 

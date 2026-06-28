@@ -19,6 +19,7 @@ import uz.vazifa.app.domain.model.ChatRoomType
 import uz.vazifa.app.domain.model.RoomMember
 import uz.vazifa.app.domain.model.RoomMessage
 import java.io.File
+import java.time.Instant
 import javax.inject.Inject
 import javax.inject.Singleton
 
@@ -155,7 +156,7 @@ fun RoomMessageDto.toDomain(): RoomMessage {
         isDeleted = isDeleted,
         isPinned = isPinned,
         clientId = clientId,
-        createdAt = createdAt,
+        createdAt = createdAt?.takeIf { it.isNotBlank() } ?: Instant.now().toString(),
     )
 }
 
