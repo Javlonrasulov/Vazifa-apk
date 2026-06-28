@@ -55,9 +55,13 @@ fun NotificationGateScreen(
                 checking = false
                 return@launch
             }
-            authRepository.registerPushTokenAsync()
+            val ok = authRepository.registerPushToken()
             checking = false
-            onGranted()
+            if (ok) {
+                onGranted()
+            } else {
+                statusMessage = msgFcmError
+            }
         }
     }
 

@@ -44,9 +44,9 @@ class MainActivity : ComponentActivity() {
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
     ) { granted ->
-        if (granted) {
-            CoroutineScope(Dispatchers.IO).launch {
-                runCatching { authRepository.syncFcmTokenIfPossible() }
+        CoroutineScope(Dispatchers.IO).launch {
+            if (granted) {
+                runCatching { authRepository.registerPushToken() }
             }
         }
     }
@@ -63,6 +63,10 @@ class MainActivity : ComponentActivity() {
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+        } else {
+            CoroutineScope(Dispatchers.IO).launch {
+                runCatching { authRepository.registerPushToken() }
+            }
         }
 
         setContent {

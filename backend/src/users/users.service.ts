@@ -359,6 +359,11 @@ export class UsersService implements OnModuleInit {
     return this.repo.save(user);
   }
 
+  async clearFcmToken(token: string) {
+    if (!token?.trim()) return;
+    await this.repo.update({ fcmToken: token }, { fcmToken: null, notificationsEnabled: false });
+  }
+
   async setAvatar(userId: string, filePath: string | null) {
     const user = await this.findById(userId);
     if (!user) throw new NotFoundException('Foydalanuvchi topilmadi');

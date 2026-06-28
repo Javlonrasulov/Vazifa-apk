@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as admin from 'firebase-admin';
+import { UsersService } from '../users/users.service';
 
 export const FCM_CHANNEL_TASKS = 'vazifa_tasks';
 export const FCM_CHANNEL_CHAT = 'vazifa_chat';
@@ -10,7 +11,10 @@ export class NotificationsService {
   private readonly logger = new Logger(NotificationsService.name);
   private initialized = false;
 
-  constructor(private config: ConfigService) {
+  constructor(
+    private config: ConfigService,
+    private usersService: UsersService,
+  ) {
     this.initFirebase();
   }
 
@@ -28,9 +32,11 @@ export class NotificationsService {
     }
 
     try {
-      admin.initializeApp({
-        credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
-      });
+      if (!admin.apps.length) {
+        admin.initializeApp({
+          credential: admin.credential.cert({ projectId, clientEmail, privateKey }),
+        });
+      }
       this.initialized = true;
       this.logger.log('Firebase tayyor — push xabarlar yoqildi');
     } catch (e) {
@@ -57,17 +63,35 @@ export class NotificationsService {
         body,
         ...(data ?? {}),
       };
+      const type = data?.type ?? '';
+      const isChat = type === 'chat' || type === 'room';
+      const channelId = isChat ? FCM_CHANNEL_CHAT : FCM_CHANNEL_TASKS;
+
       await admin.messaging().send({
         token,
+        notification: { title, body },
         data: payload,
         android: {
           priority: 'high',
           ttl: 3600 * 1000,
           directBootOk: true,
+          notification: {
+            channelId,
+            priority: 'high',
+            defaultSound: true,
+            defaultVibrateTimings: true,
+          },
         },
       });
-    } catch (e) {
+    } catch (e: unknown) {
       this.logger.error('FCM send failed', e);
+      const code = (e as { code?: string })?.code ?? '';
+      if (
+        code.includes('registration-token-not-registered') ||
+        code.includes('invalid-registration-token')
+      ) {
+        await this.usersService.clearFcmToken(token);
+      }
     }
   }
 

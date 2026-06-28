@@ -37,8 +37,9 @@ import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
-import uz.vazifa.app.util.TaskDeadlineCountdown
+import uz.vazifa.app.presentation.theme.VazifaColors
 import java.time.Instant
+import uz.vazifa.app.util.TaskDeadlineCountdown
 import java.time.LocalDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
@@ -155,7 +156,7 @@ fun TaskDetailScreen(
             val showManagerView = canAssignTasks && isCreator
             val showAssigneeView = myAssignment != null
             val showObserverView = !showManagerView && !showAssigneeView
-            val isCompleted = myAssignment?.status == TaskStatus.COMPLETED.key
+            val isCompleted = task.isCompletedForUser(state.currentUserId)
             val displayStatus = myAssignment?.status ?: task.assignments.firstOrNull()?.status
 
             Column(
@@ -320,26 +321,15 @@ fun TaskDetailScreen(
                     }
                 }
 
-                if (showAssigneeView && myAssignment != null && !isCompleted) {
-                    if (myAssignment.status == TaskStatus.NEW.key) {
-                        Button(
-                            onClick = { viewModel.updateStatus(task.id, myAssignment.id, TaskStatus.ACCEPTED.key) },
-                            modifier = Modifier.fillMaxWidth(),
-                            colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-                        ) { Text(localized("status_accepted")) }
-                    }
-                    TaskVoiceCompleteBar(
-                        enabled = !state.loading,
-                        onVoiceRecorded = { file ->
-                            viewModel.completeWithVoice(task.id, myAssignment.id, file)
-                        },
-                    )
-                    TextButton(
+                if (showAssigneeView && myAssignment != null && !task.isCompletedForUser(state.currentUserId)) {
+                    Button(
                         onClick = { showCompleteDialog = true },
+                        modifier = Modifier.fillMaxWidth().height(52.dp),
                         enabled = !state.loading,
-                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                        colors = ButtonDefaults.buttonColors(containerColor = VazifaColors.Success),
                     ) {
-                        Text(localized("task_complete_with_text"))
+                        Text(localized("task_complete_btn"))
                     }
                 }
             }
@@ -347,9 +337,15 @@ fun TaskDetailScreen(
     }
 
     if (showCompleteDialog) {
-        val assignment = state.task?.assignments?.firstOrNull { it.assigneeId == state.currentUserId }
+        val assignment = state.task?.myAssignment(state.currentUserId)
         AlertDialog(
-            onDismissRequest = { showCompleteDialog = false },
+            onDismissRequest = {
+                if (!state.loading) {
+                    showCompleteDialog = false
+                    completeComment = ""
+                    completeImageUri = null
+                }
+            },
             title = { Text(localized("task_complete_btn")) },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -358,7 +354,8 @@ fun TaskDetailScreen(
                         onValueChange = { completeComment = it },
                         label = { Text(localized("task_complete_comment")) },
                         modifier = Modifier.fillMaxWidth(),
-                        minLines = 2,
+                        minLines = 3,
+                        enabled = !state.loading,
                     )
                     OptionalTaskImagePicker(
                         imageUri = completeImageUri,
@@ -368,7 +365,7 @@ fun TaskDetailScreen(
                 }
             },
             confirmButton = {
-                TextButton(
+                Button(
                     onClick = {
                         assignment?.let {
                             viewModel.completeWithReport(taskId, it.id, completeComment, completeImageUri)
@@ -377,10 +374,30 @@ fun TaskDetailScreen(
                         completeComment = ""
                         completeImageUri = null
                     },
-                ) { Text(localized("task_report_submit")) }
+                    enabled = !state.loading && assignment != null,
+                ) {
+                    if (state.loading) {
+                        CircularProgressIndicator(
+                            modifier = Modifier.size(20.dp),
+                            strokeWidth = 2.dp,
+                            color = androidx.compose.ui.graphics.Color.White,
+                        )
+                    } else {
+                        Text(localized("task_report_submit"))
+                    }
+                }
             },
             dismissButton = {
-                TextButton(onClick = { showCompleteDialog = false }) { Text(localized("com_cancel")) }
+                TextButton(
+                    onClick = {
+                        showCompleteDialog = false
+                        completeComment = ""
+                        completeImageUri = null
+                    },
+                    enabled = !state.loading,
+                ) {
+                    Text(localized("com_cancel"))
+                }
             },
         )
     }

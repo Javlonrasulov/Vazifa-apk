@@ -165,8 +165,7 @@ class AuthRepository @Inject constructor(
 
     /**
      * Bildirishnomalar yoqilgan bo'lsa asosiy ekranga kirishga ruxsat beradi.
-     * Token (push) fonda ro'yxatdan o'tkaziladi — internet yoki Firebase
-     * vaqtincha tayyor bo'lmasa ham foydalanuvchi ilovaga kira oladi.
+     * Token ro'yxatdan o'tkaziladi — muvaffaqiyatsiz bo'lsa ham foydalanuvchi kira oladi.
      */
     suspend fun shouldSkipNotifGate(): Boolean {
         if (!hasStoredSessionAsync()) return false
@@ -174,7 +173,7 @@ class AuthRepository @Inject constructor(
             setNotifRegistered(false)
             return false
         }
-        registerPushTokenAsync()
+        registerPushToken()
         return true
     }
 

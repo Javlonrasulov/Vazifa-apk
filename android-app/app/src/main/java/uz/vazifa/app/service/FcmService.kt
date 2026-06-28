@@ -34,32 +34,34 @@ class FcmService : FirebaseMessagingService() {
         val type = data["type"]
         val chatUserId = data["chatUserId"]
         val roomId = data["roomId"]
+        val isChat = type == "chat" || type == "room"
 
         CoroutineScope(Dispatchers.IO).launch {
-            when (type) {
-                "chat", "room" -> {
+            when {
+                isChat -> {
                     if (!AppForegroundState.isInForeground) {
                         chatUnread.increment()
                     }
-                    if (!AppForegroundState.isInForeground) {
-                        notificationInbox.add(
-                            title = title,
-                            body = body,
-                            type = type,
-                            chatUserId = chatUserId,
-                            roomId = roomId,
-                        )
-                    }
+                    notificationInbox.add(
+                        title = title,
+                        body = body,
+                        type = type,
+                        chatUserId = chatUserId,
+                        roomId = roomId,
+                    )
                 }
                 else -> {
-                    if (!AppForegroundState.isInForeground) {
-                        notificationInbox.add(taskId, title, body, type)
-                    }
+                    notificationInbox.add(taskId, title, body, type)
                 }
             }
         }
 
-        if (!AppForegroundState.isInForeground) {
+        val systemShowsInBackground = message.notification != null && !AppForegroundState.isInForeground
+        val shouldShowManually = when {
+            isChat -> !systemShowsInBackground
+            else -> true
+        }
+        if (shouldShowManually) {
             VazifaNotificationHelper.show(
                 context = applicationContext,
                 title = title,
