@@ -28,6 +28,12 @@ class ChatUnreadRepository @Inject constructor(
         }
     }
 
+    suspend fun setCount(count: Int) {
+        context.chatUnreadDataStore.edit { prefs ->
+            if (count <= 0) prefs.remove(countKey) else prefs[countKey] = count
+        }
+    }
+
     suspend fun clear() {
         context.chatUnreadDataStore.edit { prefs ->
             prefs.remove(countKey)

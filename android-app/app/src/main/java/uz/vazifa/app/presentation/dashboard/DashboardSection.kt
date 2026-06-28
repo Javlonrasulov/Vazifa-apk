@@ -33,6 +33,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.Department
 import uz.vazifa.app.domain.model.Task
@@ -130,6 +131,7 @@ data class DashboardSectionUiState(
 @HiltViewModel
 class DashboardSectionViewModel @Inject constructor(
     private val repo: TaskRepository,
+    private val auth: AuthRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     val section: DashboardSection = DashboardSection.fromRoute(
@@ -145,8 +147,9 @@ class DashboardSectionViewModel @Inject constructor(
             runCatching {
                 when (section) {
                     DashboardSection.EMPLOYEES -> {
+                        val selfId = auth.currentUser()?.id
                         val employees = repo.getContacts()
-                            .filter { it.isTaskAssignable() }
+                            .filter { it.isTaskAssignable(selfId) }
                             .sortedBy { it.fullName }
                         val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
                         _state.update {
@@ -208,6 +211,7 @@ class DashboardSectionViewModel @Inject constructor(
 @HiltViewModel
 class EmployeesTabViewModel @Inject constructor(
     private val repo: TaskRepository,
+    private val auth: AuthRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(DashboardSectionUiState())
     val state = _state.asStateFlow()
@@ -216,8 +220,9 @@ class EmployeesTabViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             runCatching {
+                val selfId = auth.currentUser()?.id
                 val employees = repo.getContacts()
-                    .filter { it.isTaskAssignable() }
+                    .filter { it.isTaskAssignable(selfId) }
                     .sortedBy { it.fullName }
                 val apiDepartments = runCatching { repo.getDepartments() }.getOrDefault(emptyList())
                 _state.update {

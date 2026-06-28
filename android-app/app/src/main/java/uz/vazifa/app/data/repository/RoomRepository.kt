@@ -27,6 +27,7 @@ import javax.inject.Singleton
 class RoomRepository @Inject constructor(
     private val client: ApiClient,
     private val chat: ChatRepository,
+    private val messageCache: ChatMessageCache,
 ) {
     private val api get() = client.api
 
@@ -69,8 +70,17 @@ class RoomRepository @Inject constructor(
 
     suspend fun removeMember(id: String, userId: String) { api.removeRoomMember(id, userId) }
 
-    suspend fun history(id: String, before: String? = null, limit: Int = 40): List<RoomMessage> =
-        api.getRoomHistory(id, before, limit).map { it.toDomain() }
+    suspend fun history(id: String, before: String? = null, limit: Int = 40): List<RoomMessage> {
+        val dtos = api.getRoomHistory(id, before, limit)
+        val messages = dtos.mapNotNull { safeRoomToDomain(it) }
+        if (before == null && dtos.isNotEmpty()) {
+            messageCache.saveRoom(id, dtos)
+        }
+        return messages
+    }
+
+    suspend fun getCachedHistory(roomId: String): List<RoomMessage> =
+        messageCache.loadRoom(roomId)
 
     suspend fun send(
         roomId: String,

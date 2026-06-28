@@ -79,6 +79,10 @@ export class CreateUserDto {
   canAssignTasks?: boolean;
 
   @IsOptional()
+  @IsBoolean()
+  allowScreenshot?: boolean;
+
+  @IsOptional()
   @IsArray()
   @IsString({ each: true })
   adminPermissions?: string[];
@@ -125,6 +129,10 @@ export class UpdateUserDto {
   @IsOptional()
   @IsBoolean()
   canAssignTasks?: boolean;
+
+  @IsOptional()
+  @IsBoolean()
+  allowScreenshot?: boolean;
 
   @IsOptional()
   @IsArray()

@@ -50,9 +50,15 @@ export class TasksService {
       throw new ForbiddenException('Vazifa berish huquqi yo\'q');
     }
 
-    const assigneeIds = [...new Set(dto.assigneeIds)];
+    const rawAssigneeIds = [...new Set(dto.assigneeIds)];
+    const selfIncluded = rawAssigneeIds.includes(creator.id);
+    const assigneeIds = rawAssigneeIds.filter((id) => id !== creator.id);
     if (!assigneeIds.length) {
-      throw new BadRequestException('Kamida bitta xodim tanlang');
+      throw new BadRequestException(
+        selfIncluded
+          ? 'O\'zingizga vazifa bera olmaysiz'
+          : 'Kamida bitta xodim tanlang',
+      );
     }
 
     const task = this.taskRepo.create({

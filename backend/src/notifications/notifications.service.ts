@@ -67,6 +67,20 @@ export class NotificationsService {
       const isChat = type === 'chat' || type === 'room';
       const channelId = isChat ? FCM_CHANNEL_CHAT : FCM_CHANNEL_TASKS;
 
+      // Chat: faqat data payload — FcmService o'zi to'g'ri intent bilan ko'rsatadi
+      if (isChat) {
+        await admin.messaging().send({
+          token,
+          data: payload,
+          android: {
+            priority: 'high',
+            ttl: 3600 * 1000,
+            directBootOk: true,
+          },
+        });
+        return;
+      }
+
       await admin.messaging().send({
         token,
         notification: { title, body },

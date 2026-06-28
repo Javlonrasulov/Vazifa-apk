@@ -95,7 +95,11 @@ class ChatListViewModel @Inject constructor(
 
     fun refresh() {
         if (currentUserId.isBlank()) return
-        load()
+        viewModelScope.launch {
+            runCatching { chatUnread.setCount(repo.unreadCount()) }
+            load()
+            loadRooms()
+        }
     }
 
     fun reconnect() {
@@ -223,19 +227,32 @@ class ChatListViewModel @Inject constructor(
         loadRooms()
     }
 
+    fun markPeerRead(peerId: String) {
+        _state.update { st ->
+            st.copy(conversations = st.conversations.map {
+                if (it.peer.id == peerId) it.copy(unreadCount = 0) else it
+            })
+        }
+        viewModelScope.launch { runCatching { repo.markRead(peerId) } }
+    }
+
     fun markRoomRead(roomId: String) {
         _state.update { st ->
             st.copy(rooms = st.rooms.map { if (it.id == roomId) it.copy(unreadCount = 0) else it })
         }
-    }
-
-    fun clearTabBadge() {
-        viewModelScope.launch { chatUnread.clear() }
+        viewModelScope.launch { runCatching { rooms.markRead(roomId) } }
     }
 
     fun uploadAvatar(file: java.io.File, onResult: (String?) -> Unit) {
         viewModelScope.launch {
             val url = runCatching { auth.uploadAvatar(file).avatarUrl }.getOrNull()
+            onResult(url)
+        }
+    }
+
+    fun deleteAvatar(onResult: (String?) -> Unit) {
+        viewModelScope.launch {
+            val url = runCatching { auth.deleteAvatar().avatarUrl }.getOrNull()
             onResult(url)
         }
     }
@@ -254,11 +271,7 @@ class ChatListViewModel @Inject constructor(
         }
     }
 
-    fun markPeerRead(peerId: String) {
-        _state.update { st ->
-            st.copy(conversations = st.conversations.map {
-                if (it.peer.id == peerId) it.copy(unreadCount = 0) else it
-            })
-        }
+    fun clearTabBadge() {
+        viewModelScope.launch { chatUnread.clear() }
     }
 }

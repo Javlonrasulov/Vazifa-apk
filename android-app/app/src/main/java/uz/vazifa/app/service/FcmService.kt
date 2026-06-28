@@ -56,12 +56,7 @@ class FcmService : FirebaseMessagingService() {
             }
         }
 
-        val systemShowsInBackground = message.notification != null && !AppForegroundState.isInForeground
-        val shouldShowManually = when {
-            isChat -> !systemShowsInBackground
-            else -> true
-        }
-        if (shouldShowManually) {
+        if (isChat || !AppForegroundState.isInForeground) {
             VazifaNotificationHelper.show(
                 context = applicationContext,
                 title = title,

@@ -172,7 +172,6 @@ private fun TaskVoiceAttachmentPlayer(attachment: TaskAttachment) {
     val entryPoint = remember {
         EntryPointAccessors.fromApplication(context.applicationContext, ApiClientEntryPoint::class.java)
     }
-    val token = entryPoint.tokenStore().accessToken
     val player = remember { ChatAudioPlayer() }
     var playing by remember(attachment.id) { mutableStateOf(false) }
     var loading by remember(attachment.id) { mutableStateOf(false) }
@@ -197,11 +196,12 @@ private fun TaskVoiceAttachmentPlayer(attachment: TaskAttachment) {
                     }
                     loading = true
                     scope.launch {
-                        val started = player.toggleRemote(
-                            context = context,
-                            remoteUrl = attachment.url,
-                            speed = 1f,
-                            authToken = token,
+                    val started = player.toggleRemote(
+                        context = context,
+                        remoteUrl = attachment.url,
+                        speed = 1f,
+                        authToken = entryPoint.tokenStore().accessToken,
+                        okHttpClient = entryPoint.apiClient().httpClient,
                             onProgress = {},
                             onComplete = { playing = false },
                             onError = {

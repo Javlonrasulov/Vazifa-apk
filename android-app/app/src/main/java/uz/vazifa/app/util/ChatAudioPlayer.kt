@@ -6,10 +6,14 @@ import android.media.MediaPlayer
 import android.media.PlaybackParams
 import android.os.Build
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.coroutines.withContext
+import okhttp3.OkHttpClient
+import okhttp3.Request
 import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
+import kotlin.coroutines.resume
 
 /** Telegram uslubidagi ovozli xabar pleyeri (tezlikni boshqarish bilan) */
 class ChatAudioPlayer {
@@ -17,7 +21,7 @@ class ChatAudioPlayer {
     var currentSource: String? = null
         private set
 
-    fun toggleLocal(
+    suspend fun toggleLocal(
         file: File,
         speed: Float,
         onProgress: (Float) -> Unit,
@@ -43,11 +47,12 @@ class ChatAudioPlayer {
         remoteUrl: String,
         speed: Float,
         authToken: String? = null,
+        okHttpClient: OkHttpClient? = null,
         onProgress: (Float) -> Unit,
         onComplete: () -> Unit,
         onError: () -> Unit,
     ): Boolean {
-        val local = cacheRemote(context, remoteUrl, authToken) ?: run {
+        val local = cacheRemote(context, remoteUrl, authToken, okHttpClient) ?: run {
             onError()
             return false
         }
@@ -58,10 +63,26 @@ class ChatAudioPlayer {
         context: Context,
         remoteUrl: String,
         authToken: String? = null,
+        okHttpClient: OkHttpClient? = null,
     ): File? = withContext(Dispatchers.IO) {
         val name = remoteUrl.substringAfterLast('/').ifBlank { remoteUrl.hashCode().toString() }
         val cacheFile = File(context.cacheDir, "voice_play_$name")
+        if (cacheFile.exists() && cacheFile.length() <= 512) cacheFile.delete()
         if (cacheFile.exists() && cacheFile.length() > 512) return@withContext cacheFile
+
+        if (okHttpClient != null) {
+            runCatching {
+                val response = okHttpClient.newCall(Request.Builder().url(remoteUrl).get().build()).execute()
+                response.use { resp ->
+                    if (!resp.isSuccessful) error("HTTP ${resp.code}")
+                    resp.body?.byteStream()?.use { input ->
+                        cacheFile.outputStream().use { output -> input.copyTo(output) }
+                    } ?: error("empty body")
+                }
+                cacheFile.takeIf { it.length() > 512 }
+            }.getOrNull()?.let { return@withContext it }
+        }
+
         runCatching {
             val conn = URL(remoteUrl).openConnection() as HttpURLConnection
             conn.connectTimeout = 12_000
@@ -79,38 +100,46 @@ class ChatAudioPlayer {
         }.getOrNull()
     }
 
-    private fun startPlayer(
+    private suspend fun startPlayer(
         source: String,
         speed: Float,
         onProgress: (Float) -> Unit,
         onComplete: () -> Unit,
         onError: () -> Unit,
-    ): Boolean {
-        player = MediaPlayer().apply {
-            setAudioAttributes(
-                AudioAttributes.Builder()
-                    .setUsage(AudioAttributes.USAGE_MEDIA)
-                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
-                    .build(),
-            )
-            setDataSource(source)
-            setOnPreparedListener { mp ->
-                mp.start()
-                applySpeed(mp, speed)
-            }
-            setOnCompletionListener {
-                onProgress(1f)
-                onComplete()
-                releaseInternal()
-            }
-            setOnErrorListener { _, _, _ ->
-                onError()
-                releaseInternal()
-                true
-            }
-            prepareAsync()
+    ): Boolean = suspendCancellableCoroutine { cont ->
+        val mp = MediaPlayer()
+        player = mp
+        mp.setAudioAttributes(
+            AudioAttributes.Builder()
+                .setUsage(AudioAttributes.USAGE_MEDIA)
+                .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH)
+                .build(),
+        )
+        mp.setDataSource(source)
+        mp.setOnPreparedListener { prepared ->
+            prepared.start()
+            applySpeed(prepared, speed)
+            if (cont.isActive) cont.resume(true)
         }
-        return true
+        mp.setOnCompletionListener {
+            onProgress(1f)
+            onComplete()
+            releaseInternal()
+        }
+        mp.setOnErrorListener { _, _, _ ->
+            onError()
+            releaseInternal()
+            if (cont.isActive) cont.resume(false)
+            true
+        }
+        cont.invokeOnCancellation {
+            releaseInternal()
+        }
+        runCatching { mp.prepareAsync() }.onFailure {
+            onError()
+            releaseInternal()
+            if (cont.isActive) cont.resume(false)
+        }
     }
 
     fun setSpeed(speed: Float) {

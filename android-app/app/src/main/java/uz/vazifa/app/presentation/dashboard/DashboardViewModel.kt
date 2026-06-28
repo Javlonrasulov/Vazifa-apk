@@ -40,7 +40,7 @@ class DashboardViewModel @Inject constructor(
                 val user = auth.currentUser()
                 val list = runCatching { tasks.getTasks() }.getOrDefault(emptyList())
                 val contacts = runCatching {
-                    tasks.getContacts().filter { it.isTaskAssignable() }
+                    tasks.getContacts().filter { it.isTaskAssignable(user?.id) }
                 }.getOrDefault(emptyList())
                 val apiStats = runCatching { tasks.getDashboardStats() }.getOrNull()
                 val stats = apiStats?.let { s ->

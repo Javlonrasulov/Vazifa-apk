@@ -1,10 +1,17 @@
 package uz.vazifa.app.data.repository
 
+import com.google.gson.Gson
+import com.google.gson.JsonParser
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.withContext
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
 import okhttp3.MediaType.Companion.toMediaTypeOrNull
 import okhttp3.MultipartBody
 import okhttp3.RequestBody.Companion.asRequestBody
+import okhttp3.Request
+import uz.vazifa.app.BuildConfig
 import uz.vazifa.app.data.remote.ApiClient
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.ChatMessageDto
@@ -23,6 +30,8 @@ import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatPeer
 import uz.vazifa.app.domain.model.Conversation
+import uz.vazifa.app.domain.model.PeerProfile
+import uz.vazifa.app.domain.model.toPeerProfile
 import java.io.File
 import java.time.Instant
 import javax.inject.Inject
@@ -33,6 +42,7 @@ class ChatRepository @Inject constructor(
     private val client: ApiClient,
     private val socket: ChatSocket,
     private val aliases: ContactAliasRepository,
+    private val messageCache: ChatMessageCache,
 ) {
     private val api get() = client.api
 
@@ -93,8 +103,46 @@ class ChatRepository @Inject constructor(
             )
         }
 
-    suspend fun getHistory(peerId: String, before: String? = null, limit: Int = 40): List<ChatMessage> =
-        api.getChatHistory(peerId, before, limit).map { it.toDomain() }
+    suspend fun getHistory(peerId: String, before: String? = null, limit: Int = 40): List<ChatMessage> {
+        val dtos = try {
+            api.getChatHistory(peerId, before, limit)
+        } catch (_: Exception) {
+            fetchHistoryLenient(peerId, before, limit) ?: emptyList()
+        }
+        val messages = dtos.mapNotNull { safeToDomain(it) }
+        if (before == null && dtos.isNotEmpty()) {
+            messageCache.saveDm(peerId, dtos)
+        }
+        return messages
+    }
+
+    private suspend fun fetchHistoryLenient(
+        peerId: String,
+        before: String?,
+        limit: Int,
+    ): List<ChatMessageDto>? = withContext(Dispatchers.IO) {
+        val base = BuildConfig.API_BASE_URL.removeSuffix("/")
+        val urlBuilder = "$base/chat/$peerId".toHttpUrlOrNull()?.newBuilder() ?: return@withContext null
+        urlBuilder.addQueryParameter("limit", limit.toString())
+        before?.takeIf { it.isNotBlank() }?.let { urlBuilder.addQueryParameter("before", it) }
+        val response = client.httpClient.newCall(
+            Request.Builder().url(urlBuilder.build()).get().build(),
+        ).execute()
+        response.use { resp ->
+            if (!resp.isSuccessful) return@withContext null
+            val body = resp.body?.string()?.trim().orEmpty()
+            if (body.isEmpty() || body == "[]") return@withContext emptyList()
+            val gson = Gson()
+            val arr = runCatching { JsonParser.parseString(body).asJsonArray }.getOrNull()
+                ?: return@withContext null
+            arr.mapNotNull { el ->
+                runCatching { gson.fromJson(el, ChatMessageDto::class.java) }.getOrNull()
+            }
+        }
+    }
+
+    suspend fun getCachedHistory(peerId: String): List<ChatMessage> =
+        messageCache.loadDm(peerId)
 
     suspend fun unreadCount(): Int = api.getChatUnread().count
 
@@ -110,6 +158,20 @@ class ChatRepository @Inject constructor(
         getContacts().find { it.id == peerId }?.let { return enrichPeer(it) }
         getConversations().find { it.peer.id == peerId }?.peer?.let { return enrichPeer(it) }
         return null
+    }
+
+    suspend fun getContactProfile(peerId: String): PeerProfile? {
+        val peer = knownPeer(peerId) ?: resolvePeer(peerId)
+        val user = api.getContacts().find { it.id == peerId }
+        return if (user != null) {
+            enrichPeer(user.toPeer()).toPeerProfile(
+                login = user.login,
+                phone = user.phone,
+                role = user.role,
+            )
+        } else {
+            peer?.toPeerProfile()
+        }
     }
 
     suspend fun send(
@@ -173,7 +235,7 @@ fun ChatMessageDto.toDomain(): ChatMessage {
         mimeType = mimeType,
         meta = resolvedMeta,
         replyToId = replyToId,
-        replyTo = replyTo?.toDomain(),
+        replyTo = replyTo?.copy(replyTo = null)?.let { safeToDomain(it) },
         forwardedFrom = forwardedFrom,
         reactions = reactions ?: emptyMap(),
         status = ChatMessageStatus.from(status),
@@ -195,11 +257,11 @@ internal fun ChatMetaDto?.toDomainMessageMeta(filePath: String?): ChatMessageMet
 
 fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
     fileUrl = fileUrl,
-    fileSize = fileSize,
-    durationSec = durationSec,
-    waveform = waveform,
-    width = width,
-    height = height,
+    fileSize = fileSize?.toLong(),
+    durationSec = durationSec?.toInt(),
+    waveform = waveform?.map { it.toInt() },
+    width = width?.toInt(),
+    height = height?.toInt(),
     thumbUrl = thumbUrl,
     latitude = latitude,
     longitude = longitude,
@@ -209,11 +271,11 @@ fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
 
 fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
     fileUrl = fileUrl,
-    fileSize = fileSize,
-    durationSec = durationSec,
-    waveform = waveform,
-    width = width,
-    height = height,
+    fileSize = fileSize?.toDouble(),
+    durationSec = durationSec?.toDouble(),
+    waveform = waveform?.map { it.toDouble() },
+    width = width?.toDouble(),
+    height = height?.toDouble(),
     thumbUrl = thumbUrl,
     latitude = latitude,
     longitude = longitude,

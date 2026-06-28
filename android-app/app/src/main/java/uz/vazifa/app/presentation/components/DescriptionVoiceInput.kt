@@ -38,23 +38,28 @@ fun DescriptionVoiceInput(
     )
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(6.dp)) {
-        OutlinedTextField(
-            value = value,
-            onValueChange = onValueChange,
-            label = { Text(localized("task_desc")) },
-            modifier = Modifier.fillMaxWidth(),
-            minLines = minLines,
-            shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-            colors = fieldColors,
-            trailingIcon = {
-                VoiceMicSendButton(
-                    state = voiceState,
-                    controller = voiceController,
-                    size = 40.dp,
-                    iconSize = 22.dp,
-                )
-            },
-        )
+        Box(Modifier.fillMaxWidth()) {
+            OutlinedTextField(
+                value = value,
+                onValueChange = onValueChange,
+                label = { Text(localized("task_desc")) },
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(end = 52.dp),
+                minLines = minLines,
+                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+                colors = fieldColors,
+            )
+            VoiceMicSendButton(
+                state = voiceState,
+                controller = voiceController,
+                modifier = Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(top = 10.dp, end = 4.dp),
+                size = 44.dp,
+                iconSize = 22.dp,
+            )
+        }
         if (voiceState.isRecording) {
             Row(
                 Modifier.fillMaxWidth(),

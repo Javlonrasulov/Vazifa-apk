@@ -34,6 +34,7 @@ data class RoomUiState(
     val loading: Boolean = true,
     val loadingMore: Boolean = false,
     val hasMore: Boolean = true,
+    val loadFailed: Boolean = false,
     val input: String = "",
     val replyTo: RoomMessage? = null,
     val editing: RoomMessage? = null,
@@ -86,18 +87,35 @@ class RoomViewModel @Inject constructor(
     private fun loadHistory() {
         historyJob?.cancel()
         historyJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true) }
+            val cached = runCatching { repo.getCachedHistory(roomId) }.getOrDefault(emptyList())
+            if (cached.isNotEmpty()) {
+                _state.update { st ->
+                    val visible = cached.filter { !it.isDeleted && it.id !in hiddenIds }
+                    st.copy(messages = visible, loading = true, loadFailed = false)
+                }
+            } else {
+                _state.update { it.copy(loading = true, loadFailed = false) }
+            }
             runCatching { repo.history(roomId, before = null) }
                 .onSuccess { list ->
                     _state.update { st ->
                         val visible = list.filter { !it.isDeleted && it.id !in hiddenIds && (it.clientId == null || it.clientId !in hiddenIds) }
                         val merged = mergeRoomHistory(visible, st.messages)
-                        st.copy(messages = merged, loading = false, hasMore = list.size >= 40)
+                        st.copy(messages = merged, loading = false, loadFailed = false, hasMore = list.size >= 40)
                     }
                     markRead()
                 }
-                .onFailure { _state.update { it.copy(loading = false) } }
+                .onFailure {
+                    _state.update { st ->
+                        st.copy(loading = false, loadFailed = st.messages.isEmpty())
+                    }
+                }
         }
+    }
+
+    fun reload() {
+        if (roomId.isBlank()) return
+        loadHistory()
     }
 
     private fun mergeRoomHistory(server: List<RoomMessage>, local: List<RoomMessage>): List<RoomMessage> {
@@ -366,6 +384,13 @@ class RoomViewModel @Inject constructor(
             fileSize = msg.meta?.fileSize ?: 0L,
             fileUrl = msg.meta?.fileUrl,
         )
+    }
+
+    fun deleteRoom(onDone: () -> Unit) {
+        if (roomId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repo.delete(roomId) }.onSuccess { onDone() }
+        }
     }
 
     override fun onCleared() {

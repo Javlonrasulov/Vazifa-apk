@@ -153,6 +153,7 @@ data class TaskDetailUiState(
 @HiltViewModel
 class CreateTaskViewModel @Inject constructor(
     private val repo: TaskRepository,
+    private val auth: AuthRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     private val editTaskId: String? = savedStateHandle.get<String>("taskId")
@@ -162,9 +163,11 @@ class CreateTaskViewModel @Inject constructor(
 
     fun loadContacts() = viewModelScope.launch {
         runCatching {
+            val selfId = auth.currentUser()?.id
             _state.update {
                 it.copy(
-                    contacts = repo.getContacts().filter { it.isTaskAssignable() },
+                    currentUserId = selfId,
+                    contacts = repo.getContacts().filter { contact -> contact.isTaskAssignable(selfId) },
                 )
             }
         }
@@ -249,8 +252,18 @@ class CreateTaskViewModel @Inject constructor(
             _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
             return@launch
         }
-        if (_state.value.selectedIds.isEmpty()) {
-            _state.update { it.copy(errorKey = "task_assignee_required") }
+        val selfId = _state.value.currentUserId
+        val assigneeIds = _state.value.selectedIds.filter { it != selfId }
+        if (assigneeIds.isEmpty()) {
+            _state.update {
+                it.copy(
+                    errorKey = if (selfId != null && selfId in _state.value.selectedIds) {
+                        "task_self_assign_forbidden"
+                    } else {
+                        "task_assignee_required"
+                    },
+                )
+            }
             return@launch
         }
         _state.update { it.copy(loading = true, errorKey = null) }
@@ -268,7 +281,7 @@ class CreateTaskViewModel @Inject constructor(
                 title = title,
                 description = _state.value.description.ifBlank { null },
                 priority = "medium",
-                assigneeIds = _state.value.selectedIds.toList(),
+                assigneeIds = assigneeIds,
                 startAt = now.format(fmt),
                 deadlineAt = deadlineAt,
             )
@@ -326,16 +339,21 @@ class CreateTaskViewModel @Inject constructor(
     private fun mapCreateError(e: Throwable): String = when (e) {
         is HttpException -> when (e.code()) {
             403 -> "task_create_forbidden"
+            400 -> {
+                val body = e.response()?.errorBody()?.string().orEmpty()
+                if (body.contains("O'zingizga")) "task_self_assign_forbidden" else "task_create_failed"
+            }
             else -> "task_create_failed"
         }
         else -> "task_create_failed"
     }
 
     fun preselectAssignees(ids: Set<String>) {
+        val selfId = _state.value.currentUserId
         _state.update {
             CreateTaskUiState(
                 contacts = it.contacts,
-                selectedIds = ids,
+                selectedIds = ids.filter { id -> id != selfId }.toSet(),
                 isEditMode = it.isEditMode,
             ).withSyncedDeadline(zone)
         }
@@ -393,6 +411,7 @@ data class CreateTaskUiState(
     val deadlineHours: String = "48",
     val deadlineDateTime: LocalDateTime? = null,
     val contacts: List<User> = emptyList(),
+    val currentUserId: String? = null,
     val assigneeSearch: String = "",
     val selectedIds: Set<String> = emptySet(),
     val voiceFile: File? = null,

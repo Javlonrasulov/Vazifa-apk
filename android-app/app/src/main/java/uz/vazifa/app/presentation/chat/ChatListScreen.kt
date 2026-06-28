@@ -16,7 +16,7 @@ import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.defaultMinSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -122,6 +122,8 @@ fun ChatListScreen(
     val context = LocalContext.current
     var avatarOverride by remember { mutableStateOf<String?>(null) }
     var uploadingAvatar by remember { mutableStateOf(false) }
+    var showAvatarViewer by remember { mutableStateOf(false) }
+    val effectiveAvatar = avatarOverride ?: currentUserAvatar
     val avatarPicker = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let {
             uploadingAvatar = true
@@ -170,8 +172,13 @@ fun ChatListScreen(
             onNewChat = onNewChat,
             onQueryChange = viewModel::onQueryChange,
             onRememberPeer = viewModel::rememberPeer,
-            onOpenChat = onOpenChat,
-            onOpenRoom = onOpenRoom,
+            onOpenChat = { peerId, name ->
+                onOpenChat(peerId, name)
+            },
+            onOpenRoom = { roomId ->
+                viewModel.markRoomRead(roomId)
+                onOpenRoom(roomId)
+            },
             onNewGroup = onNewGroup,
             onNewChannel = onNewChannel,
         )
@@ -212,11 +219,14 @@ fun ChatListScreen(
                                 .width(312.dp),
                             userName = currentUserName,
                             userSubtitle = if (drawerOnline) localized("chat_online") else localized("chat_offline"),
-                            userAvatarUrl = avatarOverride ?: currentUserAvatar,
+                            userAvatarUrl = effectiveAvatar,
                             isOnline = drawerOnline,
                             isOpen = drawerOpen,
                             uploadingAvatar = uploadingAvatar,
-                            onAvatarClick = { avatarPicker.launch("image/*") },
+                            onAvatarClick = {
+                                if (!effectiveAvatar.isNullOrBlank()) showAvatarViewer = true
+                                else avatarPicker.launch("image/*")
+                            },
                             onAction = { action ->
                                 drawerOpen = false
                                 when (action) {
@@ -232,6 +242,22 @@ fun ChatListScreen(
                 }
             }
         }
+    }
+
+    if (showAvatarViewer && !effectiveAvatar.isNullOrBlank()) {
+        uz.vazifa.app.presentation.components.AvatarViewerDialog(
+            avatarUrl = effectiveAvatar,
+            name = currentUserName,
+            onDismiss = { showAvatarViewer = false },
+            onChangePhoto = { avatarPicker.launch("image/*") },
+            onDeletePhoto = {
+                uploadingAvatar = true
+                viewModel.deleteAvatar { url ->
+                    uploadingAvatar = false
+                    avatarOverride = url
+                }
+            },
+        )
     }
 }
 
@@ -426,18 +452,19 @@ private fun ChatTab(label: String, selected: Boolean, badge: Int, onClick: () ->
         if (badge > 0) {
             Spacer(Modifier.width(7.dp))
             val badgeText = formatBadgeCount(badge)
-            val wide = badgeText.length > 1
+            val wide = badgeText.length >= 2
             Box(
                 Modifier
-                    .then(if (wide) Modifier.height(18.dp).widthIn(min = 18.dp).padding(horizontal = 5.dp) else Modifier.size(18.dp))
-                    .clip(CircleShape)
+                    .defaultMinSize(minWidth = if (wide) 22.dp else 18.dp, minHeight = 18.dp)
+                    .clip(RoundedCornerShape(50))
                     .background(
                         if (selected) Color.White.copy(alpha = 0.28f)
                         else LiquidTheme.textMuted.copy(alpha = 0.35f),
-                    ),
+                    )
+                    .padding(horizontal = if (wide) 5.dp else 0.dp, vertical = 1.dp),
                 contentAlignment = Alignment.Center,
             ) {
-                CountBadgeLabel(text = badgeText, fontSize = 11.sp)
+                CountBadgeLabel(text = badgeText, fontSize = if (wide) 10.sp else 11.sp)
             }
         }
     }
@@ -796,17 +823,7 @@ private fun TicksTinted(status: ChatMessageStatus) {
 
 @Composable
 private fun UnreadBadge(count: Int) {
-    val text = formatBadgeCount(count)
-    val wide = text.length > 1
-    Box(
-        Modifier
-            .then(if (wide) Modifier.height(20.dp).padding(horizontal = 6.dp) else Modifier.size(20.dp))
-            .clip(CircleShape)
-            .background(LiquidGlass.Blue),
-        contentAlignment = Alignment.Center,
-    ) {
-        CountBadgeLabel(text = text, fontSize = 11.sp)
-    }
+    ChatUnreadBadge(count = count)
 }
 
 @Composable

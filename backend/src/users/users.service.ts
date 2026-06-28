@@ -201,6 +201,7 @@ export class UsersService implements OnModuleInit {
       fullName: dto.fullName.trim(),
       role: dto.role,
       canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
+      allowScreenshot: isAdmin ? true : (dto.allowScreenshot ?? true),
       position: isAdmin ? null : (dto.position ?? null),
       department: isAdmin ? null : (dto.department ?? null),
       visibleDepartments: isAdmin
@@ -249,6 +250,7 @@ export class UsersService implements OnModuleInit {
       user.role = dto.role;
     }
     if (dto.canAssignTasks !== undefined) user.canAssignTasks = dto.canAssignTasks;
+    if (dto.allowScreenshot !== undefined) user.allowScreenshot = dto.allowScreenshot;
     if (dto.position !== undefined) user.position = dto.position;
     if (dto.department !== undefined) user.department = dto.department;
     if (dto.visibleDepartments !== undefined) {
@@ -373,9 +375,10 @@ export class UsersService implements OnModuleInit {
   }
 
   sanitize(user: User, options?: { includePasswordPlain?: boolean }) {
-    const { passwordHash, fcmToken, passwordPlain, ...rest } = user;
+    const { passwordHash, fcmToken, passwordPlain, allowScreenshot, ...rest } = user;
     return {
       ...rest,
+      allowScreenshot: allowScreenshot !== false,
       ...(options?.includePasswordPlain ? { passwordPlain: passwordPlain ?? null } : {}),
     };
   }

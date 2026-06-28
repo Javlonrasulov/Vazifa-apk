@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.delay
+import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.isTaskAssignable
@@ -46,6 +47,7 @@ import javax.inject.Inject
 data class EmployeeDetailUiState(
     val loading: Boolean = false,
     val employee: User? = null,
+    val currentUserId: String? = null,
     val stats: EmployeeStats = EmployeeStats(),
     val tasks: List<EmployeeTaskItem> = emptyList(),
 )
@@ -53,6 +55,7 @@ data class EmployeeDetailUiState(
 @HiltViewModel
 class EmployeeDetailViewModel @Inject constructor(
     private val repo: TaskRepository,
+    private val auth: AuthRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
     private val employeeId: String = savedStateHandle.get<String>("employeeId").orEmpty()
@@ -63,12 +66,19 @@ class EmployeeDetailViewModel @Inject constructor(
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
             runCatching {
+                val currentUserId = auth.currentUser()?.id
                 val employee = repo.getContacts()
-                    .firstOrNull { it.id == employeeId && it.isTaskAssignable() }
+                    .firstOrNull { it.id == employeeId }
                 val tasks = repo.getTasks()
                 val (stats, items) = EmployeeStatsCalculator.compute(employeeId, tasks)
                 _state.update {
-                    it.copy(employee = employee, stats = stats, tasks = items, loading = false)
+                    it.copy(
+                        employee = employee,
+                        currentUserId = currentUserId,
+                        stats = stats,
+                        tasks = items,
+                        loading = false,
+                    )
                 }
             }.onFailure {
                 _state.update { it.copy(loading = false) }
@@ -98,12 +108,14 @@ fun EmployeeDetailScreen(
         onBack = onBack,
         actions = {
             state.employee?.let { employee ->
-                GlassHeaderIconButton(
-                    onClick = { onAssignTask(employee.id) },
-                    icon = Icons.Default.Add,
-                    tint = LiquidGlass.Blue,
-                    contentDescription = localized("task_create_for_employee"),
-                )
+                if (employee.id != state.currentUserId && employee.isTaskAssignable(state.currentUserId)) {
+                    GlassHeaderIconButton(
+                        onClick = { onAssignTask(employee.id) },
+                        icon = Icons.Default.Add,
+                        tint = LiquidGlass.Blue,
+                        contentDescription = localized("task_create_for_employee"),
+                    )
+                }
             }
             VazifaHeaderActions()
         },

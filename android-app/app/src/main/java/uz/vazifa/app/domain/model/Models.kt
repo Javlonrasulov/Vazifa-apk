@@ -34,7 +34,8 @@ data class User(
     val avatarUrl: String? = null,
 )
 
-fun User.isTaskAssignable(): Boolean = login != "xodim1"
+fun User.isTaskAssignable(excludeUserId: String? = null): Boolean =
+    login != "xodim1" && (excludeUserId == null || id != excludeUserId)
 
 fun User.matchesDepartment(departmentName: String): Boolean =
     department?.trim()?.equals(departmentName.trim(), ignoreCase = true) == true

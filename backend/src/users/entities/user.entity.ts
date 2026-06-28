@@ -37,6 +37,9 @@ export class User {
   @Column({ default: false })
   canAssignTasks: boolean;
 
+  @Column({ default: true })
+  allowScreenshot: boolean;
+
   @Column({ type: 'varchar', nullable: true })
   position: string | null;
 

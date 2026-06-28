@@ -42,6 +42,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalLifecycleOwner
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
@@ -58,6 +61,7 @@ import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatMessageMeta
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatPeer
+import uz.vazifa.app.domain.model.toPeerProfile
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidBackground
@@ -77,7 +81,6 @@ import kotlin.math.abs
 fun ChatConversationScreen(
     peerId: String,
     peerName: String,
-    currentUserId: String,
     onBack: () -> Unit,
     viewModel: ChatViewModel = hiltViewModel(key = peerId),
 ) {
@@ -86,10 +89,26 @@ fun ChatConversationScreen(
     val scope = rememberCoroutineScope()
     val sendFailedText = localized("chat_send_failed")
 
-    LaunchedEffect(peerId, currentUserId) {
-        if (peerId.isNotBlank() && currentUserId.isNotBlank()) {
-            viewModel.start(peerId, currentUserId, ChatPeer(id = peerId, fullName = peerName))
+    LaunchedEffect(peerId) {
+        if (peerId.isNotBlank()) {
+            viewModel.start(peerId, ChatPeer(id = peerId, fullName = peerName))
         }
+    }
+
+    var skipNextResumeReload by remember(peerId) { mutableStateOf(true) }
+    val lifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner, peerId) {
+        val observer = LifecycleEventObserver { _, event ->
+            if (event == Lifecycle.Event.ON_RESUME && peerId.isNotBlank()) {
+                if (skipNextResumeReload) {
+                    skipNextResumeReload = false
+                } else {
+                    viewModel.reload()
+                }
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
     }
 
     var actionTarget by remember { mutableStateOf<ChatMessage?>(null) }
@@ -98,6 +117,8 @@ fun ChatConversationScreen(
     var forwardPeers by remember { mutableStateOf<List<ChatPeer>>(emptyList()) }
     var forwardLoading by remember { mutableStateOf(false) }
     var showRename by remember { mutableStateOf(false) }
+    var showPeerProfile by remember { mutableStateOf(false) }
+    var showPeerAvatarFull by remember { mutableStateOf<String?>(null) }
     val strings = rememberStringResolver()
     val copiedText = localized("chat_copied")
     val forwardText = localized("chat_forward")
@@ -114,6 +135,10 @@ fun ChatConversationScreen(
                 activity = state.peerActivity,
                 onBack = onBack,
                 onRename = { showRename = true },
+                onOpenProfile = {
+                    showPeerProfile = true
+                    viewModel.loadPeerProfile()
+                },
             )
 
             state.messages.lastOrNull { it.isPinned && !it.isDeleted }?.let { pinned ->
@@ -128,6 +153,7 @@ fun ChatConversationScreen(
                 isMine = viewModel::isMine,
                 onLoadMore = viewModel::loadMore,
                 onLongPress = { actionTarget = it },
+                onRetry = viewModel::reload,
                 modifier = Modifier.weight(1f),
             )
 
@@ -171,6 +197,29 @@ fun ChatConversationScreen(
                 onSendContact = { name, phone -> viewModel.sendContact(name, phone) },
             )
         }
+    }
+
+    if (showPeerProfile) {
+        PeerProfileSheet(
+            profile = state.peerProfile ?: state.peer?.toPeerProfile(),
+            loading = state.peerProfileLoading,
+            onDismiss = { showPeerProfile = false },
+            onAvatarClick = { url ->
+                showPeerAvatarFull = url
+            },
+            onRename = {
+                showPeerProfile = false
+                showRename = true
+            },
+        )
+    }
+
+    showPeerAvatarFull?.let { url ->
+        uz.vazifa.app.presentation.components.AvatarFullScreenDialog(
+            avatarUrl = url,
+            name = state.peer?.displayName ?: peerName,
+            onDismiss = { showPeerAvatarFull = null },
+        )
     }
 
     if (showRename) {
@@ -241,7 +290,13 @@ fun ChatConversationScreen(
 }
 
 @Composable
-private fun ChatHeader(peer: ChatPeer, activity: String?, onBack: () -> Unit, onRename: () -> Unit) {
+private fun ChatHeader(
+    peer: ChatPeer,
+    activity: String?,
+    onBack: () -> Unit,
+    onRename: () -> Unit,
+    onOpenProfile: () -> Unit,
+) {
     val active = activity != null
     var showMenu by remember { mutableStateOf(false) }
     val dark = LiquidTheme.isDark
@@ -273,25 +328,34 @@ private fun ChatHeader(peer: ChatPeer, activity: String?, onBack: () -> Unit, on
         ) {
             Icon(Icons.AutoMirrored.Filled.ArrowBack, localized("com_back"), tint = LiquidGlass.Blue)
         }
-        ChatAvatar(peer.displayName, peer.isOnline, size = 42.dp, avatarUrl = peer.avatarUrl)
-        Spacer(Modifier.width(10.dp))
-        Column(Modifier.weight(1f)) {
-            Text(peer.displayName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
-            val sub = when (activity) {
-                "recording" -> localized("chat_recording")
-                "uploading" -> localized("chat_sending_file")
-                "typing" -> localized("chat_typing")
-                else -> if (peer.isOnline) {
-                    localized("chat_online")
-                } else {
-                    ChatFormat.lastSeen(peer.lastSeenAt, rememberLastSeenLabels())
+        Row(
+            Modifier
+                .weight(1f)
+                .clip(RoundedCornerShape(14.dp))
+                .clickable(onClick = onOpenProfile)
+                .padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            ChatAvatar(peer.displayName, peer.isOnline, size = 42.dp, avatarUrl = peer.avatarUrl)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(peer.displayName, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 16.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                val sub = when (activity) {
+                    "recording" -> localized("chat_recording")
+                    "uploading" -> localized("chat_sending_file")
+                    "typing" -> localized("chat_typing")
+                    else -> if (peer.isOnline) {
+                        localized("chat_online")
+                    } else {
+                        ChatFormat.lastSeen(peer.lastSeenAt, rememberLastSeenLabels())
+                    }
                 }
+                Text(
+                    sub,
+                    color = if (active || peer.isOnline) LiquidGlass.Blue else LiquidTheme.textMuted,
+                    fontSize = 12.sp,
+                )
             }
-            Text(
-                sub,
-                color = if (active || peer.isOnline) LiquidGlass.Blue else LiquidTheme.textMuted,
-                fontSize = 12.sp,
-            )
         }
         Box {
             HeaderIcon(Icons.Default.MoreVert) { showMenu = true }
@@ -445,6 +509,7 @@ private fun MessageList(
     isMine: (ChatMessage) -> Boolean,
     onLoadMore: () -> Unit,
     onLongPress: (ChatMessage) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -466,14 +531,15 @@ private fun MessageList(
     }
     LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) onLoadMore() }
 
+    Box(modifier = modifier.fillMaxSize()) {
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         state = listState,
         reverseLayout = true,
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        items(reversed.size, key = { reversed[it].id }) { i ->
+        items(reversed.size, key = { i -> "${reversed[i].id}_$i" }) { i ->
             val msg = reversed[i]
             val ascendingIndex = state.messages.size - 1 - i
             val prev = state.messages.getOrNull(ascendingIndex - 1)
@@ -490,6 +556,29 @@ private fun MessageList(
         }
         if (state.loadingMore) {
             item { Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) { Text("...", color = LiquidTheme.textMuted) } }
+        }
+    }
+
+        if (state.loadFailed) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(localized("chat_load_failed"), color = LiquidTheme.textMuted, fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(LiquidGlass.Blue)
+                            .clickable(onClick = onRetry)
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                    ) {
+                        Text(localized("chat_retry"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                }
+            }
+        } else if (state.loading && reversed.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("...", color = LiquidTheme.textMuted, fontSize = 18.sp)
+            }
         }
     }
 }
@@ -609,7 +698,18 @@ private fun ReplyPreview(reply: ChatMessage, mine: Boolean) {
 
 @Composable
 private fun ImageContent(msg: ChatMessage) {
-    val url = msg.meta?.fileUrl?.let { MediaUrl.fromFilePath(it) } ?: msg.filePath?.let { MediaUrl.fromFilePath(it) }
+    val context = LocalContext.current
+    var showViewer by remember { mutableStateOf(false) }
+    val authToken = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            uz.vazifa.app.di.ApiClientEntryPoint::class.java,
+        ).tokenStore().accessToken
+    }
+    val url = remember(msg.id, msg.filePath, msg.meta?.fileUrl) {
+        MediaUrl.resolve(msg.filePath.orEmpty(), msg.meta?.fileUrl)
+            .takeIf { it.isNotBlank() }
+    }
     if (url.isNullOrBlank()) {
         Box(
             Modifier
@@ -629,8 +729,12 @@ private fun ImageContent(msg: ChatMessage) {
         modifier = Modifier
             .widthIn(max = 260.dp)
             .heightIn(max = 320.dp)
-            .clip(RoundedCornerShape(14.dp)),
+            .clip(RoundedCornerShape(14.dp))
+            .clickable { showViewer = true },
     )
+    if (showViewer) {
+        ChatImageViewerDialog(imageUrl = url, authToken = authToken, onDismiss = { showViewer = false })
+    }
 }
 
 @Composable
@@ -659,6 +763,12 @@ private fun VoiceContent(msg: ChatMessage, mine: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val player = remember { ChatAudioPlayer() }
+    val apiEntry = remember {
+        dagger.hilt.android.EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            uz.vazifa.app.di.ApiClientEntryPoint::class.java,
+        )
+    }
     val remoteUrl = remember(msg.id, msg.filePath, msg.meta?.fileUrl) {
         val path = msg.filePath?.takeIf { it.isNotBlank() }
         val url = msg.meta?.fileUrl?.takeIf { it.isNotBlank() }
@@ -668,7 +778,11 @@ private fun VoiceContent(msg: ChatMessage, mine: Boolean) {
             !url.isNullOrBlank() -> MediaUrl.fromFilePath(url)
             else -> null
         }
-    } ?: return
+    }
+    if (remoteUrl == null) {
+        Text(localized("chat_voice_message"), color = if (mine) Color.White else LiquidTheme.text, fontSize = 14.sp)
+        return
+    }
     var playing by remember { mutableStateOf(false) }
     var loading by remember { mutableStateOf(false) }
     var progress by remember { mutableStateOf(0f) }
@@ -698,6 +812,8 @@ private fun VoiceContent(msg: ChatMessage, mine: Boolean) {
                         context = context,
                         remoteUrl = remoteUrl,
                         speed = speed,
+                        authToken = apiEntry.tokenStore().accessToken,
+                        okHttpClient = apiEntry.apiClient().httpClient,
                         onProgress = { progress = it },
                         onComplete = { playing = false; progress = 0f },
                         onError = {
@@ -913,6 +1029,7 @@ fun RoomConversationScreen(
     var forwardTarget by remember { mutableStateOf<uz.vazifa.app.domain.model.RoomMessage?>(null) }
     var forwardPeers by remember { mutableStateOf<List<ChatPeer>>(emptyList()) }
     var forwardLoading by remember { mutableStateOf(false) }
+    var showDeleteGroup by remember { mutableStateOf(false) }
     val strings = rememberStringResolver()
     val copiedText = localized("chat_copied")
     val forwardText = localized("chat_forward")
@@ -930,7 +1047,14 @@ fun RoomConversationScreen(
                 .statusBarsPadding()
                 .imePadding(),
         ) {
-            RoomHeader(room = state.room, roomId = roomId, typingLabel = state.typingLabel, onBack = onBack)
+            RoomHeader(
+                room = state.room,
+                roomId = roomId,
+                typingLabel = state.typingLabel,
+                currentUserId = currentUserId,
+                onBack = onBack,
+                onDeleteGroup = { showDeleteGroup = true },
+            )
 
             state.messages.lastOrNull { it.isPinned && !it.isDeleted }?.let { pinned ->
                 PinnedMessageBanner(
@@ -944,6 +1068,7 @@ fun RoomConversationScreen(
                 isMine = viewModel::isMine,
                 onLoadMore = viewModel::loadMore,
                 onLongPress = { actionTarget = it },
+                onRetry = viewModel::reload,
                 modifier = Modifier.weight(1f),
             )
 
@@ -1047,6 +1172,31 @@ fun RoomConversationScreen(
             },
         )
     }
+
+    if (showDeleteGroup) {
+        androidx.compose.material3.AlertDialog(
+            onDismissRequest = { showDeleteGroup = false },
+            title = { Text(localized("chat_delete_group")) },
+            text = { Text(localized("chat_delete_group_confirm")) },
+            confirmButton = {
+                Text(
+                    localized("chat_delete"),
+                    color = LiquidGlass.Rose,
+                    fontWeight = FontWeight.Bold,
+                    modifier = Modifier.clickable {
+                        showDeleteGroup = false
+                        viewModel.deleteRoom(onBack)
+                    }.padding(8.dp),
+                )
+            },
+            dismissButton = {
+                Text(
+                    localized("com_cancel"),
+                    modifier = Modifier.clickable { showDeleteGroup = false }.padding(8.dp),
+                )
+            },
+        )
+    }
 }
 
 @Composable
@@ -1054,9 +1204,13 @@ private fun RoomHeader(
     room: uz.vazifa.app.domain.model.ChatRoom?,
     roomId: String,
     typingLabel: String?,
+    currentUserId: String,
     onBack: () -> Unit,
+    onDeleteGroup: () -> Unit,
 ) {
     val dark = LiquidTheme.isDark
+    val isOwner = room?.ownerId == currentUserId
+    var showMenu by remember { mutableStateOf(false) }
     Row(
         Modifier
             .fillMaxWidth()
@@ -1118,6 +1272,18 @@ private fun RoomHeader(
             }
             Text(sub, color = if (typingLabel != null) LiquidGlass.Blue else LiquidTheme.textMuted, fontSize = 12.sp)
         }
+        if (isOwner) {
+            Box {
+                HeaderIcon(Icons.Default.MoreVert) { showMenu = true }
+                LiquidGlassDropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                    LiquidGlassDropdownItem(
+                        text = localized("chat_delete_group"),
+                        selected = false,
+                        onClick = { showMenu = false; onDeleteGroup() },
+                    )
+                }
+            }
+        }
     }
 }
 
@@ -1145,6 +1311,7 @@ private fun RoomMessageList(
     isMine: (String) -> Boolean,
     onLoadMore: () -> Unit,
     onLongPress: (uz.vazifa.app.domain.model.RoomMessage) -> Unit,
+    onRetry: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val listState = rememberLazyListState()
@@ -1166,8 +1333,9 @@ private fun RoomMessageList(
     }
     LaunchedEffect(shouldLoadMore) { if (shouldLoadMore) onLoadMore() }
 
+    Box(modifier = modifier.fillMaxSize()) {
     LazyColumn(
-        modifier = modifier.fillMaxSize(),
+        modifier = Modifier.fillMaxSize(),
         state = listState,
         reverseLayout = true,
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
@@ -1201,6 +1369,29 @@ private fun RoomMessageList(
         }
         if (state.loadingMore) {
             item { Box(Modifier.fillMaxWidth().padding(8.dp), contentAlignment = Alignment.Center) { Text("...", color = LiquidTheme.textMuted) } }
+        }
+    }
+
+        if (state.loadFailed) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(localized("chat_load_failed"), color = LiquidTheme.textMuted, fontSize = 14.sp)
+                    Spacer(Modifier.height(12.dp))
+                    Box(
+                        Modifier
+                            .clip(RoundedCornerShape(50))
+                            .background(LiquidGlass.Blue)
+                            .clickable(onClick = onRetry)
+                            .padding(horizontal = 20.dp, vertical = 10.dp),
+                    ) {
+                        Text(localized("chat_retry"), color = Color.White, fontWeight = FontWeight.SemiBold, fontSize = 14.sp)
+                    }
+                }
+            }
+        } else if (state.loading && reversed.isEmpty()) {
+            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                Text("...", color = LiquidTheme.textMuted, fontSize = 18.sp)
+            }
         }
     }
 }

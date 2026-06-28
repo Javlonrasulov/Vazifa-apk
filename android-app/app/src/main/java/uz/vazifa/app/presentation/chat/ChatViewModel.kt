@@ -3,7 +3,10 @@ package uz.vazifa.app.presentation.chat
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
+import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -18,6 +21,8 @@ import uz.vazifa.app.domain.model.ChatMessageMeta
 import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.domain.model.ChatPeer
+import uz.vazifa.app.domain.model.PeerProfile
+import uz.vazifa.app.domain.model.toPeerProfile
 import java.io.File
 import java.time.Instant
 import java.util.UUID
@@ -35,11 +40,15 @@ data class ChatUiState(
     /** null | "typing" | "recording" | "uploading" */
     val peerActivity: String? = null,
     val sending: Boolean = false,
+    val loadFailed: Boolean = false,
+    val peerProfile: PeerProfile? = null,
+    val peerProfileLoading: Boolean = false,
 )
 
 @HiltViewModel
 class ChatViewModel @Inject constructor(
     private val repo: ChatRepository,
+    private val auth: uz.vazifa.app.data.repository.AuthRepository,
 ) : ViewModel() {
     private val _state = MutableStateFlow(ChatUiState())
     val state = _state.asStateFlow()
@@ -48,6 +57,7 @@ class ChatViewModel @Inject constructor(
     private var currentUserId: String = ""
     private var stopTypingJob: Job? = null
     private var historyJob: Job? = null
+    private val historyMutex = Mutex()
     private var socketObserving = false
     private val hiddenIds = mutableSetOf<String>()
 
@@ -61,16 +71,11 @@ class ChatViewModel @Inject constructor(
 
     fun isMine(msg: ChatMessage): Boolean = msg.senderId == currentUserId
 
-    fun start(peerId: String, currentUserId: String, initialPeer: ChatPeer?) {
-        if (peerId.isBlank() || currentUserId.isBlank()) return
+    fun start(peerId: String, initialPeer: ChatPeer?) {
+        if (peerId.isBlank()) return
 
         val peerChanged = this.peerId != peerId
         this.peerId = peerId
-        this.currentUserId = currentUserId
-        if (peerChanged) {
-            hiddenIds.clear()
-            _state.value = ChatUiState(loading = true)
-        }
         initialPeer?.let {
             repo.rememberPeer(it)
             _state.update { st -> st.copy(peer = it) }
@@ -82,11 +87,45 @@ class ChatViewModel @Inject constructor(
             observeSocket()
         }
         viewModelScope.launch {
-            runCatching { repo.loadAliases(currentUserId) }
-            resolvePeerInfo(initialPeer)
-            if (peerChanged || _state.value.messages.isEmpty()) {
-                loadHistory()
+            val userId = auth.cachedUserId() ?: auth.currentUser()?.id
+            if (userId.isNullOrBlank()) {
+                _state.update { it.copy(loading = false, loadFailed = true) }
+                return@launch
             }
+            currentUserId = userId
+            hiddenIds.clear()
+            if (peerChanged) {
+                val cached = runCatching { repo.getCachedHistory(peerId) }.getOrDefault(emptyList())
+                _state.update {
+                    ChatUiState(
+                        loading = true,
+                        peer = initialPeer ?: _state.value.peer,
+                        messages = applyHidden(cached),
+                    )
+                }
+            }
+            runCatching { repo.loadAliases(userId) }
+            resolvePeerInfo(initialPeer)
+            loadHistory()
+        }
+    }
+
+    fun reload() {
+        if (peerId.isBlank()) return
+        viewModelScope.launch {
+            val userId = auth.cachedUserId() ?: auth.currentUser()?.id ?: return@launch
+            currentUserId = userId
+            loadHistory()
+        }
+    }
+
+    fun loadPeerProfile() {
+        if (peerId.isBlank()) return
+        viewModelScope.launch {
+            _state.update { it.copy(peerProfileLoading = true) }
+            val profile = runCatching { repo.getContactProfile(peerId) }.getOrNull()
+                ?: _state.value.peer?.toPeerProfile()
+            _state.update { it.copy(peerProfile = profile, peerProfileLoading = false) }
         }
     }
 
@@ -123,17 +162,57 @@ class ChatViewModel @Inject constructor(
     private fun loadHistory() {
         historyJob?.cancel()
         historyJob = viewModelScope.launch {
-            _state.update { it.copy(loading = true) }
-            runCatching { repo.getHistory(peerId, before = null) }
-                .onSuccess { list ->
+            historyMutex.withLock {
+                val cached = runCatching { repo.getCachedHistory(peerId) }.getOrDefault(emptyList())
+                if (cached.isNotEmpty()) {
                     _state.update { st ->
-                        val merged = mergeChatHistory(applyHidden(list), st.messages)
-                        st.copy(messages = merged, loading = false, hasMore = list.size >= 40)
+                        st.copy(messages = applyHidden(cached), loading = true, loadFailed = false)
                     }
-                    markIncomingRead()
+                } else {
+                    _state.update { it.copy(loading = true, loadFailed = false) }
                 }
-                .onFailure { _state.update { it.copy(loading = false) } }
+                try {
+                    var list = repo.getHistory(peerId, before = null)
+                    if (list.isEmpty()) {
+                        list = fallbackFromConversation()
+                    }
+                    _state.update { st ->
+                        val pending = st.messages.filter {
+                            it.status == ChatMessageStatus.SENDING || it.status == ChatMessageStatus.FAILED
+                        }
+                        val merged = mergeChatHistory(applyHidden(list), pending)
+                        st.copy(
+                            messages = merged,
+                            loading = false,
+                            loadFailed = merged.isEmpty(),
+                            hasMore = list.size >= 40,
+                        )
+                    }
+                    if (list.isNotEmpty()) markIncomingRead()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (_: Exception) {
+                    val fallback = fallbackFromConversation()
+                    _state.update { st ->
+                        if (fallback.isNotEmpty()) {
+                            st.copy(messages = applyHidden(fallback), loading = false, loadFailed = false)
+                        } else {
+                            st.copy(loading = false, loadFailed = st.messages.isEmpty())
+                        }
+                    }
+                }
+            }
         }
+    }
+
+    private suspend fun fallbackFromConversation(): List<ChatMessage> {
+        val fromConv = runCatching { repo.getConversations() }.getOrNull()
+            ?.find { it.peer.id == peerId }
+            ?.lastMessage
+            ?.let { listOf(it) }
+            .orEmpty()
+        if (fromConv.isNotEmpty()) return fromConv
+        return runCatching { repo.getCachedHistory(peerId) }.getOrDefault(emptyList())
     }
 
     fun loadMore() {

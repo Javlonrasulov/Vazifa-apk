@@ -1,13 +1,16 @@
 import { Injectable, CanActivate, ExecutionContext, ForbiddenException } from '@nestjs/common';
 import { UserRole } from '../enums';
 
-/** Blocks mobile app access if push notifications are disabled (director/employee only). */
+/** POST/PATCH/DELETE da bildirishnomalar yoqilgan bo'lishi kerak; GET (o'qish) har doim ochiq. */
 @Injectable()
 export class NotificationsGuard implements CanActivate {
   canActivate(context: ExecutionContext): boolean {
-    const { user } = context.switchToHttp().getRequest();
+    const req = context.switchToHttp().getRequest();
+    const { user } = req;
     if (!user) return true;
     if (user.role === UserRole.ADMIN) return true;
+    const method = String(req.method ?? 'GET').toUpperCase();
+    if (method === 'GET') return true;
     if (!user.notificationsEnabled || !user.fcmToken) {
       throw new ForbiddenException({
         code: 'NOTIFICATIONS_REQUIRED',

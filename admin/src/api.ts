@@ -71,6 +71,7 @@ export interface User {
   passwordPlain?: string | null;
   role: 'admin' | 'director' | 'employee';
   canAssignTasks: boolean;
+  allowScreenshot?: boolean;
   position: string | null;
   department: string | null;
   visibleDepartments: string[] | null;
@@ -150,6 +151,7 @@ export async function createUser(body: {
   fullName: string;
   role: 'admin' | 'director' | 'employee';
   canAssignTasks?: boolean;
+  allowScreenshot?: boolean;
   position?: string;
   department?: string;
   phone?: string;

@@ -67,6 +67,7 @@ import androidx.compose.ui.unit.sp
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.components.CountBadgeLabel
+import uz.vazifa.app.presentation.chat.ChatUnreadBadge
 import uz.vazifa.app.presentation.components.formatBadgeCount
 import uz.vazifa.app.presentation.theme.LiquidTheme
 
@@ -417,60 +418,10 @@ private fun DockNavItem(
 @Composable
 private fun GlassChatBadge(count: Int) {
     val isDark = LiquidTheme.isDark
-    val infiniteTransition = rememberInfiniteTransition(label = "badgePulse")
-    val pulse by infiniteTransition.animateFloat(
-        initialValue = 1f,
-        targetValue = 1.18f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "badgePulseScale",
+    ChatUnreadBadge(
+        count = count,
+        background = if (isDark) LiquidGlass.Rose else Color(0xFFEF4444),
     )
-    val glowAlpha by infiniteTransition.animateFloat(
-        initialValue = 0.35f,
-        targetValue = 0.65f,
-        animationSpec = infiniteRepeatable(
-            animation = tween(900, easing = FastOutSlowInEasing),
-            repeatMode = RepeatMode.Reverse,
-        ),
-        label = "badgeGlow",
-    )
-
-    val display = formatBadgeCount(count)
-    val wide = display.length > 1
-
-    Box(Modifier.scale(pulse)) {
-        Box(
-            Modifier
-                .drawBehind {
-                    drawCircle(
-                        brush = Brush.radialGradient(
-                            listOf(LiquidGlass.Rose.copy(alpha = glowAlpha), Color.Transparent),
-                            radius = size.minDimension,
-                        ),
-                    )
-                }
-                .then(if (wide) Modifier.height(16.dp).padding(horizontal = 4.dp) else Modifier.size(16.dp))
-                .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(
-                            if (isDark) LiquidGlass.Rose else Color(0xFFEF4444),
-                            if (isDark) LiquidGlass.Rose.copy(alpha = 0.85f) else Color(0xFFF87171),
-                        ),
-                    ),
-                )
-                .border(
-                    1.dp,
-                    Color.White.copy(alpha = if (isDark) 0.45f else 0.75f),
-                    CircleShape,
-                ),
-            contentAlignment = Alignment.Center,
-        ) {
-            CountBadgeLabel(text = display, fontSize = 9.sp)
-        }
-    }
 }
 
 private fun Modifier.liquidGlassDockBlur(): Modifier {

@@ -83,6 +83,41 @@ data class ChatPeer(
     val displayName: String get() = alias?.takeIf { it.isNotBlank() } ?: fullName
 }
 
+/** Chat ichidagi foydalanuvchi profili (kontakt ma'lumotlari) */
+data class PeerProfile(
+    val id: String,
+    val fullName: String,
+    val avatarUrl: String? = null,
+    val login: String? = null,
+    val phone: String? = null,
+    val position: String? = null,
+    val department: String? = null,
+    val role: String? = null,
+    val isOnline: Boolean = false,
+    val lastSeenAt: String? = null,
+    val alias: String? = null,
+) {
+    val displayName: String get() = alias?.takeIf { it.isNotBlank() } ?: fullName
+}
+
+fun ChatPeer.toPeerProfile(
+    login: String? = null,
+    phone: String? = null,
+    role: String? = null,
+) = PeerProfile(
+    id = id,
+    fullName = fullName,
+    avatarUrl = avatarUrl,
+    login = login,
+    phone = phone,
+    position = position,
+    department = department,
+    role = role,
+    isOnline = isOnline,
+    lastSeenAt = lastSeenAt,
+    alias = alias,
+)
+
 data class Conversation(
     val peer: ChatPeer,
     val lastMessage: ChatMessage?,

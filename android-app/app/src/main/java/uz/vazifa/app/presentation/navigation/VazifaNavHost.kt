@@ -33,6 +33,7 @@ import uz.vazifa.app.data.repository.ChatUnreadRepository
 import uz.vazifa.app.data.repository.NotificationInboxRepository
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.UserDto
+import uz.vazifa.app.presentation.security.ScreenshotPolicyEffect
 import uz.vazifa.app.localization.AppLanguage
 import uz.vazifa.app.localization.AppStrings
 import uz.vazifa.app.util.InboxPreview
@@ -136,7 +137,10 @@ class NavViewModel @Inject constructor(
         viewModelScope.launch {
             val user = auth.restoreSession()
             currentUser = user
-            if (user != null) connectChatSocket()
+            if (user != null) {
+                connectChatSocket()
+                runCatching { chatUnread.setCount(chat.unreadCount()) }
+            }
             onResult(user != null, user)
         }
     }
@@ -230,6 +234,7 @@ fun VazifaNavHost(
     val route = backStack?.destination?.route
     val user = viewModel.currentUser
     val canAssignTasks = user?.canAssignTasks == true
+    ScreenshotPolicyEffect(allowScreenshot = user?.allowScreenshot != false)
     val showBottomNav = route == Routes.MAIN
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
     val chatUnreadCount by viewModel.chatUnreadCount.collectAsState()
@@ -560,7 +565,6 @@ fun VazifaNavHost(
                 ChatConversationScreen(
                     peerId = entry.arguments?.getString("peerId").orEmpty(),
                     peerName = entry.arguments?.getString("name").orEmpty(),
-                    currentUserId = user?.id.orEmpty(),
                     onBack = { navController.popBackStack() },
                 )
             }

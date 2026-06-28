@@ -297,4 +297,10 @@ class AuthRepository @Inject constructor(
             loadCachedUser(prefs)
         }
     }
+
+    /** Tarmoqsiz tez ID olish (chat ochilishi uchun) */
+    suspend fun cachedUserId(): String? {
+        val prefs = loadPrefs()
+        return loadCachedUser(prefs)?.id?.takeIf { it.isNotBlank() }
+    }
 }

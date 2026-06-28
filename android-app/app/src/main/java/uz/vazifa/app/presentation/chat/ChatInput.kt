@@ -6,6 +6,7 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.location.LocationManager
 import android.net.Uri
+import android.os.Build
 import android.provider.ContactsContract
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -92,11 +93,13 @@ fun ChatInputArea(
     var recordLocked by remember { mutableStateOf(false) }
     var recordSeconds by remember { mutableStateOf(0) }
     var cancelHint by remember { mutableStateOf(false) }
+    var micPressed by remember { mutableStateOf(false) }
+    var pendingMic by remember { mutableStateOf(false) }
     val amplitudes = remember { mutableStateListOf<Int>() }
     var currentFile by remember { mutableStateOf<File?>(null) }
 
-    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
-        uri?.let { onPickMedia(it, ChatMessageType.IMAGE) }
+    val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
+        uris.forEach { onPickMedia(it, ChatMessageType.IMAGE) }
     }
     val videoLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { uri ->
         uri?.let { onPickMedia(it, ChatMessageType.VIDEO) }
@@ -114,6 +117,9 @@ fun ChatInputArea(
     }
     val locationPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) lastLocation(context)?.let { (lat, lng) -> onSendLocation(lat, lng) }
+    }
+    val videoPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) videoLauncher.launch("video/*")
     }
 
     fun beginRecording() {
@@ -151,7 +157,19 @@ fun ChatInputArea(
     }
 
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted) beginRecording()
+        if (granted && pendingMic && micPressed) {
+            beginRecording()
+        }
+        pendingMic = false
+    }
+
+    fun requestRecording() {
+        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+            beginRecording()
+        } else {
+            pendingMic = true
+            micPermission.launch(Manifest.permission.RECORD_AUDIO)
+        }
     }
 
     fun launchCamera() {
@@ -170,14 +188,6 @@ fun ChatInputArea(
             launchCamera()
         } else {
             cameraPermission.launch(Manifest.permission.CAMERA)
-        }
-    }
-
-    fun requestRecording() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
-            beginRecording()
-        } else {
-            micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
     }
 
@@ -211,7 +221,18 @@ fun ChatInputArea(
                     showAttach = false
                     requestCamera()
                 },
-                onVideo = { showAttach = false; videoLauncher.launch("video/*") },
+                onVideo = {
+                    showAttach = false
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                        if (ContextCompat.checkSelfPermission(context, Manifest.permission.READ_MEDIA_VIDEO) == PackageManager.PERMISSION_GRANTED) {
+                            videoLauncher.launch("video/*")
+                        } else {
+                            videoPermission.launch(Manifest.permission.READ_MEDIA_VIDEO)
+                        }
+                    } else {
+                        videoLauncher.launch("video/*")
+                    }
+                },
                 onFile = { showAttach = false; fileLauncher.launch("*/*") },
                 onLocation = {
                     showAttach = false
@@ -286,9 +307,10 @@ fun ChatInputArea(
             } else {
                 VoiceButton(
                     recording = recording,
+                    onPressChange = { micPressed = it },
                     onStart = { requestRecording() },
-                    onStop = { finishRecording() },
-                    onCancel = { cancelRecording() },
+                    onStop = { if (recording) finishRecording() },
+                    onCancel = { if (recording) cancelRecording() },
                     onLock = { recordLocked = true },
                     onDragCancel = { cancelHint = it },
                 )
@@ -411,6 +433,7 @@ private fun SendButton(onClick: () -> Unit) {
 @Composable
 private fun VoiceButton(
     recording: Boolean,
+    onPressChange: (Boolean) -> Unit,
     onStart: () -> Unit,
     onStop: () -> Unit,
     onCancel: () -> Unit,
@@ -428,6 +451,7 @@ private fun VoiceButton(
             .pointerInput(Unit) {
                 awaitEachGesture {
                     val down = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
+                    onPressChange(true)
                     onStart()
                     val downAt = System.currentTimeMillis()
                     var locked = false
@@ -438,12 +462,13 @@ private fun VoiceButton(
                         val dx = change.position.x - down.position.x
                         if (!locked) cancelled = dx < -120f
                         onDragCancel(cancelled)
-                        if (!locked && System.currentTimeMillis() - downAt >= 2_000L) {
+                        if (!locked && System.currentTimeMillis() - downAt >= 1_000L) {
                             locked = true
                             onLock()
                         }
                         if (change.changedToUp()) break
                     }
+                    onPressChange(false)
                     if (locked) return@awaitEachGesture
                     if (cancelled) onCancel() else onStop()
                 }

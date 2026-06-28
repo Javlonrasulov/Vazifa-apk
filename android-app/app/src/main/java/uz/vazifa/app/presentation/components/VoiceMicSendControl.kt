@@ -4,9 +4,7 @@ import android.Manifest
 import android.content.pm.PackageManager
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.foundation.background
-import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.Box
@@ -31,12 +29,11 @@ import androidx.core.content.ContextCompat
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import uz.vazifa.app.presentation.theme.LiquidGlass
-import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.util.VoiceRecorder
 import java.io.File
 
 private const val MIN_VOICE_MS = 1_000L
-private const val LOCK_MS = 2_000L
+private const val LOCK_MS = 1_000L
 
 @Stable
 class VoiceRecordState(
@@ -45,12 +42,13 @@ class VoiceRecordState(
     val elapsedSec: Int,
 )
 
-class VoiceRecordController(
-    val startHold: () -> Unit,
-    val finishRecording: () -> Unit,
-    val cancelRecording: () -> Unit,
-    val lock: () -> Unit,
-    val locked: () -> Boolean,
+class VoiceRecordController internal constructor(
+    internal val startHold: () -> Unit,
+    internal val finishRecording: () -> Unit,
+    internal val cancelRecording: () -> Unit,
+    internal val lock: () -> Unit,
+    internal val isLocked: () -> Boolean,
+    internal val isRecording: () -> Boolean,
 )
 
 @Composable
@@ -64,24 +62,10 @@ fun rememberVoiceRecorder(
     var isLocked by remember { mutableStateOf(false) }
     var elapsedSec by remember { mutableIntStateOf(0) }
     var recordingStartedAt by remember { mutableLongStateOf(0L) }
-    var pendingStart by remember { mutableStateOf(false) }
 
     val permissionLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission(),
-    ) { granted ->
-        if (granted) pendingStart = true
-    }
-
-    LaunchedEffect(pendingStart) {
-        if (pendingStart) {
-            pendingStart = false
-            recorder.start()
-            isRecording = true
-            isLocked = false
-            elapsedSec = 0
-            recordingStartedAt = System.currentTimeMillis()
-        }
-    }
+    ) { /* keyingi bosishda yoziladi */ }
 
     LaunchedEffect(isRecording) {
         if (!isRecording) return@LaunchedEffect
@@ -133,7 +117,8 @@ fun rememberVoiceRecorder(
         finishRecording = ::finishRecording,
         cancelRecording = ::cancelRecording,
         lock = { isLocked = true },
-        locked = { isLocked },
+        isLocked = { isLocked },
+        isRecording = { isRecording },
     )
     return VoiceRecordState(isRecording, isLocked, elapsedSec) to controller
 }
@@ -158,31 +143,37 @@ fun VoiceMicSendButton(
                     Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan))
                 },
             )
-            .then(
-                if (state.isRecording) {
-                    Modifier.clickable(enabled = enabled) { controller.finishRecording() }
-                } else {
-                    Modifier.pointerInput(enabled) {
-                        if (!enabled) return@pointerInput
-                        awaitEachGesture {
+            .pointerInput(enabled) {
+                if (!enabled) return@pointerInput
+                awaitEachGesture {
+                    when {
+                        controller.isRecording() && controller.isLocked() -> {
+                            awaitFirstDown(requireUnconsumed = false)
+                            controller.finishRecording()
+                        }
+                        controller.isRecording() -> {
+                            awaitFirstDown(requireUnconsumed = false)
+                            controller.finishRecording()
+                        }
+                        else -> {
                             awaitFirstDown(requireUnconsumed = false)
                             controller.startHold()
                             val downAt = System.currentTimeMillis()
                             while (true) {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull() ?: break
-                                if (!controller.locked() && System.currentTimeMillis() - downAt >= LOCK_MS) {
+                                if (!controller.isLocked() && System.currentTimeMillis() - downAt >= LOCK_MS) {
                                     controller.lock()
                                 }
                                 if (change.changedToUp()) break
                             }
-                            if (!controller.locked()) {
+                            if (!controller.isLocked()) {
                                 controller.finishRecording()
                             }
                         }
                     }
-                },
-            ),
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
         if (state.isRecording) {

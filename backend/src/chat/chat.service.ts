@@ -10,6 +10,7 @@ import { SendMessageDto } from './dto/chat.dto';
 import { User } from '../users/entities/user.entity';
 import { isUserOnline, resolveLastSeenAt } from '../common/utils/presence';
 import { mediaUrl } from '../common/utils/media-url';
+import { chatMessageToPayload } from './chat-message.util';
 
 export interface ConversationSummary {
   peer: {
@@ -48,6 +49,14 @@ export class ChatService {
     return msg ? this.withUrls(msg) : null;
   }
 
+  private toHistoryPayload(msg: ChatMessage): Record<string, unknown> {
+    const payload = chatMessageToPayload(msg);
+    if (msg.replyTo) {
+      payload.replyTo = chatMessageToPayload(msg.replyTo);
+    }
+    return payload;
+  }
+
   async getHistory(userId: string, otherId: string, before?: string, limit = 40) {
     const qb = this.repo
       .createQueryBuilder('m')
@@ -69,7 +78,7 @@ export class ChatService {
     }
 
     const rows = await qb.getMany();
-    return rows.reverse().map((m) => this.withUrls(m));
+    return rows.reverse().map((m) => this.toHistoryPayload(this.withUrls(m)));
   }
 
   async getConversations(userId: string): Promise<ConversationSummary[]> {

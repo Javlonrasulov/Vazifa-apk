@@ -1,6 +1,8 @@
 #!/bin/bash
 set -e
+cp /opt/vazifa-prod/backend/.env /tmp/vazifa-prod.env.bak
 tar xzf /tmp/vazifa-update.tar.gz -C /opt/vazifa-prod
+cp /tmp/vazifa-prod.env.bak /opt/vazifa-prod/backend/.env
 rsync -a /opt/vazifa-prod/backend/ /opt/vazifa-dev/backend/ --exclude .env
 rsync -a /opt/vazifa-prod/admin/ /opt/vazifa-dev/admin/
 

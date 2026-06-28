@@ -54,8 +54,8 @@ export class AuthController {
   @UseGuards(AuthGuard('jwt'))
   @Get('me')
   me(@Request() req: { user: User }) {
-    const { passwordHash, fcmToken, passwordPlain, ...rest } = req.user;
-    return rest;
+    const { passwordHash, fcmToken, passwordPlain, allowScreenshot, ...rest } = req.user;
+    return { ...rest, allowScreenshot: allowScreenshot !== false };
   }
 
   @UseGuards(AuthGuard('jwt'))

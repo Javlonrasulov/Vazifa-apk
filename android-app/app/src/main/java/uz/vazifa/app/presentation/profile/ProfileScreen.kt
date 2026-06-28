@@ -52,6 +52,7 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
     var showCurrentPassword by remember { mutableStateOf(false) }
     var showNewPassword by remember { mutableStateOf(false) }
     var showConfirmPassword by remember { mutableStateOf(false) }
+    var showAvatarViewer by remember { mutableStateOf(false) }
 
     LaunchedEffect(Unit) { viewModel.load(onSessionExpired = onLogout) }
 
@@ -75,7 +76,13 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                                 Box(contentAlignment = Alignment.BottomEnd) {
-                                    ChatAvatar(u.fullName, online = false, size = 72.dp, showPresence = false, avatarUrl = u.avatarUrl)
+                                    Box(
+                                        Modifier.clickable(enabled = !state.uploadingAvatar) {
+                                            if (!u.avatarUrl.isNullOrBlank()) showAvatarViewer = true
+                                        },
+                                    ) {
+                                        ChatAvatar(u.fullName, online = false, size = 72.dp, showPresence = false, avatarUrl = u.avatarUrl)
+                                    }
                                     Box(
                                         Modifier
                                             .size(26.dp)
@@ -248,5 +255,15 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
                 )
             }
         }
+    }
+
+    state.user?.avatarUrl?.takeIf { showAvatarViewer && !it.isNullOrBlank() }?.let { url ->
+        uz.vazifa.app.presentation.components.AvatarViewerDialog(
+            avatarUrl = url,
+            name = state.user?.fullName.orEmpty(),
+            onDismiss = { showAvatarViewer = false },
+            onChangePhoto = { imagePicker.launch("image/*") },
+            onDeletePhoto = { viewModel.deleteAvatar() },
+        )
     }
 }

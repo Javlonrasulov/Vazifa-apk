@@ -41,6 +41,7 @@ const emptyEmployeeForm = () => ({
   fullName: '',
   role: 'employee' as 'director' | 'employee',
   canAssignTasks: false,
+  allowScreenshot: true,
   position: '',
   department: '',
   visibleDepartments: [] as string[],
@@ -123,7 +124,7 @@ export default function EmployeesPage() {
 
   const deptChipBtn = (active: boolean): React.CSSProperties => ({
     display: 'flex',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 8,
     width: '100%',
@@ -349,6 +350,7 @@ export default function EmployeesPage() {
       fullName: u.fullName,
       role: u.role as 'director' | 'employee',
       canAssignTasks: u.canAssignTasks ?? u.role === 'director',
+      allowScreenshot: u.allowScreenshot !== false,
       position: u.position ?? '',
       department: u.department ?? '',
       visibleDepartments: [...(u.visibleDepartments ?? [])],
@@ -388,6 +390,7 @@ export default function EmployeesPage() {
           fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
+          allowScreenshot: form.allowScreenshot,
           position: form.position || null,
           department: form.department || null,
           visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : null,
@@ -406,6 +409,7 @@ export default function EmployeesPage() {
           fullName: form.fullName.trim(),
           role: form.role,
           canAssignTasks: form.canAssignTasks,
+          allowScreenshot: form.allowScreenshot,
           position: form.position || undefined,
           department: form.department || undefined,
           visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : undefined,
@@ -549,7 +553,9 @@ export default function EmployeesPage() {
             borderRadius: 20,
             border: `1px solid ${border}`,
             width: '100%',
-            maxWidth: 440,
+            maxWidth: 600,
+            maxHeight: 'calc(100vh - 32px)',
+            overflowY: 'auto',
             margin: 16,
             padding: '24px 22px',
             boxShadow: D ? '0 24px 64px rgba(0,0,0,0.7)' : '0 24px 64px rgba(0,0,0,0.15)',
@@ -684,6 +690,26 @@ export default function EmployeesPage() {
               </div>
             </div>
             <div>
+              <label style={labelStyle}>{t('allowScreenshot')}</label>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  type="button"
+                  style={segmentedBtn(form.allowScreenshot)}
+                  onClick={() => setForm({ ...form, allowScreenshot: true })}
+                >
+                  {t('yes')}
+                </button>
+                <button
+                  type="button"
+                  style={segmentedBtn(!form.allowScreenshot)}
+                  onClick={() => setForm({ ...form, allowScreenshot: false })}
+                >
+                  {t('no')}
+                </button>
+              </div>
+              <div style={{ fontSize: 11, color: muted, marginTop: 6 }}>{t('allowScreenshotHint')}</div>
+            </div>
+            <div>
               <label style={labelStyle}>{t('position')}</label>
               <input
                 style={inputStyle}
@@ -811,9 +837,9 @@ export default function EmployeesPage() {
                   <div
                     style={{
                       display: 'grid',
-                      gridTemplateColumns: 'repeat(auto-fill, minmax(140px, 1fr))',
+                      gridTemplateColumns: 'repeat(auto-fill, minmax(180px, 1fr))',
                       gap: 8,
-                      maxHeight: 176,
+                      maxHeight: 220,
                       overflowY: 'auto',
                     }}
                   >
@@ -845,7 +871,7 @@ export default function EmployeesPage() {
                             >
                               <Layers size={14} color={checked ? INDIGO : muted} />
                             </span>
-                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                            <span style={{ lineHeight: 1.35, textAlign: 'left', wordBreak: 'break-word' }}>
                               {dept.name}
                             </span>
                           </span>
