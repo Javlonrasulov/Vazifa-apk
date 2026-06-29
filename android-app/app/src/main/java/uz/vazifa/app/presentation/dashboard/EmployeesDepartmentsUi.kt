@@ -1,25 +1,22 @@
 package uz.vazifa.app.presentation.dashboard
 
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Business
 import androidx.compose.material.icons.filled.People
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
@@ -32,6 +29,7 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -58,96 +56,71 @@ private val departmentPalette = listOf(
 )
 
 @Composable
-fun EmployeesPageContent(
-    employees: List<User>,
-    departments: List<Department>,
-    selectedDepartment: String?,
-    searchQuery: String,
-    selectedEmployeeIds: Set<String>,
-    style: SectionStyle,
-    bottomPadding: androidx.compose.ui.unit.Dp,
-    onDepartmentSelected: (String?) -> Unit,
-    onSearch: (String) -> Unit,
-    onToggleEmployee: (String) -> Unit,
-    onEmployeeClick: (String) -> Unit,
-    onAssignTask: (String) -> Unit,
+fun EmployeeSearchField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    modifier: Modifier = Modifier,
+    onSearch: (() -> Unit)? = null,
 ) {
     val fieldColors = liquidGlassFieldColors()
-    val listTitle = when {
-        searchQuery.isNotBlank() -> localized("emp_search_results")
-        selectedDepartment != null -> selectedDepartment
-        else -> localized("emp_all_staff")
-    }
+    OutlinedTextField(
+        value = value,
+        onValueChange = onValueChange,
+        placeholder = {
+            Text(
+                localized("task_search_employee"),
+                color = LiquidTheme.textMuted,
+                fontSize = 13.sp,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+        },
+        modifier = modifier
+            .fillMaxWidth()
+            .heightIn(min = 44.dp, max = 48.dp),
+        shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+        colors = fieldColors,
+        leadingIcon = {
+            Icon(
+                Icons.Default.Search,
+                contentDescription = null,
+                tint = LiquidTheme.textMuted,
+                modifier = Modifier.size(20.dp),
+            )
+        },
+        singleLine = true,
+        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
+    )
+}
 
+@Composable
+fun EmployeesHubContent(
+    totalEmployees: Int,
+    departments: List<Department>,
+    searchQuery: String,
+    onSearch: (String) -> Unit,
+    onSearchSubmit: () -> Unit,
+    onDepartmentClick: (String?) -> Unit,
+) {
     LazyColumn(
-        contentPadding = PaddingValues(
-            start = 16.dp,
-            end = 16.dp,
-            top = 16.dp,
-            bottom = bottomPadding,
-        ),
+        contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         item {
-            OutlinedTextField(
+            EmployeeSearchField(
                 value = searchQuery,
                 onValueChange = onSearch,
-                label = { Text(localized("task_search_employee")) },
-                modifier = Modifier.fillMaxWidth(),
-                shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-                colors = fieldColors,
-                leadingIcon = {
-                    Icon(Icons.Default.Search, contentDescription = null, tint = LiquidTheme.textMuted)
-                },
-                singleLine = true,
+                onSearch = onSearchSubmit,
             )
         }
         item {
             EmployeeDepartmentGrid(
-                totalEmployees = employees.size,
+                totalEmployees = totalEmployees,
                 departments = departments,
-                selectedDepartment = selectedDepartment,
-                onDepartmentSelected = onDepartmentSelected,
+                onDepartmentClick = onDepartmentClick,
             )
-        }
-        item {
-            AnimatedContent(
-                targetState = listTitle,
-                transitionSpec = { fadeIn(tween(220)) togetherWith fadeOut(tween(180)) },
-                label = "emp_list_title",
-            ) { title ->
-                Row(
-                    Modifier.fillMaxWidth(),
-                    horizontalArrangement = Arrangement.SpaceBetween,
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Text(
-                        title,
-                        color = LiquidTheme.text,
-                        fontWeight = FontWeight.SemiBold,
-                        fontSize = 16.sp,
-                    )
-                    Text(
-                        "${employees.size} ${localized("dash_unit")}",
-                        color = LiquidTheme.textMuted,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-        }
-        if (employees.isEmpty()) {
-            item { EmployeesEmptyCard(style) }
-        } else {
-            items(employees, key = { it.id }) { employee ->
-                EmployeeRow(
-                    user = employee,
-                    style = style,
-                    selected = employee.id in selectedEmployeeIds,
-                    onToggleSelect = { onToggleEmployee(employee.id) },
-                    onClick = { onEmployeeClick(employee.id) },
-                    onAssignTask = { onAssignTask(employee.id) },
-                )
-            }
         }
     }
 }
@@ -156,8 +129,7 @@ fun EmployeesPageContent(
 fun EmployeeDepartmentGrid(
     totalEmployees: Int,
     departments: List<Department>,
-    selectedDepartment: String?,
-    onDepartmentSelected: (String?) -> Unit,
+    onDepartmentClick: (String?) -> Unit,
 ) {
     val allItems = buildList {
         add(null to totalEmployees)
@@ -179,8 +151,7 @@ fun EmployeeDepartmentGrid(
                         } else {
                             departmentPalette[kotlin.math.abs(name.hashCode()) % departmentPalette.size]
                         },
-                        selected = if (name == null) selectedDepartment == null else selectedDepartment == name,
-                        onClick = { onDepartmentSelected(name) },
+                        onClick = { onDepartmentClick(name) },
                         modifier = Modifier.weight(1f),
                     )
                 }
@@ -196,24 +167,13 @@ private fun EmployeeDepartmentCard(
     count: Int,
     icon: ImageVector,
     color: Color,
-    selected: Boolean,
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
 ) {
     val scale by animateFloatAsState(
-        targetValue = if (selected) 1.03f else 1f,
+        targetValue = 1f,
         animationSpec = tween(220),
         label = "dept_card_scale",
-    )
-    val borderColor by animateColorAsState(
-        targetValue = if (selected) LiquidGlass.Blue else Color.Transparent,
-        animationSpec = tween(220),
-        label = "dept_card_border",
-    )
-    val bgAlpha by animateFloatAsState(
-        targetValue = if (selected) 0.14f else 0f,
-        animationSpec = tween(220),
-        label = "dept_card_bg",
     )
 
     Column(
@@ -221,12 +181,11 @@ private fun EmployeeDepartmentCard(
             .scale(scale)
             .clip(RoundedCornerShape(LiquidGlass.RadiusCard))
             .border(
-                width = if (selected) 2.dp else 1.dp,
-                color = borderColor,
+                width = 1.dp,
+                color = Color.Transparent,
                 shape = RoundedCornerShape(LiquidGlass.RadiusCard),
             )
             .liquidGlassThemed()
-            .background(LiquidGlass.Blue.copy(alpha = bgAlpha))
             .clickable(onClick = onClick)
             .padding(14.dp),
     ) {
@@ -274,7 +233,7 @@ fun EmployeeRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        androidx.compose.material3.Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+        Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
         Row(
             Modifier
                 .weight(1f)
@@ -320,14 +279,8 @@ fun EmployeeRow(
     }
 }
 
-private fun employeeInitials(name: String): String =
-    name.trim().split(Regex("\\s+"))
-        .filter { it.isNotBlank() }
-        .take(2)
-        .joinToString("") { it.first().uppercaseChar().toString() }
-
 @Composable
-private fun EmployeesEmptyCard(style: SectionStyle) {
+fun EmployeesEmptyCard(style: SectionStyle) {
     Column(
         Modifier
             .fillMaxWidth()

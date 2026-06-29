@@ -126,7 +126,7 @@ export class ChatService {
             isOnline: isUserOnline(peer),
             lastSeenAt: resolveLastSeenAt(peer)?.toISOString() ?? null,
           },
-          lastMessage: this.withUrls(lastMessage),
+          lastMessage: this.toHistoryPayload(this.withUrls(lastMessage)) as any,
           unreadCount: unreadMap.get(peer.id) ?? 0,
         } as ConversationSummary;
       })

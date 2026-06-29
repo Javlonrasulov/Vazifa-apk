@@ -14,6 +14,16 @@ object MediaUrl {
         return "$base/tasks/attachments/$attachmentId/file"
     }
 
+    fun resolveChatMedia(filePath: String?, metaUrl: String?): String? {
+        val path = filePath?.takeIf { it.isNotBlank() }
+        val url = metaUrl?.takeIf { it.isNotBlank() }
+        return when {
+            !url.isNullOrBlank() && url.startsWith("http") -> url
+            !path.isNullOrBlank() || !url.isNullOrBlank() -> resolve(path.orEmpty(), url)
+            else -> null
+        }
+    }
+
     fun resolve(filePath: String, serverUrl: String? = null): String {
         extractUploadPath(serverUrl)?.let { return "${apiOrigin()}$it" }
         return fromFilePath(filePath)

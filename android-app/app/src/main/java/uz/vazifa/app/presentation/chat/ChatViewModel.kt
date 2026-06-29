@@ -80,29 +80,32 @@ class ChatViewModel @Inject constructor(
             repo.rememberPeer(it)
             _state.update { st -> st.copy(peer = it) }
         }
-        repo.connect()
-        repo.ping()
-        if (!socketObserving) {
-            socketObserving = true
-            observeSocket()
-        }
         viewModelScope.launch {
-            val userId = auth.cachedUserId() ?: auth.currentUser()?.id
+            val userId = auth.ensureSessionForApi()
             if (userId.isNullOrBlank()) {
                 _state.update { it.copy(loading = false, loadFailed = true) }
                 return@launch
             }
             currentUserId = userId
+            repo.connect()
+            repo.ping()
+            if (!socketObserving) {
+                socketObserving = true
+                observeSocket()
+            }
             hiddenIds.clear()
-            if (peerChanged) {
+            if (peerChanged || _state.value.messages.isEmpty()) {
                 val cached = runCatching { repo.getCachedHistory(peerId) }.getOrDefault(emptyList())
                 _state.update {
                     ChatUiState(
                         loading = true,
-                        peer = initialPeer ?: _state.value.peer,
+                        peer = initialPeer?.takeIf { it.fullName.isNotBlank() } ?: _state.value.peer,
                         messages = applyHidden(cached),
                     )
                 }
+            } else if (initialPeer?.fullName?.isNotBlank() == true) {
+                repo.rememberPeer(initialPeer)
+                _state.update { st -> st.copy(peer = initialPeer) }
             }
             runCatching { repo.loadAliases(userId) }
             resolvePeerInfo(initialPeer)
@@ -112,8 +115,10 @@ class ChatViewModel @Inject constructor(
 
     fun reload() {
         if (peerId.isBlank()) return
+        repo.reconnect()
+        repo.ping()
         viewModelScope.launch {
-            val userId = auth.cachedUserId() ?: auth.currentUser()?.id ?: return@launch
+            val userId = auth.ensureSessionForApi() ?: return@launch
             currentUserId = userId
             loadHistory()
         }
@@ -174,13 +179,14 @@ class ChatViewModel @Inject constructor(
                 try {
                     var list = repo.getHistory(peerId, before = null)
                     if (list.isEmpty()) {
+                        auth.currentUser()
+                        list = repo.getHistory(peerId, before = null)
+                    }
+                    if (list.isEmpty()) {
                         list = fallbackFromConversation()
                     }
                     _state.update { st ->
-                        val pending = st.messages.filter {
-                            it.status == ChatMessageStatus.SENDING || it.status == ChatMessageStatus.FAILED
-                        }
-                        val merged = mergeChatHistory(applyHidden(list), pending)
+                        val merged = mergeChatHistory(applyHidden(list), st.messages)
                         st.copy(
                             messages = merged,
                             loading = false,
@@ -280,9 +286,13 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun involvesPeer(m: ChatMessage): Boolean =
-        (m.senderId == peerId && m.receiverId == currentUserId) ||
+    private fun involvesPeer(m: ChatMessage): Boolean {
+        if (currentUserId.isBlank()) {
+            return m.senderId == peerId || m.receiverId == peerId
+        }
+        return (m.senderId == peerId && m.receiverId == currentUserId) ||
             (m.senderId == currentUserId && m.receiverId == peerId)
+    }
 
     private fun upsert(msg: ChatMessage) {
         if (msg.id in hiddenIds || (msg.clientId != null && msg.clientId in hiddenIds)) return

@@ -1,8 +1,12 @@
 #!/bin/bash
 set -e
 cp /opt/vazifa-prod/backend/.env /tmp/vazifa-prod.env.bak
-tar xzf /tmp/vazifa-update.tar.gz -C /opt/vazifa-prod
+tar xzf /tmp/vazifa-update.tar.gz -C /opt/vazifa-prod 2>/dev/null || tar xzf /tmp/vazifa-deploy2.tar.gz -C /opt/vazifa-prod
 cp /tmp/vazifa-prod.env.bak /opt/vazifa-prod/backend/.env
+# Agar backup noto'g'ri bo'lsa (local .env arxivdan kelgan) — .env.bak dan tikla
+if ! grep -q 'vazifa_app_prod' /opt/vazifa-prod/backend/.env 2>/dev/null; then
+  cp /opt/vazifa-prod/backend/.env.bak /opt/vazifa-prod/backend/.env
+fi
 rsync -a /opt/vazifa-prod/backend/ /opt/vazifa-dev/backend/ --exclude .env
 rsync -a /opt/vazifa-prod/admin/ /opt/vazifa-dev/admin/
 

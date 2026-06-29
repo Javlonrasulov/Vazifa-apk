@@ -19,6 +19,8 @@ uploads/
 android-app/.gradle/
 android-app/**/build/
 android-app/local.properties
+android-app/*.jks
+android-app/**/*.jks
 android-app/.idea/
 android-app/*.iml
 *.apk

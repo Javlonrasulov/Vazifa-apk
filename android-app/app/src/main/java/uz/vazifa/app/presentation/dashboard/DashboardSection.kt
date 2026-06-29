@@ -39,7 +39,6 @@ import uz.vazifa.app.domain.model.Department
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.domain.model.User
-import uz.vazifa.app.domain.model.matchesDepartment
 import uz.vazifa.app.domain.model.hasActiveAssignment
 import uz.vazifa.app.domain.model.hasCompletedAssignment
 import uz.vazifa.app.domain.model.canCreatorManage
@@ -50,7 +49,6 @@ import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
-import uz.vazifa.app.util.UzbekTextSearch
 import javax.inject.Inject
 
 enum class DashboardSection(val route: String) {
@@ -106,26 +104,10 @@ data class DashboardSectionUiState(
     val loading: Boolean = false,
     val employees: List<User> = emptyList(),
     val departments: List<Department> = emptyList(),
-    val selectedDepartment: String? = null,
     val searchQuery: String = "",
     val tasks: List<Task> = emptyList(),
-    val selectedEmployeeIds: Set<String> = emptySet(),
 ) {
-    val filteredEmployees: List<User>
-        get() {
-            val q = searchQuery.trim()
-            var list = employees
-            if (q.isNotBlank()) {
-                list = list.filter { user ->
-                    UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q)
-                }
-            } else {
-                selectedDepartment?.let { dept ->
-                    list = list.filter { it.matchesDepartment(dept) }
-                }
-            }
-            return list
-        }
+    val totalEmployees: Int get() = employees.size
 }
 
 @HiltViewModel
@@ -174,30 +156,8 @@ class DashboardSectionViewModel @Inject constructor(
         }
     }
 
-    fun toggleEmployee(id: String) {
-        _state.update {
-            val ids = it.selectedEmployeeIds.toMutableSet()
-            if (ids.contains(id)) ids.remove(id) else ids.add(id)
-            it.copy(selectedEmployeeIds = ids)
-        }
-    }
-
-    fun onDepartmentSelected(department: String?) {
-        _state.update { it.copy(selectedDepartment = department, selectedEmployeeIds = emptySet()) }
-    }
-
     fun onSearch(query: String) {
         _state.update { it.copy(searchQuery = query) }
-    }
-
-    fun selectAllEmployees() {
-        _state.update { state ->
-            state.copy(selectedEmployeeIds = state.filteredEmployees.map { it.id }.toSet())
-        }
-    }
-
-    fun clearSelection() {
-        _state.update { it.copy(selectedEmployeeIds = emptySet()) }
     }
 
     fun deleteTask(taskId: String) = viewModelScope.launch {
@@ -234,30 +194,8 @@ class EmployeesTabViewModel @Inject constructor(
         }
     }
 
-    fun toggleEmployee(id: String) {
-        _state.update {
-            val ids = it.selectedEmployeeIds.toMutableSet()
-            if (ids.contains(id)) ids.remove(id) else ids.add(id)
-            it.copy(selectedEmployeeIds = ids)
-        }
-    }
-
-    fun onDepartmentSelected(department: String?) {
-        _state.update { it.copy(selectedDepartment = department, selectedEmployeeIds = emptySet()) }
-    }
-
     fun onSearch(query: String) {
         _state.update { it.copy(searchQuery = query) }
-    }
-
-    fun selectAllEmployees() {
-        _state.update { state ->
-            state.copy(selectedEmployeeIds = state.filteredEmployees.map { it.id }.toSet())
-        }
-    }
-
-    fun clearSelection() {
-        _state.update { it.copy(selectedEmployeeIds = emptySet()) }
     }
 }
 
@@ -265,13 +203,11 @@ class EmployeesTabViewModel @Inject constructor(
 fun EmployeesTabScreen(
     onEmployeeClick: (String) -> Unit,
     onAssignTask: (Set<String>) -> Unit,
+    onDepartmentClick: (String?) -> Unit,
+    onSearchAll: (String) -> Unit,
     viewModel: EmployeesTabViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
-    val style = DashboardSection.EMPLOYEES.style()
-    val visibleEmployees = state.filteredEmployees
-    val allSelected = visibleEmployees.isNotEmpty() &&
-        visibleEmployees.all { it.id in state.selectedEmployeeIds }
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -283,65 +219,24 @@ fun EmployeesTabScreen(
 
     VazifaTabScaffold(
         title = localized("nav_employees"),
-        actions = {
-            if (visibleEmployees.isNotEmpty()) {
-                TextButton(onClick = {
-                    if (allSelected) viewModel.clearSelection() else viewModel.selectAllEmployees()
-                }) {
-                    Text(
-                        localized(if (allSelected) "emp_deselect_all" else "emp_select_all"),
-                        color = LiquidGlass.Blue,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-            VazifaHeaderActions()
-        },
+        actions = { VazifaHeaderActions() },
     ) { padding ->
         LiquidBackground(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize()) {
-                VazifaScreenBox(padding) {
-                    when {
-                        state.loading -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = LiquidGlass.Blue)
-                            }
-                        }
-                        else -> {
-                            EmployeesPageContent(
-                                employees = visibleEmployees,
-                                departments = state.departments,
-                                selectedDepartment = state.selectedDepartment,
-                                searchQuery = state.searchQuery,
-                                selectedEmployeeIds = state.selectedEmployeeIds,
-                                style = style,
-                                bottomPadding = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
-                                onDepartmentSelected = viewModel::onDepartmentSelected,
-                                onSearch = viewModel::onSearch,
-                                onToggleEmployee = viewModel::toggleEmployee,
-                                onEmployeeClick = onEmployeeClick,
-                                onAssignTask = { onAssignTask(setOf(it)) },
-                            )
+            VazifaScreenBox(padding) {
+                when {
+                    state.loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = LiquidGlass.Blue)
                         }
                     }
-                }
-                if (state.selectedEmployeeIds.isNotEmpty()) {
-                    Button(
-                        onClick = { onAssignTask(state.selectedEmployeeIds) },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(LiquidGlass.RadiusChip),
-                        colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-                    ) {
-                        Icon(Icons.Default.Add, null, tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${localized("task_create")} (${state.selectedEmployeeIds.size})",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
+                    else -> {
+                        EmployeesHubContent(
+                            totalEmployees = state.totalEmployees,
+                            departments = state.departments,
+                            searchQuery = state.searchQuery,
+                            onSearch = viewModel::onSearch,
+                            onSearchSubmit = { onSearchAll(state.searchQuery) },
+                            onDepartmentClick = onDepartmentClick,
                         )
                     }
                 }
@@ -357,6 +252,8 @@ fun DashboardSectionScreen(
     onAssignTask: (Set<String>) -> Unit = {},
     onEmployeeClick: (String) -> Unit = {},
     onEditTask: (String) -> Unit = {},
+    onDepartmentClick: (String?) -> Unit = {},
+    onSearchAll: (String) -> Unit = {},
     currentUserId: String? = null,
     viewModel: DashboardSectionViewModel = hiltViewModel(),
 ) {
@@ -365,13 +262,10 @@ fun DashboardSectionScreen(
     val section = viewModel.section
     val style = section.style()
     val isEmployees = section == DashboardSection.EMPLOYEES
-    val visibleEmployees = if (isEmployees) state.filteredEmployees else emptyList()
     val count = when {
         isEmployees -> state.employees.size
         else -> state.tasks.size
     }
-    val allSelected = isEmployees && visibleEmployees.isNotEmpty() &&
-        visibleEmployees.all { it.id in state.selectedEmployeeIds }
 
     LaunchedEffect(Unit) {
         viewModel.load()
@@ -412,18 +306,7 @@ fun DashboardSectionScreen(
         title = localized(section.titleKey()),
         onBack = onBack,
         actions = {
-            if (isEmployees && visibleEmployees.isNotEmpty()) {
-                TextButton(onClick = {
-                    if (allSelected) viewModel.clearSelection() else viewModel.selectAllEmployees()
-                }) {
-                    Text(
-                        localized(if (allSelected) "emp_deselect_all" else "emp_select_all"),
-                        color = LiquidGlass.Blue,
-                        fontSize = 13.sp,
-                    )
-                }
-            }
-            VazifaHeaderActions()
+            if (!isEmployees) VazifaHeaderActions()
         },
     ) { padding ->
         LiquidBackground(Modifier.fillMaxSize()) {
@@ -436,19 +319,13 @@ fun DashboardSectionScreen(
                             }
                         }
                         isEmployees -> {
-                            EmployeesPageContent(
-                                employees = visibleEmployees,
+                            EmployeesHubContent(
+                                totalEmployees = state.totalEmployees,
                                 departments = state.departments,
-                                selectedDepartment = state.selectedDepartment,
                                 searchQuery = state.searchQuery,
-                                selectedEmployeeIds = state.selectedEmployeeIds,
-                                style = style,
-                                bottomPadding = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
-                                onDepartmentSelected = viewModel::onDepartmentSelected,
                                 onSearch = viewModel::onSearch,
-                                onToggleEmployee = viewModel::toggleEmployee,
-                                onEmployeeClick = onEmployeeClick,
-                                onAssignTask = { onAssignTask(setOf(it)) },
+                                onSearchSubmit = { onSearchAll(state.searchQuery) },
+                                onDepartmentClick = onDepartmentClick,
                             )
                         }
                         else -> {
@@ -475,27 +352,6 @@ fun DashboardSectionScreen(
                                 }
                             }
                         }
-                    }
-                }
-                if (isEmployees && state.selectedEmployeeIds.isNotEmpty()) {
-                    Button(
-                        onClick = { onAssignTask(state.selectedEmployeeIds) },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .navigationBarsPadding()
-                            .height(52.dp),
-                        shape = androidx.compose.foundation.shape.RoundedCornerShape(LiquidGlass.RadiusChip),
-                        colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-                    ) {
-                        Icon(Icons.Default.Add, null, tint = Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${localized("task_create")} (${state.selectedEmployeeIds.size})",
-                            color = Color.White,
-                            fontWeight = FontWeight.SemiBold,
-                        )
                     }
                 }
             }

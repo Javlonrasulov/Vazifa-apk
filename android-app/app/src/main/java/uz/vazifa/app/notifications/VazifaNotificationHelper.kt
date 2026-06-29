@@ -98,6 +98,7 @@ object VazifaNotificationHelper {
             taskId?.let { putExtra(EXTRA_TASK_ID, it) }
             type?.let { putExtra(EXTRA_TYPE, it) }
             chatUserId?.let { putExtra(EXTRA_CHAT_USER_ID, it) }
+            if (isChat && title.isNotBlank()) putExtra(EXTRA_CHAT_PEER_NAME, title)
             roomId?.let { putExtra(EXTRA_ROOM_ID, it) }
         }
 
@@ -158,5 +159,6 @@ object VazifaNotificationHelper {
     const val EXTRA_TASK_ID = "task_id"
     const val EXTRA_TYPE = "notif_type"
     const val EXTRA_CHAT_USER_ID = "chat_user_id"
+    const val EXTRA_CHAT_PEER_NAME = "chat_peer_name"
     const val EXTRA_ROOM_ID = "room_id"
 }

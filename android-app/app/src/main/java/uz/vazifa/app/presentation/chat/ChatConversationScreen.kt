@@ -54,6 +54,11 @@ import androidx.compose.ui.window.Dialog
 import androidx.core.content.ContextCompat
 import androidx.hilt.navigation.compose.hiltViewModel
 import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import dagger.hilt.android.EntryPointAccessors
+import uz.vazifa.app.di.ImageLoaderEntryPoint
+import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.ui.layout.ContentScale
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
@@ -700,21 +705,29 @@ private fun ReplyPreview(reply: ChatMessage, mine: Boolean) {
 private fun ImageContent(msg: ChatMessage) {
     val context = LocalContext.current
     var showViewer by remember { mutableStateOf(false) }
-    val authToken = remember {
-        dagger.hilt.android.EntryPointAccessors.fromApplication(
+    val apiEntry = remember {
+        EntryPointAccessors.fromApplication(
             context.applicationContext,
             uz.vazifa.app.di.ApiClientEntryPoint::class.java,
-        ).tokenStore().accessToken
+        )
+    }
+    val imageLoader = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, ImageLoaderEntryPoint::class.java)
+            .imageLoader()
     }
     val url = remember(msg.id, msg.filePath, msg.meta?.fileUrl) {
-        MediaUrl.resolve(msg.filePath.orEmpty(), msg.meta?.fileUrl)
-            .takeIf { it.isNotBlank() }
+        uz.vazifa.app.util.MediaUrl.resolveChatMedia(msg.filePath, msg.meta?.fileUrl)
     }
+    val aspectW = msg.meta?.width?.takeIf { it > 0 } ?: 4
+    val aspectH = msg.meta?.height?.takeIf { it > 0 } ?: 3
+    val imageHeight = 200.dp
+    val imageWidth = (imageHeight.value * aspectW / aspectH.toFloat()).coerceIn(120f, 260f).dp
+
     if (url.isNullOrBlank()) {
         Box(
             Modifier
-                .widthIn(min = 120.dp, max = 260.dp)
-                .heightIn(min = 80.dp, max = 320.dp)
+                .width(imageWidth)
+                .height(imageHeight)
                 .clip(RoundedCornerShape(14.dp))
                 .background(Color.White.copy(alpha = 0.15f)),
             contentAlignment = Alignment.Center,
@@ -723,17 +736,49 @@ private fun ImageContent(msg: ChatMessage) {
         }
         return
     }
-    AsyncImage(
+
+    SubcomposeAsyncImage(
         model = url,
+        imageLoader = imageLoader,
         contentDescription = null,
+        contentScale = ContentScale.Crop,
         modifier = Modifier
-            .widthIn(max = 260.dp)
-            .heightIn(max = 320.dp)
+            .width(imageWidth)
+            .height(imageHeight)
             .clip(RoundedCornerShape(14.dp))
             .clickable { showViewer = true },
+        loading = {
+            Box(
+                Modifier
+                    .width(imageWidth)
+                    .height(imageHeight)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.12f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                CircularProgressIndicator(Modifier.size(28.dp), color = Color.White.copy(alpha = 0.85f), strokeWidth = 2.dp)
+            }
+        },
+        error = {
+            Box(
+                Modifier
+                    .width(imageWidth)
+                    .height(imageHeight)
+                    .clip(RoundedCornerShape(14.dp))
+                    .background(Color.White.copy(alpha = 0.12f))
+                    .clickable { showViewer = true },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.BrokenImage, null, tint = Color.White.copy(alpha = 0.7f), modifier = Modifier.size(36.dp))
+            }
+        },
     )
     if (showViewer) {
-        ChatImageViewerDialog(imageUrl = url, authToken = authToken, onDismiss = { showViewer = false })
+        ChatImageViewerDialog(
+            imageUrl = url,
+            authToken = apiEntry.tokenStore().accessToken,
+            onDismiss = { showViewer = false },
+        )
     }
 }
 

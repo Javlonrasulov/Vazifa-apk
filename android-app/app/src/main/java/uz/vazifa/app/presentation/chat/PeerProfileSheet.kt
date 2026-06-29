@@ -175,9 +175,6 @@ fun PeerProfileSheet(
                             p.phone?.takeIf { it.isNotBlank() }?.let {
                                 ProfileInfoRow(Icons.Default.Phone, localized("peer_profile_phone"), it)
                             }
-                            p.login?.takeIf { it.isNotBlank() }?.let {
-                                ProfileInfoRow(Icons.Default.Person, localized("peer_profile_login"), "@$it")
-                            }
                             p.position?.takeIf { it.isNotBlank() }?.let {
                                 ProfileInfoRow(Icons.Default.Work, localized("peer_profile_position"), it)
                             }

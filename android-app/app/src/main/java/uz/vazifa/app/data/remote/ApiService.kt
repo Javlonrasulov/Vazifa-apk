@@ -154,7 +154,6 @@ interface ApiService {
     suspend fun getChatHistory(
         @Path("userId") userId: String,
         @Query("before") before: String? = null,
-        @Query("limit") limit: Int = 40,
     ): List<ChatMessageDto>
 
     @Multipart

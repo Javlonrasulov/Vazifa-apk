@@ -204,7 +204,7 @@ fun MessageTicks(status: ChatMessageStatus, modifier: Modifier = Modifier) {
     }
 }
 
-/** Server tarixini yuborilayotgan (optimistik) xabarlar bilan birlashtiradi */
+/** Server tarixini mahalliy (socket/optimistik) xabarlar bilan birlashtiradi */
 fun mergeChatHistory(server: List<ChatMessage>, local: List<ChatMessage>): List<ChatMessage> {
     if (local.isEmpty()) return server
     val serverIds = server.map { it.id }.toSet()
@@ -213,10 +213,8 @@ fun mergeChatHistory(server: List<ChatMessage>, local: List<ChatMessage>): List<
     for (msg in local) {
         if (msg.id in serverIds) continue
         if (msg.clientId != null && msg.clientId in serverClientIds) continue
-        val pending = msg.status == ChatMessageStatus.SENDING ||
-            msg.status == ChatMessageStatus.FAILED ||
-            (msg.clientId != null && msg.id == msg.clientId)
-        if (pending) merged.add(msg)
+        if (msg.clientId != null && msg.clientId in serverIds) continue
+        merged.add(msg)
     }
     return merged.sortedBy {
         runCatching { Instant.parse(it.createdAt) }.getOrNull() ?: Instant.EPOCH

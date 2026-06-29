@@ -491,6 +491,7 @@ object Routes {
     const val MAIN = "main"
     const val TASK_DETAIL = "task/{taskId}"
     const val DASH_SECTION = "dash/{section}"
+    const val EMPLOYEES_DEPARTMENT = "employees/dept/{department}?q={q}"
     const val EMPLOYEE_DETAIL = "employee/{employeeId}"
     const val CREATE_TASK = "create_task?assigneeIds={assigneeIds}"
     const val EDIT_TASK = "edit_task/{taskId}"
@@ -503,6 +504,11 @@ object Routes {
     fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
     fun employeeDetail(id: String) = "employee/$id"
+    fun employeesDepartment(department: String?, search: String = ""): String {
+        val dept = if (department.isNullOrBlank()) "_all_" else android.net.Uri.encode(department)
+        val q = android.net.Uri.encode(search)
+        return "employees/dept/$dept?q=$q"
+    }
     fun createTask(assigneeIds: Set<String> = emptySet()): String {
         val encoded = android.net.Uri.encode(assigneeIds.joinToString(","))
         return "create_task?assigneeIds=$encoded"

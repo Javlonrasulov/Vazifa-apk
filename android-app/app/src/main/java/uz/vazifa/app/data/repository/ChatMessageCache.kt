@@ -26,6 +26,10 @@ class ChatMessageCache @Inject constructor(
         readDtos(File(dmDir, "$peerId.json")).mapNotNull { safeToDomain(it) }
     }
 
+    suspend fun clearDm(peerId: String) = withContext(Dispatchers.IO) {
+        File(dmDir, "$peerId.json").delete()
+    }
+
     suspend fun saveDm(peerId: String, dtos: List<ChatMessageDto>) = withContext(Dispatchers.IO) {
         if (dtos.isEmpty()) return@withContext
         File(dmDir, "$peerId.json").writeText(gson.toJson(dtos))

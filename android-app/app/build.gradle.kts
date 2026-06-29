@@ -13,12 +13,29 @@ android {
     namespace = "uz.vazifa.app"
     compileSdk = 35
 
+    val localProperties = Properties().also { props ->
+        val localFile = rootProject.file("local.properties")
+        if (localFile.exists()) props.load(localFile.inputStream())
+    }
+
+    signingConfigs {
+        create("release") {
+            val storeFileName = localProperties.getProperty("RELEASE_STORE_FILE")
+            if (!storeFileName.isNullOrBlank()) {
+                storeFile = rootProject.file(storeFileName)
+                storePassword = localProperties.getProperty("RELEASE_STORE_PASSWORD")
+                keyAlias = localProperties.getProperty("RELEASE_KEY_ALIAS")
+                keyPassword = localProperties.getProperty("RELEASE_KEY_PASSWORD")
+            }
+        }
+    }
+
     defaultConfig {
         applicationId = "uz.vazifa.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 7
+        versionName = "1.0.6"
     }
 
     buildTypes {
@@ -35,6 +52,7 @@ android {
                 "$apiScheme://$apiHost:$apiPort/api/v1/"
             }
             buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+            signingConfig = signingConfigs.getByName("release")
         }
         release {
             val localProperties = Properties()
@@ -49,6 +67,7 @@ android {
                 "$apiScheme://$apiHost:$apiPort/api/v1/"
             }
             buildConfigField("String", "API_BASE_URL", "\"$apiBase\"")
+            signingConfig = signingConfigs.getByName("release")
         }
     }
 

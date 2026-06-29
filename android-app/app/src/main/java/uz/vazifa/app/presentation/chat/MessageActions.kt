@@ -34,6 +34,8 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Dialog
 import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatPeer
+import uz.vazifa.app.localization.AppLanguage
+import uz.vazifa.app.localization.LocalAppLanguage
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -43,6 +45,13 @@ fun copyableMessageText(msg: ChatMessage, strings: (String) -> String): String {
     if (msg.isDeleted) return ""
     msg.body?.takeIf { it.isNotBlank() }?.let { return it }
     return messagePreview(msg, strings)
+}
+
+/** Ism + `-da` (Javlon → Javlonda, "Test uchun Javlon" → "Test uchun Javlon da") */
+private fun peerLocative(name: String): String {
+    val n = name.trim()
+    if (n.isBlank()) return n
+    return if (n.contains(' ')) "$n da" else "${n}da"
 }
 
 @Composable
@@ -95,8 +104,13 @@ fun DeleteMessageDialog(
                                 fontSize = 15.sp,
                             )
                             if (peerName.isNotBlank()) {
+                                val hintArg = if (LocalAppLanguage.current == AppLanguage.RU) {
+                                    peerName
+                                } else {
+                                    peerLocative(peerName)
+                                }
                                 Text(
-                                    localized("chat_delete_peer_hint") + " " + peerName,
+                                    String.format(localized("chat_delete_peer_hint"), hintArg),
                                     color = LiquidTheme.textMuted,
                                     fontSize = 12.sp,
                                 )

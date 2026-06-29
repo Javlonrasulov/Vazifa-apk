@@ -42,6 +42,7 @@ import uz.vazifa.app.presentation.dashboard.DirectorDashboardScreen
 import uz.vazifa.app.presentation.dashboard.DashboardSection
 import uz.vazifa.app.presentation.dashboard.DashboardSectionScreen
 import uz.vazifa.app.presentation.dashboard.EmployeesTabScreen
+import uz.vazifa.app.presentation.dashboard.DepartmentEmployeesScreen
 import uz.vazifa.app.presentation.dashboard.EmployeeDetailScreen
 import uz.vazifa.app.presentation.notifications.NotificationGateScreen
 import uz.vazifa.app.presentation.components.localized
@@ -223,6 +224,7 @@ fun VazifaNavHost(
     pendingTaskId: String? = null,
     onPendingTaskConsumed: () -> Unit = {},
     pendingChatUserId: String? = null,
+    pendingChatPeerName: String? = null,
     onPendingChatConsumed: () -> Unit = {},
     pendingRoomId: String? = null,
     onPendingRoomConsumed: () -> Unit = {},
@@ -326,9 +328,16 @@ fun VazifaNavHost(
         if (route == Routes.LOGIN || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
         viewModel.clearChatUnread()
         if (route == Routes.MAIN) selectedTab = AppTab.CHAT
-        val peerName = runCatching {
-            viewModel.chat.resolvePeer(chatUserId)?.displayName.orEmpty()
-        }.getOrElse { "" }
+        viewModel.auth.ensureSessionForApi()
+        val peerName = pendingChatPeerName?.takeIf { it.isNotBlank() }
+            ?: runCatching {
+                viewModel.chat.resolvePeer(chatUserId)?.displayName.orEmpty()
+            }.getOrElse { "" }
+        if (peerName.isNotBlank()) {
+            viewModel.chat.rememberPeer(
+                uz.vazifa.app.domain.model.ChatPeer(id = chatUserId, fullName = peerName),
+            )
+        }
         navController.navigate(Routes.chatConversation(chatUserId, peerName))
         onPendingChatConsumed()
     }
@@ -436,6 +445,12 @@ fun VazifaNavHost(
                             onAssignTask = { ids ->
                                 navController.navigate(Routes.createTask(ids))
                             },
+                            onDepartmentClick = { dept ->
+                                navController.navigate(Routes.employeesDepartment(dept))
+                            },
+                            onSearchAll = { query ->
+                                navController.navigate(Routes.employeesDepartment(null, query))
+                            },
                         )
                     } else {
                         TasksScreen(
@@ -504,6 +519,25 @@ fun VazifaNavHost(
                     onEmployeeClick = { employeeId ->
                         navController.navigate(Routes.employeeDetail(employeeId))
                     },
+                    onDepartmentClick = { dept ->
+                        navController.navigate(Routes.employeesDepartment(dept))
+                    },
+                    onSearchAll = { query ->
+                        navController.navigate(Routes.employeesDepartment(null, query))
+                    },
+                )
+            }
+            composable(
+                Routes.EMPLOYEES_DEPARTMENT,
+                arguments = listOf(
+                    navArgument("department") { type = NavType.StringType },
+                    navArgument("q") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) { entry ->
+                DepartmentEmployeesScreen(
+                    onBack = { navController.popBackStack() },
+                    onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
+                    onAssignTask = { ids -> navController.navigate(Routes.createTask(ids)) },
                 )
             }
             composable(

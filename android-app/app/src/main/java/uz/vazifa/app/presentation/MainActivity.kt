@@ -38,6 +38,8 @@ class MainActivity : ComponentActivity() {
         private set
     var pendingChatUserId by mutableStateOf<String?>(null)
         private set
+    var pendingChatPeerName by mutableStateOf<String?>(null)
+        private set
     var pendingRoomId by mutableStateOf<String?>(null)
         private set
 
@@ -59,7 +61,12 @@ class MainActivity : ComponentActivity() {
         enableEdgeToEdge()
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
+        pendingChatPeerName = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_PEER_NAME)
         pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
+
+        CoroutineScope(Dispatchers.IO).launch {
+            runCatching { authRepository.ensureSessionForApi() }
+        }
 
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
             notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
@@ -81,7 +88,8 @@ class MainActivity : ComponentActivity() {
                         pendingTaskId = pendingTaskId,
                         onPendingTaskConsumed = { pendingTaskId = null },
                         pendingChatUserId = pendingChatUserId,
-                        onPendingChatConsumed = { pendingChatUserId = null },
+                        pendingChatPeerName = pendingChatPeerName,
+                        onPendingChatConsumed = { pendingChatUserId = null; pendingChatPeerName = null },
                         pendingRoomId = pendingRoomId,
                         onPendingRoomConsumed = { pendingRoomId = null },
                         onSplashActiveChange = { active -> keepSystemSplash = active },
@@ -96,6 +104,7 @@ class MainActivity : ComponentActivity() {
         setIntent(intent)
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
+        pendingChatPeerName = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_PEER_NAME)
         pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
     }
 }

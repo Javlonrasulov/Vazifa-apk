@@ -1,6 +1,8 @@
 package uz.vazifa.app.data.repository
 
 import com.google.gson.Gson
+import com.google.gson.JsonElement
+import com.google.gson.JsonObject
 import com.google.gson.JsonParser
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.SharedFlow
@@ -19,6 +21,7 @@ import uz.vazifa.app.data.remote.ChatMetaDto
 import uz.vazifa.app.data.remote.ChatPeerDto
 import uz.vazifa.app.data.remote.ChatSocket
 import uz.vazifa.app.data.remote.ChatUploadDto
+import uz.vazifa.app.data.remote.ConversationDto
 import uz.vazifa.app.data.remote.EditMessageBody
 import uz.vazifa.app.data.remote.MarkReadBody
 import uz.vazifa.app.data.remote.ReactBody
@@ -87,6 +90,7 @@ class ChatRepository @Inject constructor(
     }
 
     fun connect() = socket.connect()
+    fun reconnect() = socket.reconnect()
     fun disconnect() = socket.disconnect()
     fun sendTyping(receiverId: String, typing: Boolean, action: String = "typing") =
         socket.sendTyping(receiverId, typing, action)
@@ -94,36 +98,120 @@ class ChatRepository @Inject constructor(
         socket.sendRoomTyping(roomId, typing, action)
     fun ping() = socket.ping()
 
-    suspend fun getConversations(): List<Conversation> =
-        api.getConversations().map { dto ->
-            Conversation(
-                peer = enrichPeer(dto.peer.toDomain()),
-                lastMessage = dto.lastMessage?.toDomain(),
-                unreadCount = dto.unreadCount,
-            )
+    suspend fun getConversations(): List<Conversation> {
+        val dtos = fetchConversationsLenient()
+            ?: runCatching { api.getConversations() }.getOrNull()
+            ?: emptyList()
+        return dtos.mapNotNull { safeToConversation(it) }
+    }
+
+    private fun safeToConversation(dto: ConversationDto): Conversation? = runCatching {
+        Conversation(
+            peer = enrichPeer(dto.peer.toDomain()),
+            lastMessage = dto.lastMessage?.let { safeToDomain(it) },
+            unreadCount = dto.unreadCount,
+        )
+    }.getOrNull()
+
+    private suspend fun fetchConversationsLenient(): List<ConversationDto>? = withContext(Dispatchers.IO) {
+        val base = BuildConfig.API_BASE_URL.removeSuffix("/")
+        val url = "$base/chat/conversations".toHttpUrlOrNull() ?: return@withContext null
+        val response = client.httpClient.newCall(Request.Builder().url(url).get().build()).execute()
+        response.use { resp ->
+            if (!resp.isSuccessful) return@withContext null
+            val body = resp.body?.string()?.trim().orEmpty()
+            if (body.isEmpty() || body == "[]") return@withContext emptyList()
+            val gson = Gson()
+            val arr = runCatching { JsonParser.parseString(body).asJsonArray }.getOrNull()
+                ?: return@withContext null
+            arr.mapNotNull { el -> parseConversationDto(gson, el) }
         }
+    }
+
+    private fun parseConversationDto(gson: Gson, el: JsonElement): ConversationDto? {
+        return runCatching { gson.fromJson(el, ConversationDto::class.java) }.getOrNull()
+            ?: runCatching {
+                val o = el.asJsonObject
+                fun str(key: String) = o.get(key)?.takeIf { !it.isJsonNull }?.asString
+                val peerObj = o.getAsJsonObject("peer") ?: return@runCatching null
+                val peer = ChatPeerDto(
+                    id = peerObj.get("id").asString,
+                    fullName = peerObj.get("fullName").asString,
+                    avatarUrl = str("avatarUrl"),
+                    position = str("position"),
+                    department = str("department"),
+                    isOnline = peerObj.get("isOnline")?.asBoolean ?: false,
+                    lastSeenAt = str("lastSeenAt"),
+                )
+                val lmEl = o.get("lastMessage")
+                val lastMessage = if (lmEl != null && lmEl.isJsonObject) {
+                    parseChatMessageDtoLoose(lmEl.asJsonObject)
+                } else null
+                ConversationDto(
+                    peer = peer,
+                    lastMessage = lastMessage,
+                    unreadCount = o.get("unreadCount")?.asInt ?: 0,
+                )
+            }.getOrNull()
+    }
 
     suspend fun getHistory(peerId: String, before: String? = null, limit: Int = 40): List<ChatMessage> {
-        val dtos = try {
-            api.getChatHistory(peerId, before, limit)
-        } catch (_: Exception) {
-            fetchHistoryLenient(peerId, before, limit) ?: emptyList()
+        var dtos = fetchHistoryLenient(peerId, before)
+        if (dtos.isNullOrEmpty()) {
+            dtos = runCatching { api.getChatHistory(peerId, before) }.getOrNull()
         }
+        dtos = dtos ?: emptyList()
         val messages = dtos.mapNotNull { safeToDomain(it) }
-        if (before == null && dtos.isNotEmpty()) {
-            messageCache.saveDm(peerId, dtos)
+        if (before == null) {
+            if (messages.isNotEmpty()) {
+                messageCache.saveDm(peerId, dtos)
+            } else {
+                messageCache.clearDm(peerId)
+            }
         }
         return messages
+    }
+
+    private fun parseChatMessageDtoLoose(o: JsonObject): ChatMessageDto? {
+        fun str(key: String): String? = o.get(key)?.takeIf { !it.isJsonNull }?.asString?.trim()?.takeIf { it.isNotBlank() }
+        val id = str("id") ?: return null
+        val senderId = str("senderId") ?: return null
+        val receiverId = str("receiverId") ?: return null
+        return ChatMessageDto(
+            id = id,
+            senderId = senderId,
+            receiverId = receiverId,
+            type = str("type") ?: "text",
+            body = str("body"),
+            filePath = str("filePath"),
+            fileName = str("fileName"),
+            mimeType = str("mimeType"),
+            replyToId = str("replyToId"),
+            status = str("status") ?: "sent",
+            isRead = o.get("isRead")?.asBoolean ?: false,
+            isEdited = o.get("isEdited")?.asBoolean ?: false,
+            isDeleted = o.get("isDeleted")?.asBoolean ?: false,
+            isPinned = o.get("isPinned")?.asBoolean ?: false,
+            clientId = str("clientId"),
+            createdAt = str("createdAt"),
+            meta = o.get("meta")?.takeIf { it.isJsonObject }?.asJsonObject?.let { metaObj ->
+                ChatMetaDto(
+                    fileUrl = metaObj.get("fileUrl")?.takeIf { !it.isJsonNull }?.asString,
+                    fileSize = metaObj.get("fileSize")?.takeIf { !it.isJsonNull }?.asDouble,
+                    width = metaObj.get("width")?.takeIf { !it.isJsonNull }?.asDouble,
+                    height = metaObj.get("height")?.takeIf { !it.isJsonNull }?.asDouble,
+                    thumbUrl = metaObj.get("thumbUrl")?.takeIf { !it.isJsonNull }?.asString,
+                )
+            },
+        )
     }
 
     private suspend fun fetchHistoryLenient(
         peerId: String,
         before: String?,
-        limit: Int,
     ): List<ChatMessageDto>? = withContext(Dispatchers.IO) {
         val base = BuildConfig.API_BASE_URL.removeSuffix("/")
         val urlBuilder = "$base/chat/$peerId".toHttpUrlOrNull()?.newBuilder() ?: return@withContext null
-        urlBuilder.addQueryParameter("limit", limit.toString())
         before?.takeIf { it.isNotBlank() }?.let { urlBuilder.addQueryParameter("before", it) }
         val response = client.httpClient.newCall(
             Request.Builder().url(urlBuilder.build()).get().build(),
@@ -137,6 +225,7 @@ class ChatRepository @Inject constructor(
                 ?: return@withContext null
             arr.mapNotNull { el ->
                 runCatching { gson.fromJson(el, ChatMessageDto::class.java) }.getOrNull()
+                    ?: (el as? JsonElement)?.takeIf { it.isJsonObject }?.asJsonObject?.let { parseChatMessageDtoLoose(it) }
             }
         }
     }

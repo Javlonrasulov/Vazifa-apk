@@ -31,6 +31,7 @@ import uz.vazifa.app.data.remote.TokenStore
 import uz.vazifa.app.data.remote.UserDto
 import java.io.IOException
 import javax.inject.Inject
+import javax.inject.Provider
 import javax.inject.Singleton
 
 private val Context.dataStore by preferencesDataStore("vazifa_prefs")
@@ -41,6 +42,7 @@ class AuthRepository @Inject constructor(
     private val api: ApiClient,
     private val tokenStore: TokenStore,
     private val appSettings: AppSettingsRepository,
+    private val chatRepositoryProvider: Provider<ChatRepository>,
 ) {
     private val gson = Gson()
     private val refreshMutex = Mutex()
@@ -192,6 +194,7 @@ class AuthRepository @Inject constructor(
             val newAccess = res["accessToken"] ?: return false
             val newRefresh = res["refreshToken"] ?: return false
             saveTokens(newAccess, newRefresh)
+            runCatching { chatRepositoryProvider.get().reconnect() }
             true
         } catch (_: Exception) {
             false
@@ -298,9 +301,18 @@ class AuthRepository @Inject constructor(
         }
     }
 
-    /** Tarmoqsiz tez ID olish (chat ochilishi uchun) */
+    /** Tarmoqsiz tez ID olish (chat ochilishi uchun) — token ham yuklanadi */
     suspend fun cachedUserId(): String? {
         val prefs = loadPrefs()
+        loadTokensFromPrefs(prefs)
         return loadCachedUser(prefs)?.id?.takeIf { it.isNotBlank() }
+    }
+
+    /** Chat/API chaqiruvidan oldin sessiya va tokenlarni tayyorlaydi */
+    suspend fun ensureSessionForApi(): String? {
+        val prefs = loadPrefs()
+        loadTokensFromPrefs(prefs)
+        loadCachedUser(prefs)?.id?.takeIf { it.isNotBlank() }?.let { return it }
+        return currentUser()?.id
     }
 }

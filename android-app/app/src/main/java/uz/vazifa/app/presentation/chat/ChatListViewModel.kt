@@ -48,12 +48,19 @@ class ChatListViewModel @Inject constructor(
 
     private var currentUserId: String = ""
 
+    private var socketObserving = false
+
     fun start(userId: String) {
-        if (currentUserId == userId) return
+        if (userId.isBlank()) return
         currentUserId = userId
-        repo.connect()
-        observeSocket()
         viewModelScope.launch {
+            auth.ensureSessionForApi()
+            repo.connect()
+            repo.ping()
+            if (!socketObserving) {
+                socketObserving = true
+                observeSocket()
+            }
             runCatching { repo.loadAliases(userId) }
             load()
             loadRooms()
@@ -63,6 +70,7 @@ class ChatListViewModel @Inject constructor(
     fun load() {
         viewModelScope.launch {
             _state.update { it.copy(loading = true) }
+            auth.ensureSessionForApi()
             runCatching { repo.getConversations() }
                 .onSuccess { list ->
                     _state.update { st ->
@@ -103,7 +111,7 @@ class ChatListViewModel @Inject constructor(
     }
 
     fun reconnect() {
-        repo.connect()
+        repo.reconnect()
         repo.ping()
     }
 

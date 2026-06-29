@@ -2,12 +2,16 @@ import {
   IsArray,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsNumber,
   IsObject,
   IsOptional,
   IsString,
   IsUUID,
+  Max,
+  Min,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { ChatMessageMeta, ChatMessageType } from '../entities/chat-message.entity';
 
 export class SendMessageDto {
@@ -90,6 +94,9 @@ export class HistoryQueryDto {
   before?: string;
 
   @IsOptional()
-  @IsNumber()
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
   limit?: number;
 }

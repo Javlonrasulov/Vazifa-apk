@@ -41,6 +41,7 @@ class ChatSocket @Inject constructor(
 ) {
     private val gson = Gson()
     private var socket: Socket? = null
+    private var lastAuthToken: String? = null
 
     private val _events = MutableSharedFlow<ChatEvent>(extraBufferCapacity = 128)
     val events: SharedFlow<ChatEvent> = _events
@@ -56,11 +57,16 @@ class ChatSocket @Inject constructor(
     @Synchronized
     fun connect() {
         val token = tokenStore.accessToken ?: return
+        if (socket != null && lastAuthToken != null && lastAuthToken != token) {
+            tearDownSocket()
+        }
         if (socket?.connected() == true) return
         if (socket != null) {
+            lastAuthToken = token
             socket?.connect()
             return
         }
+        lastAuthToken = token
         val opts = IO.Options().apply {
             forceNew = true
             reconnection = true
@@ -153,9 +159,32 @@ class ChatSocket @Inject constructor(
     }
 
     private inline fun emitMessage(args: Array<Any>, build: (ChatMessageDto) -> ChatEvent) {
-        val o = obj(args) ?: return
-        runCatching { gson.fromJson(o.toString(), ChatMessageDto::class.java) }
-            .getOrNull()?.let { _events.tryEmit(build(it)) }
+        parseMessageDto(obj(args))?.let { _events.tryEmit(build(it)) }
+    }
+
+    private fun parseMessageDto(o: JSONObject?): ChatMessageDto? {
+        if (o == null) return null
+        return runCatching { gson.fromJson(o.toString(), ChatMessageDto::class.java) }.getOrNull()
+            ?: runCatching {
+                ChatMessageDto(
+                    id = o.optString("id"),
+                    senderId = o.optString("senderId"),
+                    receiverId = o.optString("receiverId"),
+                    type = o.optString("type", "text"),
+                    body = o.optString("body").ifBlank { null },
+                    filePath = o.optString("filePath").ifBlank { null },
+                    fileName = o.optString("fileName").ifBlank { null },
+                    mimeType = o.optString("mimeType").ifBlank { null },
+                    replyToId = o.optString("replyToId").ifBlank { null },
+                    status = o.optString("status", "sent"),
+                    isRead = o.optBoolean("isRead"),
+                    isEdited = o.optBoolean("isEdited"),
+                    isDeleted = o.optBoolean("isDeleted"),
+                    isPinned = o.optBoolean("isPinned"),
+                    clientId = o.optString("clientId").ifBlank { null },
+                    createdAt = o.optString("createdAt").ifBlank { null },
+                )
+            }.getOrNull()?.takeIf { it.id.isNotBlank() && it.senderId.isNotBlank() && it.receiverId.isNotBlank() }
     }
 
     private inline fun emitRoomMessage(args: Array<Any>, build: (RoomMessageDto) -> ChatEvent) {
@@ -190,11 +219,23 @@ class ChatSocket @Inject constructor(
         socket?.emit("presence:ping")
     }
 
+    /** JWT yangilanganda yoki ilova qayta ochilganda — eski token bilan qayta ulanish */
+    @Synchronized
+    fun reconnect() {
+        tearDownSocket()
+        connect()
+    }
+
     @Synchronized
     fun disconnect() {
+        tearDownSocket()
+    }
+
+    private fun tearDownSocket() {
         socket?.disconnect()
         socket?.off()
         socket = null
+        lastAuthToken = null
         _connected.value = false
     }
 }

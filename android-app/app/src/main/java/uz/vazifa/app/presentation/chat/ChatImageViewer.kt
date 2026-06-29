@@ -14,8 +14,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.CircleShape
@@ -75,8 +79,7 @@ fun ChatImageViewerDialog(
         Box(
             Modifier
                 .fillMaxSize()
-                .background(Color.Black)
-                .statusBarsPadding(),
+                .background(Color.Black),
         ) {
             AsyncImage(
                 model = imageUrl,
@@ -103,7 +106,7 @@ fun ChatImageViewerDialog(
                     },
             )
 
-            Box(Modifier.align(Alignment.TopEnd).padding(8.dp)) {
+            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
                 IconButton(
                     onClick = onDismiss,
                     modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
@@ -112,7 +115,25 @@ fun ChatImageViewerDialog(
                 }
             }
 
-            Box(Modifier.align(Alignment.BottomEnd).padding(16.dp)) {
+            Row(
+                Modifier
+                    .align(Alignment.BottomCenter)
+                    .fillMaxWidth()
+                    .navigationBarsPadding()
+                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                IconButton(
+                    onClick = {
+                        scope.launch {
+                            shareImage(context, imageUrl, authToken)
+                        }
+                    },
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                ) {
+                    Icon(Icons.Default.Share, null, tint = Color.White)
+                }
                 IconButton(
                     onClick = {
                         scope.launch {
@@ -127,19 +148,6 @@ fun ChatImageViewerDialog(
                     modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
                 ) {
                     Icon(Icons.Default.Download, null, tint = Color.White)
-                }
-            }
-
-            Box(Modifier.align(Alignment.BottomStart).padding(16.dp)) {
-                IconButton(
-                    onClick = {
-                        scope.launch {
-                            shareImage(context, imageUrl, authToken)
-                        }
-                    },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
-                ) {
-                    Icon(Icons.Default.Share, null, tint = Color.White)
                 }
             }
         }

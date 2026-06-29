@@ -4,9 +4,14 @@ import android.provider.Settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Language
 import androidx.compose.material.icons.filled.Lock
@@ -16,11 +21,14 @@ import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
@@ -46,6 +54,7 @@ class LoginSettingsViewModel @Inject constructor(private val settings: AppSettin
     fun setLanguage(lang: AppLanguage) = viewModelScope.launch { settings.setLanguage(lang) }
 }
 
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun LoginScreen(
     onSuccess: () -> Unit,
@@ -60,11 +69,21 @@ fun LoginScreen(
     var showPassword by remember { mutableStateOf(false) }
     val fieldColors = liquidGlassFieldColors()
     val phoneTransformation = remember { UzbekPhoneVisualTransformation() }
+    val scrollState = rememberScrollState()
+    val bringIntoViewRequester = remember { BringIntoViewRequester() }
+    val focusScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
     LaunchedEffect(state.loggedIn) { if (state.loggedIn) onSuccess() }
 
     LiquidBackground(Modifier.fillMaxSize()) {
-        Box(Modifier.align(Alignment.TopEnd).padding(16.dp)) {
+        Box(
+            Modifier
+                .align(Alignment.TopEnd)
+                .statusBarsPadding()
+                .padding(16.dp),
+        ) {
             Box(
                 Modifier.size(40.dp).liquidGlassThemed(radius = LiquidGlass.RadiusChip),
                 contentAlignment = Alignment.Center,
@@ -86,10 +105,24 @@ fun LoginScreen(
             }
         }
 
-        Column(
-            Modifier.align(Alignment.Center).fillMaxWidth().padding(24.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
+        Box(
+            Modifier
+                .fillMaxSize()
+                .imePadding()
+                .navigationBarsPadding(),
         ) {
+            Column(
+                Modifier
+                    .fillMaxWidth()
+                    .align(if (isKeyboardVisible) Alignment.TopCenter else Alignment.Center)
+                    .verticalScroll(scrollState, enabled = isKeyboardVisible)
+                    .padding(horizontal = 24.dp)
+                    .then(
+                        if (isKeyboardVisible) Modifier.padding(top = 16.dp, bottom = 16.dp)
+                        else Modifier,
+                    ),
+                horizontalAlignment = Alignment.CenterHorizontally,
+            ) {
             Text(
                 localized("login_btn"),
                 color = LiquidTheme.text,
@@ -145,7 +178,14 @@ fun LoginScreen(
                 } else {
                     VisualTransformation.None
                 },
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(bringIntoViewRequester)
+                    .onFocusEvent { event ->
+                        if (event.isFocused && isKeyboardVisible) {
+                            focusScope.launch { bringIntoViewRequester.bringIntoView() }
+                        }
+                    },
                 singleLine = true,
                 keyboardOptions = KeyboardOptions(
                     keyboardType = if (state.mode == LoginMode.PHONE) KeyboardType.Phone else KeyboardType.Text,
@@ -170,7 +210,14 @@ fun LoginScreen(
                 },
                 visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
-                modifier = Modifier.fillMaxWidth(),
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .bringIntoViewRequester(bringIntoViewRequester)
+                    .onFocusEvent { event ->
+                        if (event.isFocused && isKeyboardVisible) {
+                            focusScope.launch { bringIntoViewRequester.bringIntoView() }
+                        }
+                    },
                 singleLine = true,
                 shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 colors = fieldColors,
@@ -191,6 +238,7 @@ fun LoginScreen(
             ) {
                 if (state.loading) CircularProgressIndicator(color = Color.White, modifier = Modifier.size(24.dp))
                 else Text(localized("login_btn"), fontWeight = FontWeight.SemiBold)
+            }
             }
         }
     }

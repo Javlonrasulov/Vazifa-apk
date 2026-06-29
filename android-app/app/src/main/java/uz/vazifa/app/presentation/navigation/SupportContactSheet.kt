@@ -8,7 +8,10 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Call
@@ -122,46 +125,57 @@ fun SupportContactSheet(
 
                 SupportContacts.phones.forEach { phone ->
                     GlassCard(modifier = Modifier.fillMaxWidth()) {
-                        Row(
+                        Column(
                             Modifier
                                 .fillMaxWidth()
                                 .padding(14.dp),
-                            verticalAlignment = Alignment.CenterVertically,
-                            horizontalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
-                            Icon(
-                                Icons.Default.Phone,
-                                contentDescription = null,
-                                tint = LiquidGlass.Blue,
-                                modifier = Modifier.size(26.dp),
-                            )
-                            Column(Modifier.weight(1f)) {
+                            Row(
+                                verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.spacedBy(12.dp),
+                            ) {
+                                Icon(
+                                    Icons.Default.Phone,
+                                    contentDescription = null,
+                                    tint = LiquidGlass.Blue,
+                                    modifier = Modifier.size(26.dp),
+                                )
                                 Text(
                                     phone.label,
                                     color = LiquidTheme.text,
                                     fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp,
+                                    fontSize = 16.sp,
                                 )
                             }
-                            OutlinedButton(
-                                onClick = {
-                                    onDismiss()
-                                    openDial(phone.dialUri)
-                                },
-                                shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                            Spacer(Modifier.height(12.dp))
+                            Row(
+                                Modifier.fillMaxWidth(),
+                                horizontalArrangement = Arrangement.spacedBy(10.dp),
                             ) {
-                                Icon(Icons.Default.Call, null, modifier = Modifier.size(16.dp))
-                                Text(localized("support_call"), modifier = Modifier.padding(start = 4.dp), fontSize = 12.sp)
-                            }
-                            OutlinedButton(
-                                onClick = {
-                                    onDismiss()
-                                    openSms(phone.smsUri)
-                                },
-                                shape = RoundedCornerShape(LiquidGlass.RadiusChip),
-                            ) {
-                                Icon(Icons.Default.Sms, null, modifier = Modifier.size(16.dp))
-                                Text(localized("support_sms"), modifier = Modifier.padding(start = 4.dp), fontSize = 12.sp)
+                                OutlinedButton(
+                                    onClick = {
+                                        onDismiss()
+                                        openDial(phone.dialUri)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                                ) {
+                                    Icon(Icons.Default.Call, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(localized("support_call"), fontSize = 13.sp)
+                                }
+                                OutlinedButton(
+                                    onClick = {
+                                        onDismiss()
+                                        openSms(phone.smsUri)
+                                    },
+                                    modifier = Modifier.weight(1f),
+                                    shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+                                ) {
+                                    Icon(Icons.Default.Sms, null, modifier = Modifier.size(18.dp))
+                                    Spacer(Modifier.width(6.dp))
+                                    Text(localized("support_sms"), fontSize = 13.sp)
+                                }
                             }
                         }
                     }
