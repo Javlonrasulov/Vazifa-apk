@@ -25,6 +25,7 @@ import {
   MarkReadDto,
   ReactDto,
   SendMessageDto,
+  SetContactAliasDto,
 } from './dto/chat.dto';
 import { RolesGuard, Roles } from '../common/guards/roles.guard';
 import { NotificationsGuard } from '../common/guards/notifications.guard';
@@ -54,6 +55,20 @@ export class ChatController {
   @Get('search')
   search(@Query('q') q: string, @Request() req: { user: User }) {
     return this.chatService.search(req.user.id, q ?? '');
+  }
+
+  @Get('aliases')
+  getAliases(@Request() req: { user: User }) {
+    return this.chatService.getContactAliases(req.user.id).then((aliases) => ({ aliases }));
+  }
+
+  @Patch('aliases/:peerId')
+  setAlias(
+    @Param('peerId') peerId: string,
+    @Body() dto: SetContactAliasDto,
+    @Request() req: { user: User },
+  ) {
+    return this.chatService.setContactAlias(req.user.id, peerId, dto).then((aliases) => ({ aliases }));
   }
 
   @Post('upload')

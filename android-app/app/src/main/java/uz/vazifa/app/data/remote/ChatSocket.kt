@@ -158,42 +158,71 @@ class ChatSocket @Inject constructor(
         s.connect()
     }
 
-    private inline fun emitMessage(args: Array<Any>, build: (ChatMessageDto) -> ChatEvent) {
-        parseMessageDto(obj(args))?.let { _events.tryEmit(build(it)) }
-    }
-
     private fun parseMessageDto(o: JSONObject?): ChatMessageDto? {
         if (o == null) return null
         return runCatching { gson.fromJson(o.toString(), ChatMessageDto::class.java) }.getOrNull()
-            ?: runCatching {
-                ChatMessageDto(
-                    id = o.optString("id"),
-                    senderId = o.optString("senderId"),
-                    receiverId = o.optString("receiverId"),
-                    type = o.optString("type", "text"),
-                    body = o.optString("body").ifBlank { null },
-                    filePath = o.optString("filePath").ifBlank { null },
-                    fileName = o.optString("fileName").ifBlank { null },
-                    mimeType = o.optString("mimeType").ifBlank { null },
-                    replyToId = o.optString("replyToId").ifBlank { null },
-                    status = o.optString("status", "sent"),
-                    isRead = o.optBoolean("isRead"),
-                    isEdited = o.optBoolean("isEdited"),
-                    isDeleted = o.optBoolean("isDeleted"),
-                    isPinned = o.optBoolean("isPinned"),
-                    clientId = o.optString("clientId").ifBlank { null },
-                    createdAt = o.optString("createdAt").ifBlank { null },
-                )
-            }.getOrNull()?.takeIf { it.id.isNotBlank() && it.senderId.isNotBlank() && it.receiverId.isNotBlank() }
+            ?: parseMessageDtoLoose(o)
     }
 
+    private fun parseMessageDtoLoose(o: JSONObject): ChatMessageDto? {
+        return runCatching {
+            fun str(key: String): String? = o.optString(key).trim().takeIf { it.isNotBlank() && it != "null" }
+            val id = str("id") ?: return@runCatching null
+            val senderId = str("senderId") ?: return@runCatching null
+            val receiverId = str("receiverId") ?: return@runCatching null
+            val metaObj = o.optJSONObject("meta")
+            val meta = metaObj?.let { m ->
+                ChatMetaDto(
+                    fileUrl = m.optString("fileUrl").ifBlank { null },
+                    fileSize = m.optDouble("fileSize").takeIf { !it.isNaN() },
+                    durationSec = m.optDouble("durationSec").takeIf { !it.isNaN() },
+                    width = m.optDouble("width").takeIf { !it.isNaN() },
+                    height = m.optDouble("height").takeIf { !it.isNaN() },
+                    thumbUrl = m.optString("thumbUrl").ifBlank { null },
+                )
+            }
+            ChatMessageDto(
+                id = id,
+                senderId = senderId,
+                receiverId = receiverId,
+                type = str("type") ?: "text",
+                body = str("body"),
+                filePath = str("filePath"),
+                fileName = str("fileName"),
+                mimeType = str("mimeType"),
+                meta = meta,
+                replyToId = str("replyToId"),
+                status = str("status") ?: "sent",
+                isRead = o.optBoolean("isRead"),
+                isEdited = o.optBoolean("isEdited"),
+                isDeleted = o.optBoolean("isDeleted"),
+                isPinned = o.optBoolean("isPinned"),
+                clientId = str("clientId"),
+                createdAt = str("createdAt"),
+            )
+        }.getOrNull()
+    }
+
+    private inline fun emitMessage(args: Array<Any>, build: (ChatMessageDto) -> ChatEvent) {
+        parseMessageDto(parsePayload(args))?.let { _events.tryEmit(build(it)) }
+    }
+
+    private fun parsePayload(args: Array<Any>): JSONObject? {
+        val raw = args.firstOrNull() ?: return null
+        return when (raw) {
+            is JSONObject -> raw
+            is String -> runCatching { JSONObject(raw) }.getOrNull()
+            else -> runCatching { JSONObject(gson.toJson(raw)) }.getOrNull()
+        }
+    }
+
+    private fun obj(args: Array<Any>): JSONObject? = parsePayload(args)
+
     private inline fun emitRoomMessage(args: Array<Any>, build: (RoomMessageDto) -> ChatEvent) {
-        val o = obj(args) ?: return
+        val o = parsePayload(args) ?: return
         runCatching { gson.fromJson(o.toString(), RoomMessageDto::class.java) }
             .getOrNull()?.let { _events.tryEmit(build(it)) }
     }
-
-    private fun obj(args: Array<Any>): JSONObject? = args.firstOrNull() as? JSONObject
 
     fun sendTyping(receiverId: String, typing: Boolean, action: String = "typing") {
         socket?.emit(

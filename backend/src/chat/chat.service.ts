@@ -6,8 +6,9 @@ import {
   ChatMessageStatus,
   ChatMessageType,
 } from './entities/chat-message.entity';
-import { SendMessageDto } from './dto/chat.dto';
+import { SendMessageDto, SetContactAliasDto } from './dto/chat.dto';
 import { User } from '../users/entities/user.entity';
+import { ChatContactAlias } from './entities/chat-contact-alias.entity';
 import { isUserOnline, resolveLastSeenAt } from '../common/utils/presence';
 import { mediaUrl } from '../common/utils/media-url';
 import { chatMessageToPayload } from './chat-message.util';
@@ -32,6 +33,8 @@ export class ChatService {
     private repo: Repository<ChatMessage>,
     @InjectRepository(User)
     private users: Repository<User>,
+    @InjectRepository(ChatContactAlias)
+    private aliases: Repository<ChatContactAlias>,
   ) {}
 
   private withUrls(msg: ChatMessage): ChatMessage {
@@ -288,5 +291,34 @@ export class ChatService {
         lastSeenAt: resolveLastSeenAt(p)?.toISOString() ?? null,
       })),
     };
+  }
+
+  async getContactAliases(ownerId: string): Promise<Record<string, string>> {
+    const rows = await this.aliases.find({ where: { ownerId } });
+    const out: Record<string, string> = {};
+    for (const row of rows) {
+      if (row.alias?.trim()) out[row.peerId] = row.alias.trim();
+    }
+    return out;
+  }
+
+  async setContactAlias(ownerId: string, peerId: string, dto: SetContactAliasDto): Promise<Record<string, string>> {
+    if (ownerId === peerId) {
+      throw new ForbiddenException('O\'zingizga alias qo\'yib bo\'lmaydi');
+    }
+    const peer = await this.users.findOne({ where: { id: peerId, isActive: true } });
+    if (!peer) throw new NotFoundException('Kontakt topilmadi');
+
+    const clean = dto.alias?.trim() ?? '';
+    const existing = await this.aliases.findOne({ where: { ownerId, peerId } });
+    if (!clean) {
+      if (existing) await this.aliases.remove(existing);
+    } else if (existing) {
+      existing.alias = clean;
+      await this.aliases.save(existing);
+    } else {
+      await this.aliases.save(this.aliases.create({ ownerId, peerId, alias: clean }));
+    }
+    return this.getContactAliases(ownerId);
   }
 }

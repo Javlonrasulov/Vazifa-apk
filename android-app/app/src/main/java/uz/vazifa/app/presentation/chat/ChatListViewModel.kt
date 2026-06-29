@@ -11,7 +11,7 @@ import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.repository.ChatRepository
 import uz.vazifa.app.data.repository.ChatUnreadRepository
 import uz.vazifa.app.data.repository.RoomRepository
-import uz.vazifa.app.data.repository.toDomain
+import uz.vazifa.app.data.repository.safeToDomain
 import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatPeer
 import uz.vazifa.app.domain.model.ChatRoom
@@ -64,6 +64,21 @@ class ChatListViewModel @Inject constructor(
             runCatching { repo.loadAliases(userId) }
             load()
             loadRooms()
+            observeAliases()
+        }
+    }
+
+    private fun observeAliases() {
+        viewModelScope.launch {
+            repo.contactAliases.collect {
+                _state.update { st ->
+                    st.copy(conversations = st.conversations.map { conv ->
+                        val alias = repo.aliasFor(conv.peer.id)
+                        if (conv.peer.alias == alias) conv
+                        else conv.copy(peer = conv.peer.copy(alias = alias))
+                    })
+                }
+            }
         }
     }
 
@@ -132,6 +147,7 @@ class ChatListViewModel @Inject constructor(
             serverConv.copy(
                 peer = serverConv.peer.copy(
                     fullName = name,
+                    avatarUrl = serverConv.peer.avatarUrl ?: localConv.peer.avatarUrl,
                     position = serverConv.peer.position ?: localConv.peer.position,
                 ),
                 lastMessage = if (localTime > serverTime) localConv.lastMessage else serverConv.lastMessage,
@@ -146,6 +162,7 @@ class ChatListViewModel @Inject constructor(
         if (conv.peer.fullName.isNotBlank()) return conv
         return conv.copy(peer = conv.peer.copy(
             fullName = known.fullName,
+            avatarUrl = conv.peer.avatarUrl ?: known.avatarUrl,
             position = conv.peer.position ?: known.position,
         ))
     }
@@ -162,19 +179,21 @@ class ChatListViewModel @Inject constructor(
         }
         viewModelScope.launch {
             repo.events.collect { ev ->
-                when (ev) {
-                    is ChatEvent.NewMessage -> onNewMessage(ev.message.toDomain())
-                    is ChatEvent.Presence -> _state.update {
-                        val set = it.onlineIds.toMutableSet()
-                        if (ev.online) set.add(ev.userId) else set.remove(ev.userId)
-                        it.copy(onlineIds = set)
+                runCatching {
+                    when (ev) {
+                        is ChatEvent.NewMessage -> safeToDomain(ev.message)?.let { onNewMessage(it) }
+                        is ChatEvent.Presence -> _state.update {
+                            val set = it.onlineIds.toMutableSet()
+                            if (ev.online) set.add(ev.userId) else set.remove(ev.userId)
+                            it.copy(onlineIds = set)
+                        }
+                        is ChatEvent.PresenceList -> _state.update { it.copy(onlineIds = ev.online.toSet()) }
+                        is ChatEvent.Typing -> onPeerActivity(ev.userId, if (ev.typing) ev.action else null)
+                        is ChatEvent.RoomCreated -> loadRooms()
+                        is ChatEvent.RoomNewMessage -> onRoomMessage(ev.message.roomId)
+                        is ChatEvent.Read -> Unit
+                        else -> Unit
                     }
-                    is ChatEvent.PresenceList -> _state.update { it.copy(onlineIds = ev.online.toSet()) }
-                    is ChatEvent.Typing -> onPeerActivity(ev.userId, if (ev.typing) ev.action else null)
-                    is ChatEvent.RoomCreated -> loadRooms()
-                    is ChatEvent.RoomNewMessage -> onRoomMessage(ev.message.roomId)
-                    is ChatEvent.Read -> Unit
-                    else -> Unit
                 }
             }
         }

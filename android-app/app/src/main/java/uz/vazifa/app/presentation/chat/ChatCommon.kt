@@ -12,13 +12,17 @@ import androidx.compose.material.icons.filled.Schedule
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.layout.ContentScale
-import coil.compose.AsyncImage
+import androidx.compose.ui.platform.LocalContext
+import coil.compose.SubcomposeAsyncImage
+import dagger.hilt.android.EntryPointAccessors
+import uz.vazifa.app.di.ImageLoaderEntryPoint
 import uz.vazifa.app.util.MediaUrl
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Dp
@@ -134,13 +138,47 @@ fun ChatAvatar(
     showPresence: Boolean = true,
     avatarUrl: String? = null,
 ) {
+    val context = LocalContext.current
+    val imageLoader = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, ImageLoaderEntryPoint::class.java)
+            .imageLoader()
+    }
+    val resolvedUrl = remember(avatarUrl) { avatarUrl?.takeIf { it.isNotBlank() }?.let { MediaUrl.resolve(it) } }
+
     Box(Modifier.size(size), contentAlignment = Alignment.Center) {
-        if (!avatarUrl.isNullOrBlank()) {
-            AsyncImage(
-                model = MediaUrl.resolve(avatarUrl),
+        if (!resolvedUrl.isNullOrBlank()) {
+            SubcomposeAsyncImage(
+                model = resolvedUrl,
+                imageLoader = imageLoader,
                 contentDescription = name,
                 contentScale = ContentScale.Crop,
                 modifier = Modifier.size(size).clip(CircleShape).background(avatarBrush(name)),
+                loading = {
+                    Box(
+                        Modifier.size(size).clip(CircleShape).background(avatarBrush(name)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            initials(name),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (size.value * 0.36f).sp,
+                        )
+                    }
+                },
+                error = {
+                    Box(
+                        Modifier.size(size).clip(CircleShape).background(avatarBrush(name)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Text(
+                            initials(name),
+                            color = Color.White,
+                            fontWeight = FontWeight.Bold,
+                            fontSize = (size.value * 0.36f).sp,
+                        )
+                    }
+                },
             )
         } else {
             Box(

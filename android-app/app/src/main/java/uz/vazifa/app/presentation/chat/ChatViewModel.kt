@@ -14,8 +14,10 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.ChatUploadDto
+import uz.vazifa.app.chat.ActiveChatTracker
+import uz.vazifa.app.data.remote.ChatMessageDto
 import uz.vazifa.app.data.repository.ChatRepository
-import uz.vazifa.app.data.repository.toDomain
+import uz.vazifa.app.data.repository.safeToDomain
 import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatMessageMeta
 import uz.vazifa.app.domain.model.ChatMessageStatus
@@ -58,7 +60,8 @@ class ChatViewModel @Inject constructor(
     private var stopTypingJob: Job? = null
     private var historyJob: Job? = null
     private val historyMutex = Mutex()
-    private var socketObserving = false
+    private var socketJob: Job? = null
+    private var refreshJob: Job? = null
     private val hiddenIds = mutableSetOf<String>()
 
     private fun applyHidden(list: List<ChatMessage>): List<ChatMessage> {
@@ -87,12 +90,9 @@ class ChatViewModel @Inject constructor(
                 return@launch
             }
             currentUserId = userId
-            repo.connect()
+            repo.reconnect()
             repo.ping()
-            if (!socketObserving) {
-                socketObserving = true
-                observeSocket()
-            }
+            ensureSocketObserver()
             hiddenIds.clear()
             if (peerChanged || _state.value.messages.isEmpty()) {
                 val cached = runCatching { repo.getCachedHistory(peerId) }.getOrDefault(emptyList())
@@ -130,7 +130,20 @@ class ChatViewModel @Inject constructor(
             _state.update { it.copy(peerProfileLoading = true) }
             val profile = runCatching { repo.getContactProfile(peerId) }.getOrNull()
                 ?: _state.value.peer?.toPeerProfile()
-            _state.update { it.copy(peerProfile = profile, peerProfileLoading = false) }
+            _state.update { st ->
+                val peer = st.peer
+                st.copy(
+                    peerProfile = profile,
+                    peerProfileLoading = false,
+                    peer = peer?.copy(
+                        avatarUrl = profile?.avatarUrl ?: peer.avatarUrl,
+                        position = profile?.position ?: peer.position,
+                        department = profile?.department ?: peer.department,
+                        isOnline = profile?.isOnline ?: peer.isOnline,
+                        lastSeenAt = profile?.lastSeenAt ?: peer.lastSeenAt,
+                    ),
+                )
+            }
         }
     }
 
@@ -154,6 +167,17 @@ class ChatViewModel @Inject constructor(
                     position = peer.position ?: conv.position,
                 )
             }
+        if (peer.avatarUrl.isNullOrBlank()) {
+            runCatching { repo.getContacts() }.getOrNull()
+                ?.find { it.id == peerId }
+                ?.let { contact ->
+                    peer = peer.copy(
+                        avatarUrl = contact.avatarUrl,
+                        position = peer.position ?: contact.position,
+                        department = peer.department ?: contact.department,
+                    )
+                }
+        }
         if (alias != null) peer = peer.copy(alias = alias)
         repo.rememberPeer(peer)
         _state.update { it.copy(peer = peer) }
@@ -161,7 +185,7 @@ class ChatViewModel @Inject constructor(
 
     fun renameContact(alias: String?) {
         _state.update { st -> st.copy(peer = st.peer?.copy(alias = alias?.trim()?.takeIf { it.isNotBlank() })) }
-        viewModelScope.launch { runCatching { repo.setAlias(currentUserId, peerId, alias) } }
+        viewModelScope.launch { runCatching { repo.setAlias(peerId, alias) } }
     }
 
     private fun loadHistory() {
@@ -241,57 +265,77 @@ class ChatViewModel @Inject constructor(
         }
     }
 
-    private fun observeSocket() {
-        viewModelScope.launch {
-            repo.events.collect { ev ->
-                when (ev) {
-                    is ChatEvent.NewMessage -> {
-                        val m = ev.message.toDomain()
-                        if (involvesPeer(m)) {
-                            upsert(m)
-                            if (m.senderId == peerId) markIncomingRead()
-                        }
-                    }
-                    is ChatEvent.Updated -> {
-                        val m = ev.message.toDomain()
-                        if (involvesPeer(m)) upsert(m)
-                    }
-                    is ChatEvent.Deleted -> {
-                        val target = _state.value.messages.find { it.id == ev.id } ?: return@collect
-                        if (!involvesPeer(target)) return@collect
-                        _state.update { st -> st.copy(messages = st.messages.filter { it.id != ev.id }) }
-                    }
-                    is ChatEvent.Status -> _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (it.id == ev.id) it.copy(status = ChatMessageStatus.from(ev.status)) else it
-                        })
-                    }
-                    is ChatEvent.Read -> if (ev.by == peerId) _state.update { st ->
-                        st.copy(messages = st.messages.map {
-                            if (isMine(it)) it.copy(status = ChatMessageStatus.READ, isRead = true) else it
-                        })
-                    }
-                    is ChatEvent.Typing -> if (ev.userId == peerId) {
-                        _state.update { it.copy(peerActivity = if (ev.typing) ev.action else null) }
-                    }
-                    is ChatEvent.Presence -> if (ev.userId == peerId) _state.update {
-                        it.copy(peer = it.peer?.copy(isOnline = ev.online, lastSeenAt = ev.lastSeenAt ?: it.peer.lastSeenAt))
-                    }
-                    is ChatEvent.PresenceList -> _state.update {
-                        it.copy(peer = it.peer?.copy(isOnline = peerId in ev.online))
-                    }
-                    else -> Unit
+    private fun ensureSocketObserver() {
+        if (socketJob?.isActive != true) {
+            socketJob = viewModelScope.launch {
+                repo.events.collect { ev ->
+                    runCatching { handleSocketEvent(ev) }
+                }
+            }
+        }
+        if (refreshJob?.isActive != true) {
+            refreshJob = viewModelScope.launch {
+                ActiveChatTracker.refreshRequests.collect { id ->
+                    if (id == peerId) refreshLatestMessages()
                 }
             }
         }
     }
 
-    private fun involvesPeer(m: ChatMessage): Boolean {
-        if (currentUserId.isBlank()) {
-            return m.senderId == peerId || m.receiverId == peerId
+    private fun handleSocketEvent(ev: ChatEvent) {
+        when (ev) {
+            is ChatEvent.NewMessage -> handleIncomingDto(ev.message)
+            is ChatEvent.Updated -> safeToDomain(ev.message)?.let { m ->
+                if (involvesPeer(m)) upsert(m)
+            }
+            is ChatEvent.Deleted -> {
+                val target = _state.value.messages.find { it.id == ev.id } ?: return
+                if (!involvesPeer(target)) return
+                _state.update { st -> st.copy(messages = st.messages.filter { it.id != ev.id }) }
+            }
+            is ChatEvent.Status -> _state.update { st ->
+                st.copy(messages = st.messages.map {
+                    if (it.id == ev.id) it.copy(status = ChatMessageStatus.from(ev.status)) else it
+                })
+            }
+            is ChatEvent.Read -> if (ev.by == peerId) _state.update { st ->
+                st.copy(messages = st.messages.map {
+                    if (isMine(it)) it.copy(status = ChatMessageStatus.READ, isRead = true) else it
+                })
+            }
+            is ChatEvent.Typing -> if (ev.userId == peerId) {
+                _state.update { it.copy(peerActivity = if (ev.typing) ev.action else null) }
+            }
+            is ChatEvent.Presence -> if (ev.userId == peerId) _state.update {
+                it.copy(peer = it.peer?.copy(isOnline = ev.online, lastSeenAt = ev.lastSeenAt ?: it.peer.lastSeenAt))
+            }
+            is ChatEvent.PresenceList -> _state.update {
+                it.copy(peer = it.peer?.copy(isOnline = peerId in ev.online))
+            }
+            else -> Unit
         }
-        return (m.senderId == peerId && m.receiverId == currentUserId) ||
-            (m.senderId == currentUserId && m.receiverId == peerId)
+    }
+
+    private fun handleIncomingDto(dto: ChatMessageDto) {
+        val m = safeToDomain(dto) ?: return
+        if (!involvesPeer(m)) return
+        upsert(m)
+        if (m.senderId == peerId) markIncomingRead()
+    }
+
+    private fun refreshLatestMessages() {
+        if (peerId.isBlank()) return
+        viewModelScope.launch {
+            runCatching { repo.getHistory(peerId, before = null) }
+                .onSuccess { list ->
+                    list.forEach { upsert(it) }
+                }
+        }
+    }
+
+    private fun involvesPeer(m: ChatMessage): Boolean {
+        if (peerId.isBlank()) return false
+        return m.senderId == peerId || m.receiverId == peerId
     }
 
     private fun upsert(msg: ChatMessage) {

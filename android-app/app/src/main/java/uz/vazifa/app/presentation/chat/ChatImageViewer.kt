@@ -17,11 +17,13 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.navigationBars
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -44,13 +46,15 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
-import coil.compose.AsyncImage
+import coil.compose.SubcomposeAsyncImage
+import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
-import androidx.compose.ui.unit.dp
+import uz.vazifa.app.di.ImageLoaderEntryPoint
 import uz.vazifa.app.presentation.components.localized
 import java.net.HttpURLConnection
 import java.net.URL
@@ -63,8 +67,14 @@ fun ChatImageViewerDialog(
 ) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
+    val imageLoader = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, ImageLoaderEntryPoint::class.java)
+            .imageLoader()
+    }
     val savedText = localized("chat_image_saved")
     val saveFailedText = localized("chat_image_save_failed")
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomBarPadding = maxOf(navBottom, 48.dp) + 16.dp
     var scale by remember { mutableFloatStateOf(1f) }
     var offset by remember { mutableStateOf(Offset.Zero) }
     val transformState = rememberTransformableState { zoom, pan, _ ->
@@ -81,12 +91,14 @@ fun ChatImageViewerDialog(
                 .fillMaxSize()
                 .background(Color.Black),
         ) {
-            AsyncImage(
+            SubcomposeAsyncImage(
                 model = imageUrl,
+                imageLoader = imageLoader,
                 contentDescription = null,
                 contentScale = ContentScale.Fit,
                 modifier = Modifier
                     .fillMaxSize()
+                    .padding(bottom = bottomBarPadding + 56.dp)
                     .graphicsLayer {
                         scaleX = scale
                         scaleY = scale
@@ -106,10 +118,15 @@ fun ChatImageViewerDialog(
                     },
             )
 
-            Box(Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(8.dp)) {
+            Box(
+                Modifier
+                    .align(Alignment.TopEnd)
+                    .padding(WindowInsets.statusBars.asPaddingValues())
+                    .padding(8.dp),
+            ) {
                 IconButton(
                     onClick = onDismiss,
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                    modifier = Modifier.background(Color.Black.copy(alpha = 0.55f), CircleShape),
                 ) {
                     Icon(Icons.Default.Close, null, tint = Color.White)
                 }
@@ -119,8 +136,13 @@ fun ChatImageViewerDialog(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 8.dp, vertical = 12.dp),
+                    .background(Color.Black.copy(alpha = 0.65f))
+                    .padding(
+                        start = 16.dp,
+                        end = 16.dp,
+                        top = 12.dp,
+                        bottom = bottomBarPadding,
+                    ),
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
@@ -130,7 +152,7 @@ fun ChatImageViewerDialog(
                             shareImage(context, imageUrl, authToken)
                         }
                     },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                    modifier = Modifier.background(Color.White.copy(alpha = 0.18f), CircleShape),
                 ) {
                     Icon(Icons.Default.Share, null, tint = Color.White)
                 }
@@ -145,7 +167,7 @@ fun ChatImageViewerDialog(
                             ).show()
                         }
                     },
-                    modifier = Modifier.background(Color.Black.copy(alpha = 0.45f), CircleShape),
+                    modifier = Modifier.background(Color.White.copy(alpha = 0.18f), CircleShape),
                 ) {
                     Icon(Icons.Default.Download, null, tint = Color.White)
                 }

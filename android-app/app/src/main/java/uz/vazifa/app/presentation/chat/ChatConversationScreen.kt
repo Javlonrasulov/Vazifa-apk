@@ -100,6 +100,11 @@ fun ChatConversationScreen(
         }
     }
 
+    DisposableEffect(peerId) {
+        uz.vazifa.app.chat.ActiveChatTracker.setActive(peerId.takeIf { it.isNotBlank() })
+        onDispose { uz.vazifa.app.chat.ActiveChatTracker.setActive(null) }
+    }
+
     var skipNextResumeReload by remember(peerId) { mutableStateOf(true) }
     val lifecycleOwner = LocalLifecycleOwner.current
     DisposableEffect(lifecycleOwner, peerId) {
@@ -520,7 +525,7 @@ private fun MessageList(
     val listState = rememberLazyListState()
     val reversed = remember(state.messages) { state.messages.filter { !it.isDeleted }.asReversed() }
 
-    LaunchedEffect(state.messages.size) {
+    LaunchedEffect(state.messages.lastOrNull()?.id) {
         if (state.messages.isNotEmpty()) {
             val firstVisible = listState.firstVisibleItemIndex
             if (firstVisible <= 2) listState.animateScrollToItem(0)
@@ -544,7 +549,7 @@ private fun MessageList(
         contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp),
         verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        items(reversed.size, key = { i -> "${reversed[i].id}_$i" }) { i ->
+        items(reversed.size, key = { reversed[it].id }) { i ->
             val msg = reversed[i]
             val ascendingIndex = state.messages.size - 1 - i
             val prev = state.messages.getOrNull(ascendingIndex - 1)
@@ -1362,7 +1367,7 @@ private fun RoomMessageList(
     val listState = rememberLazyListState()
     val reversed = remember(state.messages) { state.messages.filter { !it.isDeleted }.asReversed() }
 
-    LaunchedEffect(state.messages.size) {
+    LaunchedEffect(state.messages.lastOrNull()?.id) {
         if (state.messages.isNotEmpty()) {
             val firstVisible = listState.firstVisibleItemIndex
             if (firstVisible <= 2) listState.animateScrollToItem(0)

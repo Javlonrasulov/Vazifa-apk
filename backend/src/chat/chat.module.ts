@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { TypeOrmModule } from '@nestjs/typeorm';
+import { ChatContactAlias } from './entities/chat-contact-alias.entity';
 import { ChatMessage } from './entities/chat-message.entity';
 import { ChatRoom, ChatRoomMember } from './entities/chat-room.entity';
 import { ChatRoomMessage } from './entities/chat-room-message.entity';
@@ -17,6 +18,7 @@ import { User } from '../users/entities/user.entity';
   imports: [
     TypeOrmModule.forFeature([
       ChatMessage,
+      ChatContactAlias,
       ChatRoom,
       ChatRoomMember,
       ChatRoomMessage,

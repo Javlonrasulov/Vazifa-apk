@@ -51,8 +51,8 @@ class ChatRepository @Inject constructor(
 
     suspend fun loadAliases(userId: String) = aliases.load(userId)
     fun aliasFor(peerId: String): String? = aliases.aliasFor(peerId)
-    suspend fun setAlias(userId: String, peerId: String, alias: String?) =
-        aliases.setAlias(userId, peerId, alias)
+    val contactAliases: StateFlow<Map<String, String>> = aliases.aliases
+    suspend fun setAlias(peerId: String, alias: String?) = aliases.setAlias(peerId, alias)
 
     val events: SharedFlow<ChatEvent> get() = socket.events
     val connected: StateFlow<Boolean> get() = socket.connected
@@ -63,6 +63,7 @@ class ChatRepository @Inject constructor(
         if (peer.id.isBlank() || peer.fullName.isBlank()) return
         val cached = peerCache[peer.id]
         peerCache[peer.id] = if (cached == null) peer else peer.copy(
+            avatarUrl = peer.avatarUrl ?: cached.avatarUrl,
             position = peer.position ?: cached.position,
             department = peer.department ?: cached.department,
             isOnline = peer.isOnline || cached.isOnline,
@@ -79,6 +80,7 @@ class ChatRepository @Inject constructor(
         } else {
             peer.copy(
                 fullName = peer.fullName.ifBlank { known.fullName },
+                avatarUrl = peer.avatarUrl ?: known.avatarUrl,
                 position = peer.position ?: known.position,
                 department = peer.department ?: known.department,
                 isOnline = peer.isOnline || known.isOnline,
@@ -102,7 +104,20 @@ class ChatRepository @Inject constructor(
         val dtos = fetchConversationsLenient()
             ?: runCatching { api.getConversations() }.getOrNull()
             ?: emptyList()
+        val contacts = runCatching { api.getContacts() }.getOrNull()
+            ?.associateBy { it.id }
+            ?: emptyMap()
         return dtos.mapNotNull { safeToConversation(it) }
+            .map { conv ->
+                val contact = contacts[conv.peer.id] ?: return@map conv
+                conv.copy(
+                    peer = conv.peer.copy(
+                        avatarUrl = conv.peer.avatarUrl ?: contact.avatarUrl,
+                        position = conv.peer.position ?: contact.position,
+                        department = conv.peer.department ?: contact.department,
+                    ),
+                )
+            }
     }
 
     private fun safeToConversation(dto: ConversationDto): Conversation? = runCatching {

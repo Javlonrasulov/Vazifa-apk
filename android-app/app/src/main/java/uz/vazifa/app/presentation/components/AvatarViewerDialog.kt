@@ -2,7 +2,21 @@ package uz.vazifa.app.presentation.components
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
@@ -34,6 +48,8 @@ fun AvatarViewerDialog(
     onDeletePhoto: (() -> Unit)? = null,
 ) {
     val url = MediaUrl.resolve(avatarUrl)
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomPad = maxOf(navBottom, 48.dp) + 24.dp
     Dialog(
         onDismissRequest = onDismiss,
         properties = DialogProperties(usePlatformDefaultWidth = false),
@@ -48,13 +64,14 @@ fun AvatarViewerDialog(
                 contentDescription = name,
                 modifier = Modifier
                     .fillMaxSize()
-                    .padding(bottom = 120.dp),
+                    .padding(bottom = bottomPad + 140.dp),
                 contentScale = ContentScale.Fit,
             )
 
             Box(
                 Modifier
                     .align(Alignment.TopEnd)
+                    .padding(WindowInsets.statusBars.asPaddingValues())
                     .padding(16.dp)
                     .size(40.dp)
                     .clip(RoundedCornerShape(50))
@@ -69,8 +86,13 @@ fun AvatarViewerDialog(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .navigationBarsPadding()
-                    .padding(horizontal = 20.dp, vertical = 16.dp),
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(
+                        start = 20.dp,
+                        end = 20.dp,
+                        top = 16.dp,
+                        bottom = bottomPad,
+                    ),
                 horizontalAlignment = Alignment.CenterHorizontally,
             ) {
                 Text(name, color = Color.White, fontWeight = FontWeight.Bold, fontSize = 18.sp)

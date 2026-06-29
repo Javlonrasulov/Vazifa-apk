@@ -100,3 +100,9 @@ export class HistoryQueryDto {
   @Max(100)
   limit?: number;
 }
+
+export class SetContactAliasDto {
+  @IsOptional()
+  @IsString()
+  alias?: string | null;
+}

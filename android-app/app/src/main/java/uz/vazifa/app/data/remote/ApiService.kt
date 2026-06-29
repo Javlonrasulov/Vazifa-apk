@@ -150,6 +150,12 @@ interface ApiService {
     @GET("chat/search")
     suspend fun searchChat(@Query("q") q: String): ChatSearchDto
 
+    @GET("chat/aliases")
+    suspend fun getChatAliases(): ChatAliasesDto
+
+    @PATCH("chat/aliases/{peerId}")
+    suspend fun setChatAlias(@Path("peerId") peerId: String, @Body body: ContactAliasBody): ChatAliasesDto
+
     @GET("chat/{userId}")
     suspend fun getChatHistory(
         @Path("userId") userId: String,
@@ -287,6 +293,10 @@ data class ChatSearchDto(
 )
 
 data class ChatUnreadDto(val count: Int = 0)
+
+data class ChatAliasesDto(val aliases: Map<String, String> = emptyMap())
+
+data class ContactAliasBody(val alias: String? = null)
 
 data class ChatUploadDto(
     val filePath: String,

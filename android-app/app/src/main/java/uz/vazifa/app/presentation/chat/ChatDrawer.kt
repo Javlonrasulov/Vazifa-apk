@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -217,7 +218,7 @@ private fun DrawerHeaderCard(
                     Box(
                         Modifier.then(
                             if (onAvatarClick != null) {
-                                Modifier.clip(CircleShape).clickable(enabled = !uploadingAvatar) { onAvatarClick() }
+                                Modifier.clickable(enabled = !uploadingAvatar) { onAvatarClick() }
                             } else Modifier,
                         ),
                     ) {
@@ -246,7 +247,8 @@ private fun DrawerHeaderCard(
                             Box(
                                 Modifier
                                     .align(Alignment.BottomEnd)
-                                    .size(22.dp)
+                                    .offset(x = 2.dp, y = 2.dp)
+                                    .size(24.dp)
                                     .clip(CircleShape)
                                     .background(LiquidTheme.bgMid)
                                     .padding(2.dp),
@@ -263,7 +265,7 @@ private fun DrawerHeaderCard(
                                         Icons.Default.PhotoCamera,
                                         contentDescription = null,
                                         tint = Color.White,
-                                        modifier = Modifier.size(12.dp),
+                                        modifier = Modifier.size(13.dp),
                                     )
                                 }
                             }
@@ -393,7 +395,7 @@ private fun DrawerFooter(isOpen: Boolean) {
         Modifier
             .fillMaxWidth()
             .alpha(alpha)
-            .padding(top = 8.dp, bottom = 12.dp),
+            .padding(top = 8.dp, bottom = BottomNavHeight + 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
