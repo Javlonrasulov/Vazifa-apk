@@ -11,7 +11,7 @@ export class NotificationsGuard implements CanActivate {
     if (user.role === UserRole.ADMIN) return true;
     const method = String(req.method ?? 'GET').toUpperCase();
     if (method === 'GET') return true;
-    if (!user.notificationsEnabled || !user.fcmToken) {
+    if (!user.notificationsEnabled) {
       throw new ForbiddenException({
         code: 'NOTIFICATIONS_REQUIRED',
         message: 'Ilovadan foydalanish uchun bildirishnomalarni yoqing',

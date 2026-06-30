@@ -37,6 +37,9 @@ data class User(
 fun User.isTaskAssignable(excludeUserId: String? = null): Boolean =
     login != "xodim1" && (excludeUserId == null || id != excludeUserId)
 
+fun User.canAssignTasksInApp(): Boolean =
+    role.equals("director", ignoreCase = true) || role.equals("employee", ignoreCase = true)
+
 fun User.matchesDepartment(departmentName: String): Boolean =
     department?.trim()?.equals(departmentName.trim(), ignoreCase = true) == true
 

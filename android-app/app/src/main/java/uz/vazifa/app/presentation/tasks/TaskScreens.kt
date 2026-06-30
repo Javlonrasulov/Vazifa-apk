@@ -1,10 +1,13 @@
 package uz.vazifa.app.presentation.tasks
 
+import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.relocation.BringIntoViewRequester
+import androidx.compose.foundation.relocation.bringIntoViewRequester
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -13,16 +16,20 @@ import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import android.net.Uri
 import androidx.hilt.navigation.compose.hiltViewModel
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskAssignment
 import uz.vazifa.app.domain.model.TaskStatus
@@ -153,7 +160,7 @@ fun TaskDetailScreen(
         state.task?.let { task ->
             val myAssignment = task.myAssignment(state.currentUserId)
             val isCreator = task.isCreator(state.currentUserId)
-            val showManagerView = canAssignTasks && isCreator
+            val showManagerView = isCreator
             val showAssigneeView = myAssignment != null
             val showObserverView = !showManagerView && !showAssigneeView
             val isCompleted = task.isCompletedForUser(state.currentUserId)
@@ -403,7 +410,7 @@ fun TaskDetailScreen(
     }
 }
 
-@OptIn(ExperimentalMaterial3Api::class)
+@OptIn(ExperimentalMaterial3Api::class, ExperimentalFoundationApi::class)
 @Composable
 fun CreateTaskScreen(
     onBack: () -> Unit,
@@ -423,6 +430,11 @@ fun CreateTaskScreen(
     var createImageUri by remember { mutableStateOf<Uri?>(null) }
     var showAllSelectedAssignees by remember { mutableStateOf(false) }
     val snackbarHostState = remember { SnackbarHostState() }
+    val scrollState = rememberScrollState()
+    val assigneeSearchBringIntoView = remember { BringIntoViewRequester() }
+    val focusScope = rememberCoroutineScope()
+    val density = LocalDensity.current
+    val isKeyboardVisible = WindowInsets.ime.getBottom(density) > 0
 
     LaunchedEffect(Unit) {
         viewModel.loadContacts()
@@ -467,13 +479,14 @@ fun CreateTaskScreen(
         Column(
             Modifier
                 .fillMaxSize()
-                .padding(padding),
+                .padding(padding)
+                .imePadding(),
         ) {
             Column(
                 Modifier
                     .weight(1f)
                     .padding(horizontal = 16.dp)
-                    .verticalScroll(rememberScrollState()),
+                    .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
             OutlinedTextField(
@@ -548,7 +561,17 @@ fun CreateTaskScreen(
                 OutlinedTextField(
                     state.assigneeSearch, viewModel::onAssigneeSearch,
                     label = { Text(localized("task_search_employee")) },
-                    modifier = Modifier.fillMaxWidth(),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .bringIntoViewRequester(assigneeSearchBringIntoView)
+                        .onFocusEvent { event ->
+                            if (event.isFocused) {
+                                focusScope.launch {
+                                    delay(150)
+                                    assigneeSearchBringIntoView.bringIntoView()
+                                }
+                            }
+                        },
                     shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                     colors = fieldColors,
                     leadingIcon = { Icon(Icons.Default.Search, contentDescription = null, tint = LiquidTheme.textMuted) },
@@ -596,13 +619,15 @@ fun CreateTaskScreen(
                     label = localized("task_add_photo"),
                 )
             }
-                Spacer(Modifier.height(8.dp))
+                Spacer(Modifier.height(if (isKeyboardVisible) 24.dp else 8.dp))
             }
-            CreateTaskSubmitBar(
-                isEditMode = state.isEditMode,
-                loading = state.loading,
-                onSubmit = submitCreate,
-            )
+            if (!isKeyboardVisible) {
+                CreateTaskSubmitBar(
+                    isEditMode = state.isEditMode,
+                    loading = state.loading,
+                    onSubmit = submitCreate,
+                )
+            }
         }
     }
 

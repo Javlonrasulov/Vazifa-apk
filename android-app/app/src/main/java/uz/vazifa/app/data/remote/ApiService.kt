@@ -31,6 +31,10 @@ data class UserDto(
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
 )
+
+fun UserDto.canAssignTasksInApp(): Boolean =
+    role.equals("director", ignoreCase = true) || role.equals("employee", ignoreCase = true)
+
 data class FcmRequest(
     val fcmToken: String,
     val notificationsEnabled: Boolean,

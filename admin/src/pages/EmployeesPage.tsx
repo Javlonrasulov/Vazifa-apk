@@ -7,6 +7,7 @@ import {
   Eye,
   EyeOff,
   Layers,
+  FileSpreadsheet,
   Loader,
   Lock,
   Plus,
@@ -32,6 +33,10 @@ import { useAppSettings } from '../i18n/LanguageContext';
 import { INDIGO, useAdminTheme } from '../theme/adminTheme';
 import { displayPhone, formatUzPhone, PHONE_PLACEHOLDER, phoneDigits, phoneForSave, phonesSame } from '../utils/phone';
 import { formatDeviceId, formatDeviceLabel, formatDeviceTime, getUserDevices } from '../utils/devices';
+import {
+  exportEmployeesToExcel,
+  filterEmployeesForExport,
+} from '../utils/exportEmployeesExcel';
 
 const DEFAULT_EMPLOYEE_PASSWORD = '123456';
 
@@ -79,6 +84,11 @@ export default function EmployeesPage() {
   const [departmentOptions, setDepartmentOptions] = useState<string[]>([]);
   const [allDepartments, setAllDepartments] = useState<{ id: string; name: string }[]>([]);
   const [form, setForm] = useState(emptyEmployeeForm);
+  const [exportOpen, setExportOpen] = useState(false);
+  const [exportSelected, setExportSelected] = useState<Set<string>>(new Set());
+  const [exportIncludeNone, setExportIncludeNone] = useState(false);
+  const [exportError, setExportError] = useState('');
+  const [exporting, setExporting] = useState(false);
 
   const closeEmployeeDialog = () => {
     setDialogOpen(false);
@@ -531,6 +541,266 @@ export default function EmployeesPage() {
       canAssignTasks: role === 'director' ? true : false,
     }));
   };
+
+  const openExportModal = () => {
+    const keys = new Set(departmentFilterData.options.map((o) => o.key));
+    setExportSelected(keys);
+    setExportIncludeNone(departmentFilterData.noDepartmentCount > 0);
+    setExportError('');
+    setExportOpen(true);
+  };
+
+  const toggleExportDepartment = (key: string) => {
+    setExportSelected((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  };
+
+  const selectAllExportDepartments = () => {
+    setExportSelected(new Set(departmentFilterData.options.map((o) => o.key)));
+    if (departmentFilterData.noDepartmentCount > 0) setExportIncludeNone(true);
+  };
+
+  const clearExportDepartments = () => {
+    setExportSelected(new Set());
+    setExportIncludeNone(false);
+  };
+
+  const handleExportExcel = async () => {
+    if (exporting) return;
+    if (!exportSelected.size && !exportIncludeNone) {
+      setExportError(t('exportExcelEmpty'));
+      return;
+    }
+    const filteredUsers = filterEmployeesForExport(users, exportSelected, exportIncludeNone);
+    if (!filteredUsers.length) {
+      setExportError(t('exportExcelEmpty'));
+      return;
+    }
+    setExporting(true);
+    setExportError('');
+    try {
+      await exportEmployeesToExcel(filteredUsers, {
+        num: t('exportColNum'),
+        fullName: t('exportColFullName'),
+        login: t('exportColLogin'),
+        password: t('exportColPassword'),
+        phone: t('exportColPhone'),
+        role: t('exportColRole'),
+        position: t('exportColPosition'),
+        department: t('exportColDepartment'),
+        canAssignTasks: t('exportColCanAssign'),
+        allowScreenshot: t('exportColScreenshot'),
+        visibleDepartments: t('exportColVisibleDepts'),
+        devices: t('exportColDevices'),
+        status: t('exportColStatus'),
+        createdAt: t('exportColCreated'),
+        statusActive: t('exportStatusActive'),
+        statusInactive: t('exportStatusInactive'),
+        yes: t('yes'),
+        no: t('no'),
+      }, roleLabel);
+      setExportOpen(false);
+      setToast(t('exportExcelDone'));
+    } catch {
+      setExportError(t('error'));
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const renderExportModal = () =>
+    exportOpen && (
+      <div
+        style={{
+          position: 'fixed',
+          inset: 0,
+          zIndex: 400,
+          background: 'rgba(0,0,0,0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          backdropFilter: 'blur(4px)',
+        }}
+        onClick={() => !exporting && setExportOpen(false)}
+      >
+        <div
+          style={{
+            background: tableBg,
+            borderRadius: 20,
+            border: `1px solid ${border}`,
+            width: '100%',
+            maxWidth: 480,
+            maxHeight: 'calc(100vh - 32px)',
+            overflowY: 'auto',
+            margin: 16,
+            padding: '24px 22px',
+            boxShadow: D ? '0 24px 64px rgba(0,0,0,0.7)' : '0 24px 64px rgba(0,0,0,0.15)',
+          }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div
+                style={{
+                  width: 40,
+                  height: 40,
+                  borderRadius: 12,
+                  background: D ? 'rgba(34,197,94,0.15)' : 'rgba(34,197,94,0.1)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                }}
+              >
+                <FileSpreadsheet size={20} color="#22c55e" />
+              </div>
+              <div>
+                <div style={{ fontSize: 16, fontWeight: 700, color: txt }}>{t('exportExcelTitle')}</div>
+                <div style={{ fontSize: 12, color: muted, marginTop: 2 }}>{t('exportExcelHint')}</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => !exporting && setExportOpen(false)}
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 10,
+                border: 'none',
+                background: D ? 'rgba(255,255,255,0.06)' : '#f3f4f6',
+                color: muted,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <X size={16} />
+            </button>
+          </div>
+
+          {(departmentFilterData.options.length > 0 || departmentFilterData.noDepartmentCount > 0) && (
+            <div style={{ display: 'flex', gap: 6, marginBottom: 14, marginTop: 10 }}>
+              <button type="button" style={miniActionBtn} onClick={selectAllExportDepartments}>
+                {t('exportExcelSelectAll')}
+              </button>
+              <button type="button" style={miniActionBtn} onClick={clearExportDepartments}>
+                {t('exportExcelClear')}
+              </button>
+            </div>
+          )}
+
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              maxHeight: 320,
+              overflowY: 'auto',
+              padding: '2px 0',
+            }}
+          >
+            {departmentFilterData.options.map((opt) => {
+              const active = exportSelected.has(opt.key);
+              return (
+                <button
+                  key={opt.key}
+                  type="button"
+                  style={deptChipBtn(active)}
+                  onClick={() => toggleExportDepartment(opt.key)}
+                >
+                  <span style={{ flex: 1, lineHeight: 1.35 }}>{opt.label}</span>
+                  <span style={{ fontSize: 11, color: muted, fontWeight: 600, flexShrink: 0 }}>
+                    {opt.count}
+                  </span>
+                  {active && <Check size={16} color={INDIGO} style={{ flexShrink: 0 }} />}
+                </button>
+              );
+            })}
+            {departmentFilterData.noDepartmentCount > 0 && (
+              <button
+                type="button"
+                style={deptChipBtn(exportIncludeNone)}
+                onClick={() => setExportIncludeNone((v) => !v)}
+              >
+                <span style={{ flex: 1, lineHeight: 1.35 }}>{t('exportExcelNoDept')}</span>
+                <span style={{ fontSize: 11, color: muted, fontWeight: 600, flexShrink: 0 }}>
+                  {departmentFilterData.noDepartmentCount}
+                </span>
+                {exportIncludeNone && <Check size={16} color={INDIGO} style={{ flexShrink: 0 }} />}
+              </button>
+            )}
+            {!departmentFilterData.options.length && !departmentFilterData.noDepartmentCount && (
+              <div style={{ fontSize: 13, color: muted, textAlign: 'center', padding: '20px 0' }}>—</div>
+            )}
+          </div>
+
+          {exportError && (
+            <div
+              style={{
+                marginTop: 14,
+                padding: '10px 12px',
+                borderRadius: 10,
+                background: D ? 'rgba(239,68,68,0.12)' : 'rgba(239,68,68,0.08)',
+                border: `1px solid ${D ? 'rgba(239,68,68,0.25)' : 'rgba(239,68,68,0.2)'}`,
+                color: '#ef4444',
+                fontSize: 12,
+              }}
+            >
+              {exportError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
+            <button
+              type="button"
+              onClick={() => !exporting && setExportOpen(false)}
+              disabled={exporting}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 11,
+                border: `1px solid ${border}`,
+                background: 'transparent',
+                color: muted,
+                fontSize: 13,
+                fontWeight: 600,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+              }}
+            >
+              {t('cancel')}
+            </button>
+            <button
+              type="button"
+              onClick={handleExportExcel}
+              disabled={exporting}
+              style={{
+                flex: 1,
+                padding: 10,
+                borderRadius: 11,
+                border: 'none',
+                background: exporting ? (D ? '#374151' : '#d1d5db') : '#22c55e',
+                color: '#fff',
+                fontSize: 13,
+                fontWeight: 700,
+                cursor: exporting ? 'not-allowed' : 'pointer',
+                boxShadow: exporting ? 'none' : '0 4px 14px rgba(34,197,94,0.35)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
+              }}
+            >
+              {exporting ? <Loader size={14} className="animate-spin" /> : <FileSpreadsheet size={14} />}
+              {exporting ? t('loginLoading') : t('exportExcelDownload')}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
 
   const renderModal = () =>
     dialogOpen && (
@@ -1402,6 +1672,7 @@ export default function EmployeesPage() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {renderModal()}
+      {renderExportModal()}
       {renderPasswordModal()}
       {renderDeviceResetModal()}
       {renderDeleteModal()}
@@ -1450,6 +1721,29 @@ export default function EmployeesPage() {
               }}
             />
           </div>
+
+          <button
+            type="button"
+            onClick={openExportModal}
+            disabled={loading || !users.length}
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 7,
+              padding: '8px 16px',
+              borderRadius: 11,
+              border: `1px solid ${border}`,
+              background: surface,
+              color: loading || !users.length ? muted : '#22c55e',
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: loading || !users.length ? 'not-allowed' : 'pointer',
+              opacity: loading || !users.length ? 0.6 : 1,
+            }}
+          >
+            <FileSpreadsheet size={14} />
+            {t('exportExcel')}
+          </button>
 
           <button
             type="button"

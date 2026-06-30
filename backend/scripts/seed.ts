@@ -67,7 +67,14 @@ async function seed() {
     console.log('Namuna xodim (xodim1) olib tashlandi');
   }
 
-  await repo.update({ role: UserRole.DIRECTOR }, { canAssignTasks: true });
+  await repo.update(
+    { role: UserRole.DIRECTOR },
+    { canAssignTasks: true },
+  );
+  await repo.update(
+    { role: UserRole.EMPLOYEE },
+    { canAssignTasks: true },
+  );
 
   await ds.destroy();
   console.log('Seed completed');

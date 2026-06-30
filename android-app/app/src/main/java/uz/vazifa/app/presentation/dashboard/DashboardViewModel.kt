@@ -14,6 +14,7 @@ import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.hasActiveAssignment
 import uz.vazifa.app.domain.model.hasCompletedAssignment
 import uz.vazifa.app.domain.model.isOverdue
+import uz.vazifa.app.data.remote.canAssignTasksInApp
 import uz.vazifa.app.domain.model.isTaskAssignable
 import javax.inject.Inject
 
@@ -62,7 +63,7 @@ class DashboardViewModel @Inject constructor(
                         stats = stats,
                         tasks = list,
                         currentUserId = user?.id,
-                        canAssignTasks = user?.canAssignTasks == true,
+                        canAssignTasks = user?.canAssignTasksInApp() == true,
                         loading = false,
                     )
                 }

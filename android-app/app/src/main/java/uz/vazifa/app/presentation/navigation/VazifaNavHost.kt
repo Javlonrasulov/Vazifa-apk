@@ -33,6 +33,7 @@ import uz.vazifa.app.data.repository.ChatUnreadRepository
 import uz.vazifa.app.data.repository.NotificationInboxRepository
 import uz.vazifa.app.data.remote.ChatEvent
 import uz.vazifa.app.data.remote.UserDto
+import uz.vazifa.app.data.remote.canAssignTasksInApp
 import uz.vazifa.app.presentation.security.ScreenshotPolicyEffect
 import uz.vazifa.app.localization.AppLanguage
 import uz.vazifa.app.localization.AppStrings
@@ -235,7 +236,7 @@ fun VazifaNavHost(
     val backStack by navController.currentBackStackEntryAsState()
     val route = backStack?.destination?.route
     val user = viewModel.currentUser
-    val canAssignTasks = user?.canAssignTasks == true
+    val canAssignTasks = user?.canAssignTasksInApp() == true
     ScreenshotPolicyEffect(allowScreenshot = user?.allowScreenshot != false)
     val showBottomNav = route == Routes.MAIN
     val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
@@ -439,25 +440,18 @@ fun VazifaNavHost(
                             navController.navigate(Routes.dashSection(section.route))
                         },
                     )
-                    AppTab.EMPLOYEES -> if (canAssignTasks) {
-                        EmployeesTabScreen(
-                            onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
-                            onAssignTask = { ids ->
-                                navController.navigate(Routes.createTask(ids))
-                            },
-                            onDepartmentClick = { dept ->
-                                navController.navigate(Routes.employeesDepartment(dept))
-                            },
-                            onSearchAll = { query ->
-                                navController.navigate(Routes.employeesDepartment(null, query))
-                            },
-                        )
-                    } else {
-                        TasksScreen(
-                            onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
-                            onEditTask = { navController.navigate(Routes.editTask(it)) },
-                        )
-                    }
+                    AppTab.EMPLOYEES -> EmployeesTabScreen(
+                        onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
+                        onAssignTask = { ids ->
+                            navController.navigate(Routes.createTask(ids))
+                        },
+                        onDepartmentClick = { dept ->
+                            navController.navigate(Routes.employeesDepartment(dept))
+                        },
+                        onSearchAll = { query ->
+                            navController.navigate(Routes.employeesDepartment(null, query))
+                        },
+                    )
                     AppTab.TASKS -> TasksScreen(
                         onTaskClick = { navController.navigate(Routes.taskDetail(it)) },
                         onEditTask = { navController.navigate(Routes.editTask(it)) },
@@ -484,17 +478,13 @@ fun VazifaNavHost(
                             },
                         )
                     }
-                    AppTab.CREATE -> if (canAssignTasks) {
-                        CreateTaskScreen(
-                            showBack = false,
-                            onBack = { selectedTab = AppTab.HOME },
-                            onCreated = { selectedTab = AppTab.TASKS },
-                            preselectedAssigneeIds = preselectedAssigneeIds,
-                            onPreselectConsumed = { preselectedAssigneeIds = null },
-                        )
-                    } else {
-                        TasksScreen(onTaskClick = { navController.navigate(Routes.taskDetail(it)) })
-                    }
+                    AppTab.CREATE -> CreateTaskScreen(
+                        showBack = false,
+                        onBack = { selectedTab = AppTab.HOME },
+                        onCreated = { selectedTab = AppTab.TASKS },
+                        preselectedAssigneeIds = preselectedAssigneeIds,
+                        onPreselectConsumed = { preselectedAssigneeIds = null },
+                    )
                     AppTab.PROFILE -> ProfileScreen(
                         onLogout = {
                             viewModel.clearBootRoute()

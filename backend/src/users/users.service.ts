@@ -200,7 +200,7 @@ export class UsersService implements OnModuleInit {
       passwordPlain: plain,
       fullName: dto.fullName.trim(),
       role: dto.role,
-      canAssignTasks: dto.canAssignTasks ?? dto.role === UserRole.DIRECTOR,
+      canAssignTasks: dto.canAssignTasks ?? dto.role !== UserRole.ADMIN,
       allowScreenshot: isAdmin ? true : (dto.allowScreenshot ?? true),
       position: isAdmin ? null : (dto.position ?? null),
       department: isAdmin ? null : (dto.department ?? null),

@@ -16,6 +16,7 @@ import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.hasCompletedAssignment
+import uz.vazifa.app.data.remote.canAssignTasksInApp
 import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.util.TaskDeadlineCountdown
 import uz.vazifa.app.util.UzbekTextSearch
@@ -42,7 +43,7 @@ class TasksViewModel @Inject constructor(
                 it.copy(
                     tasks = repo.getTasks(),
                     currentUserId = user?.id,
-                    canAssignTasks = user?.canAssignTasks == true,
+                    canAssignTasks = user?.canAssignTasksInApp() == true,
                 )
             }
         }
@@ -337,13 +338,17 @@ class CreateTaskViewModel @Inject constructor(
     fun clearError() = _state.update { it.copy(errorKey = null) }
 
     private fun mapCreateError(e: Throwable): String = when (e) {
-        is HttpException -> when (e.code()) {
-            403 -> "task_create_forbidden"
-            400 -> {
-                val body = e.response()?.errorBody()?.string().orEmpty()
-                if (body.contains("O'zingizga")) "task_self_assign_forbidden" else "task_create_failed"
+        is HttpException -> {
+            val body = e.response()?.errorBody()?.string().orEmpty()
+            when (e.code()) {
+                403 -> when {
+                    body.contains("NOTIFICATIONS_REQUIRED") -> "task_notifications_required"
+                    body.contains("Vazifa berish") -> "task_create_forbidden"
+                    else -> "task_create_forbidden"
+                }
+                400 -> if (body.contains("O'zingizga")) "task_self_assign_forbidden" else "task_create_failed"
+                else -> "task_create_failed"
             }
-            else -> "task_create_failed"
         }
         else -> "task_create_failed"
     }
