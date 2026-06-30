@@ -124,15 +124,28 @@ class TaskDetailViewModel @Inject constructor(
         comment: String,
         imageUri: Uri?,
     ) = viewModelScope.launch {
-        _state.update { it.copy(loading = true) }
+        _state.update { it.copy(loading = true, errorKey = null, completeSuccess = false) }
         runCatching {
             val text = comment.trim()
             if (text.isNotBlank()) repo.addComment(taskId, text)
             if (imageUri != null) repo.uploadAttachment(taskId, imageUri)
             repo.updateStatus(taskId, assignmentId, TaskStatus.COMPLETED.key)
-            load(taskId)
-        }.onFailure { _state.update { it.copy(loading = false) } }
+            val userId = auth.currentUser()?.id
+            val task = repo.getTask(taskId)
+            _state.update {
+                it.copy(
+                    task = task,
+                    currentUserId = userId,
+                    loading = false,
+                    completeSuccess = true,
+                )
+            }
+        }.onFailure {
+            _state.update { it.copy(loading = false, errorKey = "task_complete_failed") }
+        }
     }
+
+    fun clearCompleteFeedback() = _state.update { it.copy(errorKey = null, completeSuccess = false) }
 
     fun completeWithVoice(taskId: String, assignmentId: String, voiceFile: File) = viewModelScope.launch {
         _state.update { it.copy(loading = true) }
@@ -149,6 +162,8 @@ data class TaskDetailUiState(
     val currentUserId: String? = null,
     val loading: Boolean = false,
     val error: Boolean = false,
+    val errorKey: String? = null,
+    val completeSuccess: Boolean = false,
 )
 
 @HiltViewModel

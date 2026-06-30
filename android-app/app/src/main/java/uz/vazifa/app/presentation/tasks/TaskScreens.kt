@@ -156,7 +156,29 @@ fun TaskDetailScreen(
 
     LaunchedEffect(taskId) { viewModel.load(taskId) }
 
-    VazifaStackScaffold(title = localized("task_detail"), onBack = onBack) { padding ->
+    LaunchedEffect(state.completeSuccess) {
+        if (state.completeSuccess) {
+            showCompleteDialog = false
+            completeComment = ""
+            completeImageUri = null
+            viewModel.clearCompleteFeedback()
+        }
+    }
+
+    val snackbarHostState = remember { SnackbarHostState() }
+    val completeError = state.errorKey?.let { localized(it) }
+    LaunchedEffect(completeError) {
+        completeError?.let {
+            snackbarHostState.showSnackbar(it)
+            viewModel.clearCompleteFeedback()
+        }
+    }
+
+    VazifaStackScaffold(
+        title = localized("task_detail"),
+        onBack = onBack,
+        snackbarHost = { SnackbarHost(snackbarHostState) },
+    ) { padding ->
         state.task?.let { task ->
             val myAssignment = task.myAssignment(state.currentUserId)
             val isCreator = task.isCreator(state.currentUserId)
@@ -377,9 +399,6 @@ fun TaskDetailScreen(
                         assignment?.let {
                             viewModel.completeWithReport(taskId, it.id, completeComment, completeImageUri)
                         }
-                        showCompleteDialog = false
-                        completeComment = ""
-                        completeImageUri = null
                     },
                     enabled = !state.loading && assignment != null,
                 ) {

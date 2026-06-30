@@ -145,7 +145,11 @@ fun ChatAvatar(
     }
     val resolvedUrl = remember(avatarUrl) { avatarUrl?.takeIf { it.isNotBlank() }?.let { MediaUrl.resolve(it) } }
 
-    Box(Modifier.size(size), contentAlignment = Alignment.Center) {
+    val dotSize = size * 0.28f
+    val presenceExtra = if (showPresence && online) dotSize * 0.35f else 0.dp
+
+    Box(Modifier.size(size + presenceExtra), contentAlignment = Alignment.Center) {
+        Box(Modifier.size(size), contentAlignment = Alignment.Center) {
         if (!resolvedUrl.isNullOrBlank()) {
             SubcomposeAsyncImage(
                 model = resolvedUrl,
@@ -196,11 +200,12 @@ fun ChatAvatar(
                 )
             }
         }
+        }
         if (showPresence && online) {
             Box(
                 Modifier
                     .align(Alignment.BottomEnd)
-                    .size(size * 0.28f)
+                    .size(dotSize)
                     .clip(CircleShape)
                     .background(Color(0xFF34D399))
                     .border((size.value * 0.04f).dp, Color.White, CircleShape),

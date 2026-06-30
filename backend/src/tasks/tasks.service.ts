@@ -216,8 +216,12 @@ export class TasksService {
 
     const isAssignee = assignment.assigneeId === user.id;
     const isTaskManager = userCanAssignTasks(user);
-    if (!isAssignee && !isTaskManager) throw new ForbiddenException();
-    if (isTaskManager && assignment.task.createdById !== user.id) {
+    const isCreator = assignment.task.createdById === user.id;
+    if (isAssignee) {
+      // Xodim o'z vazifasini yangilay oladi
+    } else if (isTaskManager && isCreator) {
+      // Vazifa beruvchi o'z yaratgan vazifada holatni o'zgartira oladi
+    } else {
       throw new ForbiddenException('Ruxsat yo\'q');
     }
 

@@ -105,8 +105,7 @@ fun PeerProfileSheet(
                     Spacer(Modifier.height(8.dp))
                     Box(
                         Modifier
-                            .size(120.dp)
-                            .clip(CircleShape)
+                            .wrapContentSize()
                             .then(
                                 if (!p.avatarUrl.isNullOrBlank()) {
                                     Modifier.clickable { onAvatarClick(p.avatarUrl) }
