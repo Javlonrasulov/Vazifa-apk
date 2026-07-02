@@ -63,7 +63,7 @@ class ApiClient @Inject constructor(
     val api: ApiService = Retrofit.Builder()
         .baseUrl(BuildConfig.API_BASE_URL)
         .client(client)
-        .addConverterFactory(GsonConverterFactory.create())
+        .addConverterFactory(GsonConverterFactory.create(GsonBuilder().create()))
         .build()
         .create(ApiService::class.java)
 

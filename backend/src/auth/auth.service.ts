@@ -12,6 +12,7 @@ import { UserRole } from '../common/enums';
 import { AuditService } from '../audit/audit.service';
 import { AuditAction } from '../common/enums';
 import { bindUserDevice, getApprovedDevices, deviceLimitMessage } from '../common/utils/user-devices';
+import { NotificationsService } from '../notifications/notifications.service';
 
 @Injectable()
 export class AuthService {
@@ -20,6 +21,7 @@ export class AuthService {
     private jwt: JwtService,
     private config: ConfigService,
     private audit: AuditService,
+    private notifications: NotificationsService,
   ) {}
 
   async validateUser(userId: string): Promise<User | null> {
@@ -119,6 +121,9 @@ export class AuthService {
     user.notificationsEnabled = enabled;
     if (language) user.language = language;
     await this.usersService.saveUser(user);
+    if (enabled) {
+      await this.notifications.flushPendingForUser(userId);
+    }
     return this.usersService.sanitize(user);
   }
 

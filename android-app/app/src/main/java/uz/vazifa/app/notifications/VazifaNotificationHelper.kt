@@ -82,12 +82,14 @@ object VazifaNotificationHelper {
         type: String?,
         chatUserId: String? = null,
         roomId: String? = null,
+        announcementId: String? = null,
     ) {
         if (!canShowNotifications(context)) return
 
         createChannels(context)
 
         val isChat = type == "chat" || type == "room"
+        val isAnnouncement = type == "announcement" || type == "announcement_reminder"
         val channelId = if (isChat) CHANNEL_CHAT else CHANNEL_TASKS
         val groupKey = if (isChat) GROUP_CHAT else GROUP_TASKS
 
@@ -100,10 +102,12 @@ object VazifaNotificationHelper {
             chatUserId?.let { putExtra(EXTRA_CHAT_USER_ID, it) }
             if (isChat && title.isNotBlank()) putExtra(EXTRA_CHAT_PEER_NAME, title)
             roomId?.let { putExtra(EXTRA_ROOM_ID, it) }
+            announcementId?.let { putExtra(EXTRA_ANNOUNCEMENT_ID, it) }
         }
 
         val notifyId = roomId?.hashCode()
             ?: chatUserId?.hashCode()
+            ?: announcementId?.hashCode()
             ?: taskId?.hashCode()
             ?: title.hashCode()
 
@@ -114,15 +118,18 @@ object VazifaNotificationHelper {
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
 
-        val notification = NotificationCompat.Builder(context, channelId)
+        val builder = NotificationCompat.Builder(context, channelId)
             .setSmallIcon(R.drawable.ic_notification)
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(
-                if (isChat) NotificationCompat.CATEGORY_MESSAGE
-                else NotificationCompat.CATEGORY_REMINDER,
+                when {
+                    isChat -> NotificationCompat.CATEGORY_MESSAGE
+                    isAnnouncement -> NotificationCompat.CATEGORY_REMINDER
+                    else -> NotificationCompat.CATEGORY_REMINDER
+                },
             )
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .setAutoCancel(true)
@@ -131,7 +138,23 @@ object VazifaNotificationHelper {
             .setOnlyAlertOnce(false)
             .setDefaults(NotificationCompat.DEFAULT_ALL)
             .setVibrate(vibrationPattern)
-            .build()
+
+        if (isAnnouncement && !announcementId.isNullOrBlank()) {
+            val ackIntent = Intent(context, AnnouncementAckReceiver::class.java).apply {
+                action = AnnouncementAckReceiver.ACTION_ACKNOWLEDGE
+                putExtra(AnnouncementAckReceiver.EXTRA_ANNOUNCEMENT_ID, announcementId)
+                putExtra(AnnouncementAckReceiver.EXTRA_NOTIFY_ID, notifyId)
+            }
+            val ackPending = PendingIntent.getBroadcast(
+                context,
+                notifyId + 1,
+                ackIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            builder.addAction(0, "Tushundim", ackPending)
+        }
+
+        val notification = builder.build()
 
         try {
             NotificationManagerCompat.from(context).notify(notifyId, notification)
@@ -161,4 +184,5 @@ object VazifaNotificationHelper {
     const val EXTRA_CHAT_USER_ID = "chat_user_id"
     const val EXTRA_CHAT_PEER_NAME = "chat_peer_name"
     const val EXTRA_ROOM_ID = "room_id"
+    const val EXTRA_ANNOUNCEMENT_ID = "announcement_id"
 }

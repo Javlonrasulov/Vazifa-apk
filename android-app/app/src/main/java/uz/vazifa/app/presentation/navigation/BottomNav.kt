@@ -500,6 +500,10 @@ object Routes {
     const val CHAT_CONTACTS = "chat_contacts"
     const val CHAT_CREATE_ROOM = "chat_create_room/{type}"
     const val ROOM_CONVERSATION = "room_conv/{roomId}"
+    const val CREATE_ANNOUNCEMENT = "create_announcement?recipientIds={recipientIds}"
+    const val ANNOUNCEMENT_DETAIL = "announcement/{announcementId}"
+    const val ANNOUNCEMENT_TRACKING = "announcement/{announcementId}/tracking"
+    const val ANNOUNCEMENTS_SENT = "announcements/sent"
     fun taskDetail(id: String) = "task/$id"
     fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
@@ -513,6 +517,12 @@ object Routes {
         val encoded = android.net.Uri.encode(assigneeIds.joinToString(","))
         return "create_task?assigneeIds=$encoded"
     }
+    fun createAnnouncement(recipientIds: Set<String> = emptySet()): String {
+        val encoded = android.net.Uri.encode(recipientIds.joinToString(","))
+        return "create_announcement?recipientIds=$encoded"
+    }
+    fun announcementDetail(id: String) = "announcement/$id"
+    fun announcementTracking(id: String) = "announcement/$id/tracking"
     fun chatConversation(peerId: String, name: String) =
         "chat_conv/$peerId?name=${android.net.Uri.encode(name)}"
     fun createRoom(type: String) = "chat_create_room/$type"

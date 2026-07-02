@@ -87,6 +87,9 @@ export interface User {
     lastLoginAt?: string;
   }> | null;
   notificationsEnabled: boolean;
+  restStart: string | null;
+  restEnd: string | null;
+  restDays: number[] | null;
   isActive: boolean;
   canAccessAdminPanel: boolean;
   adminPermissions: string[] | null;
@@ -157,6 +160,9 @@ export async function createUser(body: {
   phone?: string;
   visibleDepartments?: string[];
   adminPermissions?: string[];
+  restStart?: string | null;
+  restEnd?: string | null;
+  restDays?: number[] | null;
 }) {
   const { data } = await api.post('/users', body);
   return data;

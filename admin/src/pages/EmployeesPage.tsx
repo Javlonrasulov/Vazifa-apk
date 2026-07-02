@@ -51,6 +51,9 @@ const emptyEmployeeForm = () => ({
   department: '',
   visibleDepartments: [] as string[],
   phone: '+998 ',
+  restStart: '',
+  restEnd: '',
+  restDays: [] as number[],
 });
 
 export default function EmployeesPage() {
@@ -365,6 +368,9 @@ export default function EmployeesPage() {
       department: u.department ?? '',
       visibleDepartments: [...(u.visibleDepartments ?? [])],
       phone: displayPhone(u.phone ?? ''),
+      restStart: u.restStart ?? '',
+      restEnd: u.restEnd ?? '',
+      restDays: [...(u.restDays ?? [])],
     });
     setDialogOpen(true);
     void loadFieldOptions(u.position ?? '', u.department ?? '');
@@ -391,6 +397,11 @@ export default function EmployeesPage() {
         return;
       }
 
+      if (Boolean(form.restStart) !== Boolean(form.restEnd)) {
+        setSaveError(t('restTimeBothError'));
+        return;
+      }
+
       if (editUser) {
         const initialPassword = (editUser.passwordPlain ?? '').trim();
         const passwordChanged = trimmedPassword !== initialPassword;
@@ -405,6 +416,9 @@ export default function EmployeesPage() {
           department: form.department || null,
           visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : null,
           phone: phoneForSave(form.phone),
+          restStart: form.restStart || null,
+          restEnd: form.restEnd || null,
+          restDays: form.restDays.length ? form.restDays : null,
         });
         setUsers((prev) => prev.map((u) => (u.id === updated.id ? updated : u)));
         setToast(t('updated'));
@@ -424,6 +438,9 @@ export default function EmployeesPage() {
           department: form.department || undefined,
           visibleDepartments: form.visibleDepartments.length ? form.visibleDepartments : undefined,
           phone: phoneForSave(form.phone) || undefined,
+          restStart: form.restStart || undefined,
+          restEnd: form.restEnd || undefined,
+          restDays: form.restDays.length ? form.restDays : undefined,
         });
         setUsers((prev) => [created, ...prev.filter((u) => u.id !== created.id)]);
         setSearch('');
@@ -1184,6 +1201,67 @@ export default function EmployeesPage() {
                   setForm({ ...form, phone: formatUzPhone(phoneDigits(e.target.value)) });
                 }}
               />
+            </div>
+            <div>
+              <label style={{ ...labelStyle, marginBottom: 4 }}>{t('restTimeTitle')}</label>
+              <div style={{ fontSize: 11, color: muted, lineHeight: 1.45, marginBottom: 8 }}>
+                {t('restTimeHint')}
+              </div>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>{t('restStart')}</div>
+                  <input
+                    style={inputStyle}
+                    type="time"
+                    value={form.restStart}
+                    onChange={(e) => setForm({ ...form, restStart: e.target.value })}
+                  />
+                </div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 11, color: muted, marginBottom: 4 }}>{t('restEnd')}</div>
+                  <input
+                    style={inputStyle}
+                    type="time"
+                    value={form.restEnd}
+                    onChange={(e) => setForm({ ...form, restEnd: e.target.value })}
+                  />
+                </div>
+              </div>
+            </div>
+            <div>
+              <label style={{ ...labelStyle, marginBottom: 4 }}>{t('restDaysTitle')}</label>
+              <div style={{ fontSize: 11, color: muted, lineHeight: 1.45, marginBottom: 8 }}>
+                {t('restDaysHint')}
+              </div>
+              <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+                {t('restDayNames')
+                  .split(',')
+                  .map((dayName, idx) => {
+                    const active = form.restDays.includes(idx);
+                    return (
+                      <button
+                        key={idx}
+                        type="button"
+                        style={{
+                          ...segmentedBtn(active),
+                          flex: 'none',
+                          minWidth: 56,
+                          padding: '8px 10px',
+                        }}
+                        onClick={() =>
+                          setForm({
+                            ...form,
+                            restDays: active
+                              ? form.restDays.filter((d) => d !== idx)
+                              : [...form.restDays, idx].sort(),
+                          })
+                        }
+                      >
+                        {dayName}
+                      </button>
+                    );
+                  })}
+              </div>
             </div>
           </div>
 

@@ -208,6 +208,9 @@ export class UsersService implements OnModuleInit {
         ? null
         : this.normalizeVisibleDepartments(dto.visibleDepartments),
       phone: isAdmin ? null : (dto.phone ?? null),
+      restStart: isAdmin ? null : (dto.restStart ?? null),
+      restEnd: isAdmin ? null : (dto.restEnd ?? null),
+      restDays: isAdmin ? null : this.normalizeRestDays(dto.restDays),
       adminPermissions: isAdmin
         ? (dto.adminPermissions?.length
             ? dto.adminPermissions
@@ -260,6 +263,9 @@ export class UsersService implements OnModuleInit {
       await this.assertUniquePhone(dto.phone, id);
       user.phone = dto.phone;
     }
+    if (dto.restStart !== undefined) user.restStart = dto.restStart || null;
+    if (dto.restEnd !== undefined) user.restEnd = dto.restEnd || null;
+    if (dto.restDays !== undefined) user.restDays = this.normalizeRestDays(dto.restDays);
     if (dto.isActive !== undefined) {
       if (user.role === UserRole.ADMIN && !dto.isActive) {
         const adminCount = await this.countActiveAdmins(id);
@@ -400,6 +406,12 @@ export class UsersService implements OnModuleInit {
       lastSeenAt: lastSeen?.toISOString() ?? null,
       isOnline: isUserOnline(user),
     };
+  }
+
+  private normalizeRestDays(days?: number[] | null): number[] | null {
+    if (!days?.length) return null;
+    const unique = [...new Set(days.filter((d) => d >= 0 && d <= 6))].sort();
+    return unique.length ? unique : null;
   }
 
   private normalizeVisibleDepartments(departments?: string[] | null): string[] | null {

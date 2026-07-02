@@ -485,13 +485,58 @@ fun CreateTaskScreen(
         }
     }
 
+    var restWarning by remember { mutableStateOf<String?>(null) }
+    val restTodayText = localized("task_rest_today")
+    val restTomorrowText = localized("task_rest_tomorrow")
+    val restQuestionText = localized("task_rest_question")
+
     val submitCreate: () -> Unit = submit@{
         when {
             state.title.isBlank() -> viewModel.showTitleError()
             !state.isEditMode && state.selectedIds.isEmpty() -> viewModel.showAssigneeError()
             state.isEditMode -> viewModel.update()
-            else -> viewModel.create(createImageUri)
+            else -> {
+                // Dam olish kuniga to'g'ri kelgan xodimlar uchun yumshoq ogohlantirish
+                val todayIdx = java.time.LocalDate.now(zone).dayOfWeek.value % 7
+                val tomorrowIdx = (todayIdx + 1) % 7
+                val resting = state.selectedContacts.mapNotNull { c ->
+                    val days = c.restDays ?: return@mapNotNull null
+                    when {
+                        todayIdx in days -> "${c.fullName} — $restTodayText"
+                        tomorrowIdx in days -> "${c.fullName} — $restTomorrowText"
+                        else -> null
+                    }
+                }
+                if (resting.isNotEmpty()) {
+                    restWarning = resting.joinToString("\n") + "\n\n" + restQuestionText
+                } else {
+                    viewModel.create(createImageUri)
+                }
+            }
         }
+    }
+
+    restWarning?.let { message ->
+        AlertDialog(
+            onDismissRequest = { restWarning = null },
+            title = { Text(localized("task_rest_day_title")) },
+            text = { Text(message) },
+            confirmButton = {
+                Button(
+                    onClick = {
+                        restWarning = null
+                        viewModel.create(createImageUri)
+                    },
+                ) {
+                    Text(localized("task_rest_send"))
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { restWarning = null }) {
+                    Text(localized("com_cancel"))
+                }
+            },
+        )
     }
 
     val formContent: @Composable (PaddingValues) -> Unit = { padding ->

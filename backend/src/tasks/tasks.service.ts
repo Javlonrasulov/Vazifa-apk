@@ -84,15 +84,13 @@ export class TasksService {
     );
     await Promise.all(
       assignees
-        .filter((a) => a.notificationsEnabled && a.fcmToken)
+        .filter((a) => a?.notificationsEnabled)
         .map((a) => {
           const text = newTaskText(saved.title, a.language);
-          return this.notifications.sendToToken(
-            a.fcmToken as string,
-            text.title,
-            text.body,
-            { taskId: saved.id, type: 'task_new' },
-          );
+          return this.notifications.notifyUser(a.id, text.title, text.body, {
+            taskId: saved.id,
+            type: 'task_new',
+          });
         }),
     );
 
@@ -240,7 +238,7 @@ export class TasksService {
 
     if (isAssignee) {
       const creator = await this.usersService.findById(assignment.task.createdById);
-      if (creator.notificationsEnabled && creator.fcmToken) {
+      if (creator.notificationsEnabled) {
         const assigneeName = assignment.assignee?.fullName ?? 'Xodim';
         const text =
           dto.status === TaskStatus.COMPLETED
@@ -251,12 +249,11 @@ export class TasksService {
                 dto.status,
                 creator.language,
               );
-        await this.notifications.sendToToken(
-          creator.fcmToken,
-          text.title,
-          text.body,
-          { taskId, type: 'task_status', status: dto.status },
-        );
+        await this.notifications.notifyUser(creator.id, text.title, text.body, {
+          taskId,
+          type: 'task_status',
+          status: dto.status,
+        });
       }
     }
 

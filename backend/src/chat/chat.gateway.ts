@@ -186,9 +186,9 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
   ) {
     try {
       const receiver = await this.users.findById(receiverId);
-      if (!receiver?.fcmToken || !receiver.notificationsEnabled) return;
+      if (!receiver?.notificationsEnabled) return;
       const text = chatPushText(sender.fullName, type, body, receiver.language);
-      await this.notifications.sendToToken(receiver.fcmToken, text.title, text.body, {
+      await this.notifications.notifyUser(receiverId, text.title, text.body, {
         type: 'chat',
         chatUserId: sender.id,
         channel: FCM_CHANNEL_CHAT,
@@ -303,14 +303,13 @@ export class ChatGateway implements OnGatewayConnection, OnGatewayDisconnect {
     try {
       const recipients = await this.rooms.pushRecipients(roomId, sender.id);
       for (const r of recipients) {
-        if (!r.fcmToken) continue;
+        if (!r.notificationsEnabled) continue;
         const text = chatPushText(sender.fullName, message.type, message.body, r.language);
-        await this.notifications.sendToToken(
-          r.fcmToken,
-          roomTitle,
-          `${sender.fullName}: ${text.body}`,
-          { type: 'room', roomId, channel: FCM_CHANNEL_CHAT },
-        );
+        await this.notifications.notifyUser(r.id, roomTitle, `${sender.fullName}: ${text.body}`, {
+          type: 'room',
+          roomId,
+          channel: FCM_CHANNEL_CHAT,
+        });
       }
     } catch (e) {
       this.logger.error('room push failed', e as Error);

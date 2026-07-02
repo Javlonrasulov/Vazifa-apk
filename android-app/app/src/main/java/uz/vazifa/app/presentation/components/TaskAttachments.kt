@@ -1,6 +1,7 @@
 package uz.vazifa.app.presentation.components
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,6 +26,7 @@ import dagger.hilt.android.EntryPointAccessors
 import kotlinx.coroutines.launch
 import uz.vazifa.app.di.ApiClientEntryPoint
 import uz.vazifa.app.domain.model.TaskAttachment
+import uz.vazifa.app.presentation.chat.ChatImageViewerDialog
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
@@ -131,13 +133,28 @@ fun LocalVoicePreviewRow(
 
 @Composable
 private fun TaskImageAttachment(url: String) {
+    val context = LocalContext.current
+    val entryPoint = remember {
+        EntryPointAccessors.fromApplication(context.applicationContext, ApiClientEntryPoint::class.java)
+    }
+    var showFullScreen by remember(url) { mutableStateOf(false) }
+
+    if (showFullScreen) {
+        ChatImageViewerDialog(
+            imageUrl = url,
+            authToken = entryPoint.tokenStore().accessToken,
+            onDismiss = { showFullScreen = false },
+        )
+    }
+
     SubcomposeAsyncImage(
         model = url,
         contentDescription = null,
         modifier = Modifier
             .fillMaxWidth()
             .height(180.dp)
-            .clip(RoundedCornerShape(LiquidGlass.RadiusInput)),
+            .clip(RoundedCornerShape(LiquidGlass.RadiusInput))
+            .clickable { showFullScreen = true },
         contentScale = ContentScale.Crop,
         loading = {
             Box(

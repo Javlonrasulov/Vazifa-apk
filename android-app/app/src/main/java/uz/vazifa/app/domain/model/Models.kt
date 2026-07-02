@@ -32,6 +32,8 @@ data class User(
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
     val avatarUrl: String? = null,
+    /** Dam olish kunlari: 0=yakshanba ... 6=shanba */
+    val restDays: List<Int>? = null,
 )
 
 fun User.isTaskAssignable(excludeUserId: String? = null): Boolean =

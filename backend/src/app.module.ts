@@ -10,6 +10,7 @@ import { AuditModule } from './audit/audit.module';
 import { NotificationsModule } from './notifications/notifications.module';
 import { ChatModule } from './chat/chat.module';
 import { DepartmentsModule } from './departments/departments.module';
+import { AnnouncementsModule } from './announcements/announcements.module';
 import { PresenceInterceptor } from './common/interceptors/presence.interceptor';
 
 @Module({
@@ -37,6 +38,7 @@ import { PresenceInterceptor } from './common/interceptors/presence.interceptor'
     NotificationsModule,
     ChatModule,
     DepartmentsModule,
+    AnnouncementsModule,
   ],
   providers: [
     {

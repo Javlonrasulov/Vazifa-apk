@@ -30,6 +30,7 @@ data class UserDto(
     val notificationsEnabled: Boolean = true,
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
+    val restDays: List<Int>? = null,
 )
 
 fun UserDto.canAssignTasksInApp(): Boolean =
@@ -58,11 +59,53 @@ data class UpdateTaskRequest(
     val deadlineAt: String? = null,
 )
 data class CommentRequest(val body: String)
+data class CreateAnnouncementRequest(
+    val title: String,
+    val description: String?,
+    val deadlineAt: String,
+    val reminderIntervalMinutes: Int,
+    val recipientIds: List<String>,
+)
+
+data class AnnouncementAckResponse(
+    val acknowledged: Boolean,
+    val acknowledgedAt: String?,
+)
+
+data class AnnouncementRecipientDto(
+    val id: String,
+    val recipientId: String,
+    val acknowledgedAt: String? = null,
+    val recipient: UserDto? = null,
+)
+
+data class AnnouncementAttachmentDto(
+    val id: String,
+    val fileName: String,
+    val mimeType: String,
+    val url: String? = null,
+)
+
+data class AnnouncementDto(
+    val id: String,
+    val title: String,
+    val description: String? = null,
+    val deadlineAt: String,
+    val reminderIntervalMinutes: Int,
+    val status: String,
+    val createdById: String,
+    val createdBy: UserDto? = null,
+    val recipients: List<AnnouncementRecipientDto> = emptyList(),
+    val attachments: List<AnnouncementAttachmentDto> = emptyList(),
+    val acknowledgedAt: String? = null,
+)
+
 data class DepartmentDto(
     val id: String,
     val name: String,
     val employeeCount: Int,
 )
+
 
 data class DashboardStatsDto(
     val totalEmployees: Int,
@@ -236,6 +279,31 @@ interface ApiService {
 
     @POST("rooms/messages/{msgId}/pin")
     suspend fun pinRoomMessage(@Path("msgId") msgId: String): RoomMessageDto
+
+    @GET("announcements/sent")
+    suspend fun getSentAnnouncements(): List<AnnouncementDto>
+
+    @GET("announcements/received")
+    suspend fun getReceivedAnnouncements(): List<AnnouncementDto>
+
+    @GET("announcements/{id}")
+    suspend fun getAnnouncement(@Path("id") id: String): AnnouncementDto
+
+    @POST("announcements")
+    suspend fun createAnnouncement(@Body body: CreateAnnouncementRequest): AnnouncementDto
+
+    @POST("announcements/{id}/acknowledge")
+    suspend fun acknowledgeAnnouncement(@Path("id") id: String): AnnouncementAckResponse
+
+    @POST("announcements/{id}/cancel")
+    suspend fun cancelAnnouncement(@Path("id") id: String): AnnouncementDto
+
+    @Multipart
+    @POST("announcements/{id}/attachments")
+    suspend fun uploadAnnouncementAttachment(
+        @Path("id") id: String,
+        @Part file: MultipartBody.Part,
+    ): AnnouncementAttachmentDto
 }
 
 data class ChatMetaDto(

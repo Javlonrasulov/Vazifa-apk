@@ -11,6 +11,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Assignment
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.HeadsetMic
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -32,6 +33,7 @@ import uz.vazifa.app.presentation.theme.LiquidTheme
 
 enum class CreateAction {
     NEW_TASK,
+    NEW_ANNOUNCEMENT,
     NEW_CHAT,
     SUPPORT,
 }
@@ -55,6 +57,7 @@ fun CreateActionSheet(
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val items = listOf(
         CreateActionItem(CreateAction.NEW_TASK, Icons.Default.Assignment, "create_new_task", "create_new_task_desc"),
+        CreateActionItem(CreateAction.NEW_ANNOUNCEMENT, Icons.Default.Campaign, "create_new_announcement", "create_new_announcement_desc"),
         CreateActionItem(CreateAction.NEW_CHAT, Icons.Default.Chat, "create_new_chat", "create_new_chat_desc"),
         CreateActionItem(CreateAction.SUPPORT, Icons.Default.HeadsetMic, "create_support", "create_support_desc"),
     )

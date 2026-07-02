@@ -173,3 +173,27 @@ export function overdueText(title: string, code?: string | null): PushText {
       return { title: 'Муддат ўтди!', body: `"${title}" — кечикмоқда` };
   }
 }
+
+export function newAnnouncementText(title: string, code?: string | null): PushText {
+  const lang = normalizeLang(code);
+  switch (lang) {
+    case 'uz':
+      return { title: 'Yangi xabar', body: `"${title}" — o\'qib, tasdiqlang` };
+    case 'ru':
+      return { title: 'Новое сообщение', body: `"${title}" — прочитайте и подтвердите` };
+    default:
+      return { title: 'Янги хабар', body: `"${title}" — ўқиб, тасдиқланг` };
+  }
+}
+
+export function announcementReminderText(title: string, code?: string | null): PushText {
+  const lang = normalizeLang(code);
+  switch (lang) {
+    case 'uz':
+      return { title: 'Xabar eslatmasi', body: `"${title}" — Tushundim tugmasini bosing` };
+    case 'ru':
+      return { title: 'Напоминание', body: `"${title}" — нажмите «Понял»` };
+    default:
+      return { title: 'Хабар эслатмаси', body: `"${title}" — Тушундим тугмасини босинг` };
+  }
+}

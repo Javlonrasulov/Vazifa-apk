@@ -42,6 +42,8 @@ class MainActivity : ComponentActivity() {
         private set
     var pendingRoomId by mutableStateOf<String?>(null)
         private set
+    var pendingAnnouncementId by mutableStateOf<String?>(null)
+        private set
 
     private val notifPermission = registerForActivityResult(
         ActivityResultContracts.RequestPermission(),
@@ -63,6 +65,7 @@ class MainActivity : ComponentActivity() {
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
         pendingChatPeerName = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_PEER_NAME)
         pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
+        pendingAnnouncementId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ANNOUNCEMENT_ID)
 
         CoroutineScope(Dispatchers.IO).launch {
             runCatching { authRepository.ensureSessionForApi() }
@@ -92,6 +95,8 @@ class MainActivity : ComponentActivity() {
                         onPendingChatConsumed = { pendingChatUserId = null; pendingChatPeerName = null },
                         pendingRoomId = pendingRoomId,
                         onPendingRoomConsumed = { pendingRoomId = null },
+                        pendingAnnouncementId = pendingAnnouncementId,
+                        onPendingAnnouncementConsumed = { pendingAnnouncementId = null },
                         onSplashActiveChange = { active -> keepSystemSplash = active },
                     )
                 }
@@ -106,5 +111,6 @@ class MainActivity : ComponentActivity() {
         pendingChatUserId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_USER_ID)
         pendingChatPeerName = intent.getStringExtra(VazifaNotificationHelper.EXTRA_CHAT_PEER_NAME)
         pendingRoomId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ROOM_ID)
+        pendingAnnouncementId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_ANNOUNCEMENT_ID)
     }
 }

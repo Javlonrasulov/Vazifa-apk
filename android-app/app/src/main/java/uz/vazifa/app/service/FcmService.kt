@@ -11,6 +11,7 @@ import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.ChatUnreadRepository
 import uz.vazifa.app.data.repository.ContactAliasRepository
 import uz.vazifa.app.data.repository.NotificationInboxRepository
+import uz.vazifa.app.notifications.PushDedup
 import uz.vazifa.app.notifications.VazifaNotificationHelper
 import javax.inject.Inject
 
@@ -30,13 +31,19 @@ class FcmService : FirebaseMessagingService() {
 
     override fun onMessageReceived(message: RemoteMessage) {
         val data = message.data
+        val outboxId = data["outboxId"].orEmpty()
+        if (outboxId.isNotBlank() && PushDedup.isDuplicate(applicationContext, outboxId)) {
+            return
+        }
         val serverTitle = data["title"] ?: message.notification?.title ?: "Vazifa"
         val body = data["body"] ?: message.notification?.body ?: ""
         val taskId = data["taskId"]
         val type = data["type"]
+        val announcementId = data["announcementId"]
         val chatUserId = data["chatUserId"]
         val roomId = data["roomId"]
         val isChat = type == "chat" || type == "room"
+        val isAnnouncement = type == "announcement" || type == "announcement_reminder"
 
         CoroutineScope(Dispatchers.IO).launch {
             val uid = authRepository.cachedUserId()
@@ -58,11 +65,17 @@ class FcmService : FirebaseMessagingService() {
                     )
                 }
                 else -> {
-                    notificationInbox.add(taskId, title, body, type)
+                    notificationInbox.add(
+                        taskId = taskId,
+                        title = title,
+                        body = body,
+                        type = type,
+                        announcementId = announcementId,
+                    )
                 }
             }
 
-            if (isChat || !AppForegroundState.isInForeground) {
+            if (isChat || isAnnouncement || !AppForegroundState.isInForeground) {
                 VazifaNotificationHelper.show(
                     context = applicationContext,
                     title = title,
@@ -71,7 +84,11 @@ class FcmService : FirebaseMessagingService() {
                     type = type,
                     chatUserId = chatUserId,
                     roomId = roomId,
+                    announcementId = announcementId,
                 )
+            }
+            if (outboxId.isNotBlank()) {
+                PushDedup.remember(applicationContext, outboxId)
             }
         }
 

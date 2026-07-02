@@ -7,6 +7,8 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.CallMade
+import androidx.compose.material.icons.automirrored.filled.CallReceived
 import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -207,6 +209,23 @@ fun TaskRow(
         "in_progress", "in_review" -> VazifaColors.Primary
         else -> VazifaColors.Warning
     }
+    val isSent = isCreator
+    val isReceived = !isCreator && myAssignment != null
+    val directionIcon = when {
+        isSent -> Icons.AutoMirrored.Filled.CallMade
+        isReceived -> Icons.AutoMirrored.Filled.CallReceived
+        else -> Icons.Default.Assignment
+    }
+    val directionLabel = when {
+        isSent -> localized("task_sent")
+        isReceived -> localized("task_received")
+        else -> localized("task_detail")
+    }
+    val directionGradient = when {
+        isSent -> listOf(LiquidGlass.Blue, LiquidGlass.Cyan)
+        isReceived -> listOf(LiquidGlass.Emerald, VazifaColors.Success)
+        else -> listOf(LiquidGlass.Blue.copy(alpha = 0.85f), LiquidGlass.Cyan.copy(alpha = 0.85f))
+    }
     Row(
         Modifier
             .fillMaxWidth()
@@ -219,15 +238,16 @@ fun TaskRow(
             Modifier
                 .size(40.dp)
                 .clip(CircleShape)
-                .background(
-                    Brush.linearGradient(
-                        listOf(LiquidGlass.Blue.copy(alpha = 0.85f), LiquidGlass.Cyan.copy(alpha = 0.85f)),
-                    ),
-                )
+                .background(Brush.linearGradient(directionGradient))
                 .clickable(onClick = onClick),
             contentAlignment = Alignment.Center,
         ) {
-            Icon(Icons.Default.Assignment, null, tint = Color.White, modifier = Modifier.size(20.dp))
+            Icon(
+                directionIcon,
+                contentDescription = directionLabel,
+                tint = Color.White,
+                modifier = Modifier.size(20.dp),
+            )
         }
         Column(
             Modifier

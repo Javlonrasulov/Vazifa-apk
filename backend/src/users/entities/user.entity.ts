@@ -76,6 +76,18 @@ export class User {
   @Column({ default: true })
   notificationsEnabled: boolean;
 
+  /** Dam olish vaqti boshlanishi, "23:00" ko'rinishida (Toshkent vaqti) */
+  @Column({ type: 'varchar', nullable: true })
+  restStart: string | null;
+
+  /** Dam olish vaqti tugashi, "08:00" ko'rinishida (Toshkent vaqti) */
+  @Column({ type: 'varchar', nullable: true })
+  restEnd: string | null;
+
+  /** Dam olish kunlari: 0=yakshanba ... 6=shanba */
+  @Column({ type: 'simple-json', nullable: true })
+  restDays: number[] | null;
+
   @Column({ type: 'varchar', default: 'uz_kril' })
   language: string;
 

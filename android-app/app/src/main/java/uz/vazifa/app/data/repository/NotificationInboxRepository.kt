@@ -38,6 +38,7 @@ class NotificationInboxRepository @Inject constructor(
         type: String? = null,
         chatUserId: String? = null,
         roomId: String? = null,
+        announcementId: String? = null,
     ) {
         context.inboxDataStore.edit { prefs ->
             val current = parseItems(prefs[inboxKey]).toMutableList()
@@ -46,6 +47,7 @@ class NotificationInboxRepository @Inject constructor(
                 InboxNotification(
                     id = UUID.randomUUID().toString(),
                     taskId = taskId,
+                    announcementId = announcementId,
                     chatUserId = chatUserId,
                     roomId = roomId,
                     title = title,

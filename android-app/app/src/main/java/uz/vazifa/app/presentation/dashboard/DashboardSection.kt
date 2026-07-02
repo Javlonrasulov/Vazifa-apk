@@ -343,6 +343,7 @@ fun DashboardSectionScreen(
                                         val canManage = task.canCreatorManage(currentUserId)
                                         TaskRow(
                                             task = task,
+                                            currentUserId = currentUserId,
                                             canManage = canManage,
                                             onClick = { onTaskClick(task.id) },
                                             onEdit = if (canManage) ({ onEditTask(task.id) }) else null,

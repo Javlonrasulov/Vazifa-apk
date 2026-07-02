@@ -56,6 +56,7 @@ import uz.vazifa.app.presentation.profile.ProfileScreen
 import uz.vazifa.app.presentation.splash.SplashScreen
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.tasks.*
+import uz.vazifa.app.presentation.announcements.*
 
 import javax.inject.Inject
 
@@ -229,6 +230,8 @@ fun VazifaNavHost(
     onPendingChatConsumed: () -> Unit = {},
     pendingRoomId: String? = null,
     onPendingRoomConsumed: () -> Unit = {},
+    pendingAnnouncementId: String? = null,
+    onPendingAnnouncementConsumed: () -> Unit = {},
     onSplashActiveChange: (Boolean) -> Unit = {},
     viewModel: NavViewModel = hiltViewModel(),
 ) {
@@ -353,6 +356,17 @@ fun VazifaNavHost(
         onPendingRoomConsumed()
     }
 
+    LaunchedEffect(pendingAnnouncementId, route, user) {
+        val announcementId = pendingAnnouncementId ?: return@LaunchedEffect
+        if (user == null) return@LaunchedEffect
+        if (route == Routes.LOGIN || route == Routes.NOTIFICATION_GATE) return@LaunchedEffect
+        viewModel.clearNotificationBadge()
+        if (route != Routes.announcementDetail(announcementId)) {
+            navController.navigate(Routes.announcementDetail(announcementId))
+        }
+        onPendingAnnouncementConsumed()
+    }
+
     CompositionLocalProvider(
         LocalTaskNavigator provides { taskId ->
             navController.navigate(Routes.taskDetail(taskId))
@@ -368,6 +382,7 @@ fun VazifaNavHost(
                     navController.navigate(Routes.chatConversation(item.chatUserId, item.title))
                 }
                 item.taskId != null -> navController.navigate(Routes.taskDetail(item.taskId))
+                item.announcementId != null -> navController.navigate(Routes.announcementDetail(item.announcementId))
             }
         },
     ) {
@@ -580,6 +595,49 @@ fun VazifaNavHost(
                 )
             }
             composable(
+                Routes.CREATE_ANNOUNCEMENT,
+                arguments = listOf(
+                    navArgument("recipientIds") {
+                        type = NavType.StringType
+                        defaultValue = ""
+                    },
+                ),
+            ) {
+                CreateAnnouncementScreen(
+                    onBack = { navController.popBackStack() },
+                    onCreated = { id ->
+                        navController.popBackStack()
+                        navController.navigate(Routes.announcementTracking(id))
+                    },
+                )
+            }
+            composable(
+                Routes.ANNOUNCEMENT_DETAIL,
+                arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
+            ) { entry ->
+                AnnouncementDetailScreen(
+                    announcementId = entry.arguments?.getString("announcementId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onOpenTracking = { navController.navigate(Routes.announcementTracking(it)) },
+                )
+            }
+            composable(
+                Routes.ANNOUNCEMENT_TRACKING,
+                arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
+            ) { entry ->
+                AnnouncementTrackingScreen(
+                    announcementId = entry.arguments?.getString("announcementId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                )
+            }
+            composable(Routes.ANNOUNCEMENTS_SENT) {
+                SentAnnouncementsScreen(
+                    onBack = { navController.popBackStack() },
+                    onAnnouncementClick = { navController.navigate(Routes.announcementDetail(it)) },
+                    onTrackingClick = { navController.navigate(Routes.announcementTracking(it)) },
+                )
+            }
+            composable(
                 Routes.CHAT_CONVERSATION,
                 arguments = listOf(
                     navArgument("peerId") { type = NavType.StringType },
@@ -667,6 +725,7 @@ fun VazifaNavHost(
             onAction = { action ->
                 when (action) {
                     CreateAction.NEW_TASK -> navController.navigate(Routes.createTask())
+                    CreateAction.NEW_ANNOUNCEMENT -> navController.navigate(Routes.createAnnouncement())
                     CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
                     CreateAction.SUPPORT -> showSupportSheet = true
                 }

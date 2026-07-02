@@ -1,5 +1,19 @@
-import { IsArray, IsBoolean, IsEnum, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
+import {
+  IsArray,
+  IsBoolean,
+  IsEnum,
+  IsInt,
+  IsNotEmpty,
+  IsOptional,
+  IsString,
+  Matches,
+  Max,
+  Min,
+  MinLength,
+} from 'class-validator';
 import { UserRole } from '../../common/enums';
+
+const TIME_PATTERN = /^([01]\d|2[0-3]):[0-5]\d$/;
 
 export class LoginDto {
   @IsString()
@@ -91,6 +105,21 @@ export class CreateUserDto {
   @IsArray()
   @IsString({ each: true })
   visibleDepartments?: string[];
+
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'restStart HH:MM formatida bo\'lishi kerak' })
+  restStart?: string | null;
+
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'restEnd HH:MM formatida bo\'lishi kerak' })
+  restEnd?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  restDays?: number[] | null;
 }
 
 export class UpdateUserDto {
@@ -147,6 +176,21 @@ export class UpdateUserDto {
   @IsArray()
   @IsString({ each: true })
   visibleDepartments?: string[];
+
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'restStart HH:MM formatida bo\'lishi kerak' })
+  restStart?: string | null;
+
+  @IsOptional()
+  @Matches(TIME_PATTERN, { message: 'restEnd HH:MM formatida bo\'lishi kerak' })
+  restEnd?: string | null;
+
+  @IsOptional()
+  @IsArray()
+  @IsInt({ each: true })
+  @Min(0, { each: true })
+  @Max(6, { each: true })
+  restDays?: number[] | null;
 }
 
 export class ResetPasswordDto {
