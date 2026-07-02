@@ -53,6 +53,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uz.vazifa.app.presentation.navigation.BottomNavContentGap
 import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
@@ -395,7 +396,7 @@ private fun DrawerFooter(isOpen: Boolean) {
         Modifier
             .fillMaxWidth()
             .alpha(alpha)
-            .padding(top = 8.dp, bottom = BottomNavHeight + 8.dp),
+            .padding(top = 8.dp, bottom = BottomNavHeight + BottomNavContentGap + 8.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(

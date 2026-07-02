@@ -170,7 +170,7 @@ fun DepartmentEmployeesScreen(
                                 start = 16.dp,
                                 end = 16.dp,
                                 top = 16.dp,
-                                bottom = 16.dp,
+                                bottom = if (state.selectedEmployeeIds.isNotEmpty()) 80.dp else 16.dp,
                             ),
                             verticalArrangement = Arrangement.spacedBy(10.dp),
                         ) {
@@ -231,18 +231,18 @@ private fun DepartmentSelectionBar(
     label: String,
     onClick: () -> Unit,
 ) {
-    Surface(
-        modifier = Modifier
+    // NavHost allaqachon tizim navigatsiyasi uchun pastdan joy qoldiradi —
+    // bu yerda qayta navigationBarsPadding qo'shilmasin (tugma yuqoriga siljib ketadi).
+    Column(
+        Modifier
             .fillMaxWidth()
-            .navigationBarsPadding(),
-        color = LiquidTheme.bgMid.copy(alpha = 0.95f),
-        shadowElevation = 8.dp,
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 8.dp),
     ) {
         Button(
             onClick = onClick,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp)
                 .height(52.dp),
             shape = RoundedCornerShape(LiquidGlass.RadiusChip),
             colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),

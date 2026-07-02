@@ -158,7 +158,9 @@ class CreateAnnouncementViewModel @Inject constructor(
     }
 
     fun create() = viewModelScope.launch {
-        val title = _state.value.title.trim()
+        val snapshot = _state.value
+        if (snapshot.loading || snapshot.created) return@launch
+        val title = snapshot.title.trim()
         if (title.isBlank()) {
             _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
             return@launch
@@ -182,7 +184,15 @@ class CreateAnnouncementViewModel @Inject constructor(
             _state.update { it.copy(errorKey = "announcement_interval_invalid") }
             return@launch
         }
-        _state.update { it.copy(loading = true, errorKey = null, errorText = null) }
+        var locked = false
+        _state.update { s ->
+            if (s.loading || s.created) s
+            else {
+                locked = true
+                s.copy(loading = true, errorKey = null, errorText = null)
+            }
+        }
+        if (!locked) return@launch
         val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME
         val now = nowZoned()
         val deadlineAt = _state.value.deadlineDateTime?.let { dt ->
@@ -216,7 +226,9 @@ class CreateAnnouncementViewModel @Inject constructor(
 
     fun update() = viewModelScope.launch {
         val id = editAnnouncementId ?: return@launch
-        val title = _state.value.title.trim()
+        val snapshot = _state.value
+        if (snapshot.loading || snapshot.saved) return@launch
+        val title = snapshot.title.trim()
         if (title.isBlank()) {
             _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
             return@launch
@@ -226,7 +238,15 @@ class CreateAnnouncementViewModel @Inject constructor(
             _state.update { it.copy(errorKey = "announcement_interval_invalid") }
             return@launch
         }
-        _state.update { it.copy(loading = true, errorKey = null, errorText = null) }
+        var locked = false
+        _state.update { s ->
+            if (s.loading || s.saved) s
+            else {
+                locked = true
+                s.copy(loading = true, errorKey = null, errorText = null)
+            }
+        }
+        if (!locked) return@launch
         val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME
         val now = nowZoned()
         val deadlineAt = _state.value.deadlineDateTime?.let { dt ->

@@ -882,64 +882,68 @@ private fun VideoNoteContent(msg: ChatMessage) {
     }
 
     Box(
-        Modifier
-            .size(size)
-            .clip(CircleShape)
-            .border(2.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-            .background(Color(0xFF1A1A2E))
-            .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
-                scope.launch {
-                    if (playing) {
-                        exoPlayer.pause()
-                        playing = false
-                        return@launch
-                    }
-                    loading = true
-                    val cached = cacheVideoFile(context, remoteUrl!!, apiEntry.apiClient().httpClient)
-                    if (cached != null) {
-                        exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(cached)))
-                        exoPlayer.prepare()
-                        exoPlayer.play()
-                        playing = true
-                    }
-                    loading = false
-                }
-            },
+        Modifier.size(size),
         contentAlignment = Alignment.Center,
     ) {
-        AndroidView(
-            factory = { ctx ->
-                PlayerView(ctx).apply {
-                    player = exoPlayer
-                    useController = false
-                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+        Box(
+            Modifier
+                .fillMaxSize()
+                .clip(CircleShape)
+                .border(2.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+                .background(Color(0xFF1A1A2E))
+                .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
+                    scope.launch {
+                        if (playing) {
+                            exoPlayer.pause()
+                            playing = false
+                            return@launch
+                        }
+                        loading = true
+                        val cached = cacheVideoFile(context, remoteUrl!!, apiEntry.apiClient().httpClient)
+                        if (cached != null) {
+                            exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(cached)))
+                            exoPlayer.prepare()
+                            exoPlayer.play()
+                            playing = true
+                        }
+                        loading = false
+                    }
+                },
+            contentAlignment = Alignment.Center,
+        ) {
+            AndroidView(
+                factory = { ctx ->
+                    PlayerView(ctx).apply {
+                        player = exoPlayer
+                        useController = false
+                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                    }
+                },
+                modifier = Modifier.fillMaxSize().alpha(if (playing) 1f else 0f),
+            )
+            if (loading) {
+                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
+            } else if (!playing) {
+                Box(
+                    Modifier.size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(32.dp))
                 }
-            },
-            modifier = Modifier.fillMaxSize().alpha(if (playing) 1f else 0f),
-        )
-        if (loading) {
-            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
-        } else if (!playing) {
-            Box(
-                Modifier.size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
-                contentAlignment = Alignment.Center,
-            ) {
-                Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
         }
         msg.meta?.durationSec?.takeIf { it > 0 }?.let { dur ->
-            val s = dur.coerceAtLeast(0)
             Text(
-                "%02d:%02d".format(s / 60, s % 60),
+                ChatFormat.durationLabel(dur),
                 color = Color.White,
-                fontSize = 11.sp,
-                fontWeight = FontWeight.Medium,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
                 modifier = Modifier
-                    .align(Alignment.BottomStart)
-                    .padding(10.dp)
-                    .clip(RoundedCornerShape(10.dp))
-                    .background(Color.Black.copy(alpha = 0.55f))
-                    .padding(horizontal = 7.dp, vertical = 3.dp),
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 14.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.6f))
+                    .padding(horizontal = 8.dp, vertical = 4.dp),
             )
         }
     }

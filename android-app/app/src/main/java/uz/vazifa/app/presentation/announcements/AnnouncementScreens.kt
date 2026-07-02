@@ -110,11 +110,13 @@ fun CreateAnnouncementScreen(
     }
 
     val submit: () -> Unit = {
-        when {
-            state.title.isBlank() -> viewModel.showTitleError()
-            !state.isEditMode && state.selectedIds.isEmpty() -> viewModel.showRecipientError()
-            state.isEditMode -> viewModel.update()
-            else -> viewModel.create()
+        if (!state.loading && !state.created && !state.saved) {
+            when {
+                state.title.isBlank() -> viewModel.showTitleError()
+                !state.isEditMode && state.selectedIds.isEmpty() -> viewModel.showRecipientError()
+                state.isEditMode -> viewModel.update()
+                else -> viewModel.create()
+            }
         }
     }
 
@@ -322,7 +324,7 @@ fun CreateAnnouncementScreen(
             if (showSubmitBar) {
                 AnnouncementPrimaryButton(
                     onClick = submit,
-                    enabled = !state.loading,
+                    enabled = !state.loading && !state.created && !state.saved,
                     modifier = Modifier
                         .align(Alignment.BottomCenter)
                         .fillMaxWidth()

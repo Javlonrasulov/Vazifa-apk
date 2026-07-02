@@ -249,7 +249,6 @@ fun VazifaNavHost(
     var showCreateSheet by remember { mutableStateOf(false) }
     var showSupportSheet by remember { mutableStateOf(false) }
     var preselectedAssigneeIds by remember { mutableStateOf<Set<String>?>(null) }
-    var pendingAnnouncementTrackingId by remember { mutableStateOf<String?>(null) }
     var mainInitialized by rememberSaveable { mutableStateOf(false) }
     val skipSplash = viewModel.bootRoute != null
     var splashDone by remember { mutableStateOf(skipSplash) }
@@ -310,16 +309,6 @@ fun VazifaNavHost(
         if (!splashDone) return@LaunchedEffect
         if (startDestination == Routes.MAIN && !viewModel.auth.shouldSkipNotifGate()) {
             redirectToNotificationGate()
-        }
-    }
-
-    LaunchedEffect(pendingAnnouncementTrackingId) {
-        val id = pendingAnnouncementTrackingId ?: return@LaunchedEffect
-        pendingAnnouncementTrackingId = null
-        delay(50)
-        navController.navigate(Routes.announcementTracking(id)) {
-            popUpTo(Routes.ANNOUNCEMENT_RECIPIENTS) { inclusive = false }
-            launchSingleTop = true
         }
     }
 
@@ -404,7 +393,11 @@ fun VazifaNavHost(
             navController,
             startDestination = startDestination,
             modifier = Modifier.fillMaxSize().padding(
-                bottom = if (showBottomNav) BottomNavHeight + navigationBarPadding else navigationBarPadding,
+                bottom = if (showBottomNav) {
+                    BottomNavHeight + navigationBarPadding + BottomNavContentGap
+                } else {
+                    navigationBarPadding
+                },
             ),
         ) {
             composable(Routes.LOGIN) {
@@ -610,7 +603,12 @@ fun VazifaNavHost(
             ) {
                 CreateAnnouncementScreen(
                     onBack = { navController.popBackStack() },
-                    onCreated = { id -> pendingAnnouncementTrackingId = id },
+                    onCreated = { id ->
+                        navController.navigate(Routes.announcementTracking(id)) {
+                            popUpTo(Routes.CREATE_ANNOUNCEMENT) { inclusive = true }
+                            launchSingleTop = true
+                        }
+                    },
                 )
             }
             composable(
@@ -759,7 +757,6 @@ fun VazifaNavHost(
                 onCreateClick = { showCreateSheet = true },
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .navigationBarsPadding()
                     .zIndex(100f),
             )
         }

@@ -24,6 +24,7 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -71,15 +72,17 @@ import uz.vazifa.app.presentation.chat.ChatUnreadBadge
 import uz.vazifa.app.presentation.components.formatBadgeCount
 import uz.vazifa.app.presentation.theme.LiquidTheme
 
-val DockBarHeight = 72.dp
-val DockBottomMargin = 20.dp
-val DockHorizontalMargin = 16.dp
+val DockBarHeight = 58.dp
+val DockBottomMargin = 8.dp
+val DockHorizontalMargin = 12.dp
 val BottomNavHeight = DockBarHeight + DockBottomMargin
+/** Kontent va suzuvchi dock orasidagi qo'shimcha bo'shliq */
+val BottomNavContentGap = 8.dp
 
 private val dockShape = RoundedCornerShape(50.dp)
 private val tabActiveShape = RoundedCornerShape(50.dp)
-private val tabActiveHeight = 56.dp
-private val tabPaddingV = 6.dp
+private val tabActiveHeight = 44.dp
+private val tabPaddingV = 4.dp
 
 enum class AppTab(val route: String) {
     HOME("home"),
@@ -119,6 +122,7 @@ fun VazifaBottomNav(
     Box(
         modifier
             .fillMaxWidth()
+            .navigationBarsPadding()
             .padding(horizontal = DockHorizontalMargin)
             .padding(bottom = DockBottomMargin),
     ) {
@@ -127,13 +131,13 @@ fun VazifaBottomNav(
                 Modifier
                     .matchParentSize()
                     .shadow(
-                        elevation = 32.dp,
+                        elevation = 16.dp,
                         shape = dockShape,
-                        ambientColor = if (isDark) LiquidGlass.Blue.copy(alpha = 0.18f) else Color(0xFF2563EB).copy(alpha = 0.10f),
-                        spotColor = if (isDark) Color.Black.copy(alpha = 0.45f) else Color(0xFF0F172A).copy(alpha = 0.12f),
+                        ambientColor = if (isDark) LiquidGlass.Blue.copy(alpha = 0.14f) else Color(0xFF2563EB).copy(alpha = 0.08f),
+                        spotColor = if (isDark) Color.Black.copy(alpha = 0.35f) else Color(0xFF0F172A).copy(alpha = 0.10f),
                     )
                     .shadow(
-                        elevation = 8.dp,
+                        elevation = 4.dp,
                         shape = dockShape,
                         ambientColor = Color.Transparent,
                         spotColor = if (isDark) Color.Black.copy(alpha = 0.55f) else Color(0xFF0F172A).copy(alpha = 0.18f),
@@ -210,13 +214,13 @@ private fun CreateDockButton(onClick: () -> Unit) {
 
     Box(
         Modifier
-            .width(52.dp)
-            .padding(horizontal = 2.dp),
+            .width(44.dp)
+            .padding(horizontal = 1.dp),
         contentAlignment = Alignment.Center,
     ) {
         Box(
             Modifier
-                .size(48.dp)
+                .size(40.dp)
                 .scale(scale)
                 .drawBehind {
                     drawCircle(
@@ -230,7 +234,7 @@ private fun CreateDockButton(onClick: () -> Unit) {
                     )
                 }
                 .shadow(
-                    elevation = 12.dp,
+                    elevation = 8.dp,
                     shape = CircleShape,
                     ambientColor = LiquidGlass.Blue.copy(alpha = 0.30f),
                     spotColor = LiquidGlass.Blue.copy(alpha = 0.20f),
@@ -267,7 +271,7 @@ private fun CreateDockButton(onClick: () -> Unit) {
                 Icons.Default.Add,
                 contentDescription = localized("nav_create"),
                 tint = Color.White,
-                modifier = Modifier.size(26.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
     }
@@ -439,17 +443,17 @@ private fun DrawScope.drawLiquidGlassDockLayers(isDark: Boolean) {
     val glassBase = if (isDark) {
         Brush.verticalGradient(
             listOf(
-                Color.White.copy(alpha = 0.14f),
-                Color.White.copy(alpha = 0.08f),
-                LiquidGlass.BgMidDark.copy(alpha = 0.55f),
+                Color.White.copy(alpha = 0.10f),
+                Color.White.copy(alpha = 0.05f),
+                LiquidGlass.BgMidDark.copy(alpha = 0.38f),
             ),
         )
     } else {
         Brush.verticalGradient(
             listOf(
-                Color.White.copy(alpha = 0.82f),
-                Color.White.copy(alpha = 0.65f),
-                LiquidGlass.BgMidLight.copy(alpha = 0.45f),
+                Color.White.copy(alpha = 0.72f),
+                Color.White.copy(alpha = 0.52f),
+                LiquidGlass.BgMidLight.copy(alpha = 0.32f),
             ),
         )
     }
