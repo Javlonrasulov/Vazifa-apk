@@ -10,10 +10,13 @@ import androidx.camera.video.QualitySelector
 import androidx.camera.video.Recorder
 import androidx.camera.video.Recording
 import androidx.camera.video.VideoCapture
+import androidx.camera.video.VideoRecordEvent
 import androidx.camera.view.PreviewView
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.LifecycleOwner
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.suspendCancellableCoroutine
+import kotlinx.coroutines.withTimeoutOrNull
 import java.io.File
 import java.util.concurrent.Executor
 import kotlin.coroutines.resume
@@ -26,6 +29,7 @@ class VideoNoteRecorder(private val context: Context) {
     private var outputFile: File? = null
     private var previewView: PreviewView? = null
     private var lifecycleOwner: LifecycleOwner? = null
+    private var finalizeDeferred: CompletableDeferred<File?>? = null
 
     var useFrontCamera: Boolean = true
         private set
@@ -41,6 +45,7 @@ class VideoNoteRecorder(private val context: Context) {
     }
 
     fun flipCamera() {
+        if (activeRecording != null) return
         useFrontCamera = !useFrontCamera
         val provider = cameraProvider ?: return
         val owner = lifecycleOwner ?: return
@@ -54,38 +59,54 @@ class VideoNoteRecorder(private val context: Context) {
         outputFile = file
         val capture = videoCapture ?: error("Camera not ready")
         val options = FileOutputOptions.Builder(file).build()
+        finalizeDeferred = CompletableDeferred()
         activeRecording = capture.output
             .prepareRecording(context, options)
             .withAudioEnabled()
-            .start(mainExecutor) { }
+            .start(mainExecutor) { event ->
+                if (event is VideoRecordEvent.Finalize) {
+                    val deferred = finalizeDeferred
+                    finalizeDeferred = null
+                    if (event.hasError()) {
+                        outputFile?.delete()
+                        deferred?.complete(null)
+                    } else {
+                        deferred?.complete(outputFile?.takeIf { it.exists() && it.length() > 512 })
+                    }
+                }
+            }
         return file
     }
 
-    fun stop(): File? {
-        val recording = activeRecording
+    suspend fun stop(): File? {
+        val recording = activeRecording ?: return outputFile?.takeIf { it.exists() && it.length() > 512 }
+        val deferred = finalizeDeferred ?: CompletableDeferred<File?>().also { finalizeDeferred = it }
         activeRecording = null
-        return try {
-            recording?.stop()
-            outputFile?.takeIf { it.exists() && it.length() > 0 }
-        } catch (_: Exception) {
-            outputFile?.delete()
-            null
-        }
+        recording.stop()
+        return withTimeoutOrNull(8_000) { deferred.await() }
     }
 
     fun cancel() {
         cancelRecordingOnly()
+        finalizeDeferred?.complete(null)
+        finalizeDeferred = null
         outputFile?.delete()
         outputFile = null
     }
 
-    fun release() {
-        cancel()
+    /** Kamerani bo'shatadi, yozilgan faylni o'chirmaydi */
+    fun releaseCamera() {
+        cancelRecordingOnly()
         cameraProvider?.unbindAll()
         cameraProvider = null
         videoCapture = null
         previewView = null
         lifecycleOwner = null
+    }
+
+    fun release() {
+        cancel()
+        releaseCamera()
     }
 
     private fun cancelRecordingOnly() {

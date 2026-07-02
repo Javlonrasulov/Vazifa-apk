@@ -69,6 +69,7 @@ import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
+import kotlinx.coroutines.launch
 import uz.vazifa.app.domain.model.ChatMessage
 import uz.vazifa.app.domain.model.ChatMessageType
 import uz.vazifa.app.presentation.components.localized
@@ -76,7 +77,6 @@ import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
-import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.util.VideoNoteRecorder
 import uz.vazifa.app.util.VoiceRecorder
 import java.io.File
@@ -108,6 +108,7 @@ fun ChatInputArea(
     var showAttach by remember { mutableStateOf(false) }
     var showEmoji by remember { mutableStateOf(false) }
     val sendFailedText = localized("chat_send_failed")
+    val scope = rememberCoroutineScope()
     val recorder = remember { VoiceRecorder(context) }
     val videoRecorder = remember { VideoNoteRecorder(context) }
     var recordMode by remember { mutableStateOf(RecordMode.VOICE) }
@@ -127,7 +128,7 @@ fun ChatInputArea(
     var currentFile by remember { mutableStateOf<File?>(null) }
 
     DisposableEffect(Unit) {
-        onDispose { videoRecorder.release() }
+        onDispose { videoRecorder.releaseCamera() }
     }
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
@@ -203,13 +204,17 @@ fun ChatInputArea(
         showVideoOverlay = false
         cameraReady = false
         onRecordingChange(false)
-        val file = videoRecorder.stop()
-        if (file != null && recordSeconds >= 1) {
-            onSendVideoNote(file, recordSeconds)
-        } else {
-            file?.delete()
+        val seconds = recordSeconds
+        scope.launch {
+            val file = videoRecorder.stop()
+            videoRecorder.releaseCamera()
+            if (file != null && seconds >= 1) {
+                onSendVideoNote(file, seconds)
+            } else {
+                file?.delete()
+                android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
-        videoRecorder.release()
     }
 
     fun cancelVoiceRecording() {
@@ -231,7 +236,7 @@ fun ChatInputArea(
         cameraReady = false
         onRecordingChange(false)
         videoRecorder.cancel()
-        videoRecorder.release()
+        videoRecorder.releaseCamera()
     }
 
     fun finishRecording() {
@@ -346,8 +351,7 @@ fun ChatInputArea(
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
-            .padding(WindowInsets.navigationBars.asPaddingValues())
-            .padding(bottom = BottomNavHeight),
+            .padding(WindowInsets.navigationBars.asPaddingValues()),
     ) {
         AnimatedVisibility(visible = state.replyTo != null || state.editing != null) {
             ReplyEditBar(state, onCancelReplyEdit)
@@ -655,10 +659,12 @@ private fun RecordCaptureButton(
                         if (holdStarted && !locked) {
                             cancelled = dx < -120f
                             onDragCancel(cancelled)
-                            if (dy < -100f) {
+                            val swipeLock = mode == RecordMode.VIDEO && dy < -100f
+                            val timeLock = elapsed >= 1_000L
+                            if (swipeLock || timeLock) {
                                 locked = true
                                 onLock()
-                                onDragLock(true)
+                                onDragLock(swipeLock)
                             } else {
                                 onDragLock(false)
                             }

@@ -33,7 +33,6 @@ import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import uz.vazifa.app.presentation.components.localized
-import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
 import uz.vazifa.app.util.VideoNoteRecorder
@@ -54,7 +53,7 @@ fun VideoNoteRecordingOverlay(
     val scope = rememberCoroutineScope()
     var previewReady by remember { mutableStateOf(false) }
     val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
-    val bottomControlsPadding = maxOf(navBottom, 48.dp) + BottomNavHeight + 12.dp
+    val bottomControlsPadding = maxOf(navBottom, 48.dp) + 16.dp
 
     Dialog(
         onDismissRequest = {},
