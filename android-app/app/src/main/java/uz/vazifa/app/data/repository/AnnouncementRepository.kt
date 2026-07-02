@@ -47,6 +47,10 @@ class AnnouncementRepository @Inject constructor(
         api.api.acknowledgeAnnouncement(id)
     }
 
+    suspend fun markViewed(id: String) {
+        api.api.markAnnouncementViewed(id)
+    }
+
     suspend fun uploadVoice(announcementId: String, file: File) {
         val part = MultipartBody.Part.createFormData(
             "file",
@@ -87,6 +91,7 @@ class AnnouncementRepository @Inject constructor(
         id = id,
         recipientId = recipientId,
         acknowledgedAt = acknowledgedAt,
+        viewedAt = viewedAt,
         recipient = recipient?.toDomain(),
     )
 

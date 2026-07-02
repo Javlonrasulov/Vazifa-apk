@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Cron } from '@nestjs/schedule';
 import { InjectRepository } from '@nestjs/typeorm';
@@ -7,6 +7,7 @@ import { LessThanOrEqual, Repository } from 'typeorm';
 import { UsersService } from '../users/users.service';
 import { isUserResting, nextAllowedTime } from '../common/utils/rest-time';
 import { PushOutbox } from './entities/push-outbox.entity';
+import { User } from '../users/entities/user.entity';
 
 export const FCM_CHANNEL_TASKS = 'vazifa_tasks';
 export const FCM_CHANNEL_CHAT = 'vazifa_chat';
@@ -17,7 +18,7 @@ const OUTBOX_RETENTION_MS = 7 * 24 * 60 * 60 * 1000;
 const OUTBOX_MAX_ATTEMPTS = 100;
 
 @Injectable()
-export class NotificationsService {
+export class NotificationsService implements OnModuleInit {
   private readonly logger = new Logger(NotificationsService.name);
   private initialized = false;
 
@@ -59,6 +60,24 @@ export class NotificationsService {
     return this.initialized;
   }
 
+  async onModuleInit() {
+    try {
+      await this.outboxRepo.count();
+      this.logger.log('Push navbat jadvali tayyor');
+    } catch (e) {
+      this.logger.error(
+        'DIQQAT: push_outbox jadvali topilmadi — backend/scripts/add-push-outbox.sql migration ishga tushiring. ' +
+          'Pushlar vaqtincha to\'g\'ridan-to\'g\'ri yuboriladi.',
+        e,
+      );
+    }
+    if (!this.initialized) {
+      this.logger.error(
+        'DIQQAT: Firebase sozlanmagan — .env da FIREBASE_PROJECT_ID, FIREBASE_CLIENT_EMAIL, FIREBASE_PRIVATE_KEY kerak',
+      );
+    }
+  }
+
   // Dam olish cheklovi FAQAT vazifa pushlariga tegishli:
   // chat va xabar (announcement) pushlari damga qaramay yuboriladi.
 
@@ -72,26 +91,33 @@ export class NotificationsService {
   /** Dam olish paytida kechiktirilib, dam tugagach yuboriladigan vazifa pushlari. */
   private static readonly REST_DEFER_TYPES = new Set(['task_new', 'task_status']);
 
-  /** Vazifa, chat, xabar — barcha pushlar navbat orqali yuboriladi. */
+  /** Vazifa, chat, xabar — avval navbatga, xato bo'lsa to'g'ridan-to'g'ri yuboriladi. */
   async notifyUser(
     userId: string,
     title: string,
     body: string,
     data?: Record<string, string>,
   ): Promise<void> {
+    let user: User;
     try {
-      const user = await this.usersService.findById(userId);
-      if (!user?.notificationsEnabled) return;
+      user = await this.usersService.findById(userId);
+    } catch (e) {
+      this.logger.error(`Push uchun foydalanuvchi topilmadi (userId=${userId})`, e);
+      return;
+    }
+    if (!user.notificationsEnabled) return;
 
-      // Takroriy vazifa eslatmalari dam olish paytida umuman yuborilmaydi —
-      // dam tugagach keyingi tsiklda baribir yangi eslatma keladi.
-      if (
-        NotificationsService.REST_SKIP_TYPES.has(data?.type ?? '') &&
-        isUserResting(user)
-      ) {
-        return;
-      }
+    const pushType = data?.type ?? '';
 
+    // Takroriy vazifa eslatmalari dam olish paytida umuman yuborilmaydi.
+    if (
+      NotificationsService.REST_SKIP_TYPES.has(pushType) &&
+      isUserResting(user)
+    ) {
+      return;
+    }
+
+    try {
       const item = await this.outboxRepo.save(
         this.outboxRepo.create({
           userId,
@@ -105,49 +131,80 @@ export class NotificationsService {
       );
       await this.deliverOutboxItem(item);
     } catch (e) {
-      this.logger.error(`Push navbatga yozishda xato (userId=${userId})`, e);
+      this.logger.warn(
+        `Push navbat ishlamadi, to'g'ridan-to'g'ri yuborilmoqda (userId=${userId})`,
+        e,
+      );
+      await this.sendDirectToUser(user, title, body, data);
     }
+  }
+
+  /** Navbat ishlamasa — FCM orqali darhol yuborish (chat/xabar uchun). */
+  private async sendDirectToUser(
+    user: User,
+    title: string,
+    body: string,
+    data?: Record<string, string>,
+  ): Promise<void> {
+    const pushType = data?.type ?? '';
+    const restAffected =
+      NotificationsService.REST_SKIP_TYPES.has(pushType) ||
+      NotificationsService.REST_DEFER_TYPES.has(pushType);
+    if (restAffected && isUserResting(user)) return;
+
+    const token = user.fcmToken;
+    if (!token || token.startsWith('local-')) return;
+
+    await this.sendToToken(token, title, body, data);
   }
 
   /** FCM token yangilanganda kutilayotgan xabarlarni yuborish. */
   async flushPendingForUser(userId: string): Promise<void> {
-    const pending = await this.outboxRepo.find({
-      where: { userId, status: 'pending' },
-      order: { createdAt: 'ASC' },
-      take: 50,
-    });
-    for (const item of pending) {
-      await this.deliverOutboxItem(item);
+    try {
+      const pending = await this.outboxRepo.find({
+        where: { userId, status: 'pending' },
+        order: { createdAt: 'ASC' },
+        take: 50,
+      });
+      for (const item of pending) {
+        await this.deliverOutboxItem(item);
+      }
+    } catch (e) {
+      this.logger.warn(`Push navbatni tozalashda xato (userId=${userId})`, e);
     }
   }
 
   /** Token yo'q yoki FCM xato bersa — har 3 daqiqada qayta uriniladi. */
   @Cron('*/3 * * * *')
   async processOutboxRetries(): Promise<void> {
-    const now = new Date();
-    const expireBefore = new Date(Date.now() - OUTBOX_RETENTION_MS);
-    const items = await this.outboxRepo.find({
-      where: {
-        status: 'pending',
-        nextRetryAt: LessThanOrEqual(now),
-      },
-      order: { createdAt: 'ASC' },
-      take: 200,
-    });
+    try {
+      const now = new Date();
+      const expireBefore = new Date(Date.now() - OUTBOX_RETENTION_MS);
+      const items = await this.outboxRepo.find({
+        where: {
+          status: 'pending',
+          nextRetryAt: LessThanOrEqual(now),
+        },
+        order: { createdAt: 'ASC' },
+        take: 200,
+      });
 
-    let delivered = 0;
-    for (const item of items) {
-      if (item.createdAt < expireBefore) {
-        item.status = 'failed';
-        await this.outboxRepo.save(item);
-        continue;
+      let delivered = 0;
+      for (const item of items) {
+        if (item.createdAt < expireBefore) {
+          item.status = 'failed';
+          await this.outboxRepo.save(item);
+          continue;
+        }
+        const before = item.status;
+        await this.deliverOutboxItem(item);
+        if (before === 'pending' && item.status === 'sent') delivered++;
       }
-      const before = item.status;
-      await this.deliverOutboxItem(item);
-      if (before === 'pending' && item.status === 'sent') delivered++;
-    }
-    if (delivered > 0) {
-      this.logger.log(`Push navbat: ${delivered} ta yuborildi`);
+      if (delivered > 0) {
+        this.logger.log(`Push navbat: ${delivered} ta yuborildi`);
+      }
+    } catch (e) {
+      this.logger.warn('Push navbat qayta urinishda xato', e);
     }
   }
 

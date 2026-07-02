@@ -9,6 +9,8 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import retrofit2.HttpException
+import com.google.gson.JsonSyntaxException
+import org.json.JSONObject
 import uz.vazifa.app.data.repository.AnnouncementRepository
 import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
@@ -17,6 +19,7 @@ import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.acknowledgedCount
 import uz.vazifa.app.domain.model.isAcknowledgedBy
 import uz.vazifa.app.domain.model.isCreator
+import uz.vazifa.app.domain.model.isViewedBy
 import uz.vazifa.app.domain.model.pendingCount
 import uz.vazifa.app.domain.model.isTaskAssignable
 import uz.vazifa.app.util.UzbekTextSearch
@@ -141,7 +144,7 @@ class CreateAnnouncementViewModel @Inject constructor(
             _state.update { it.copy(errorKey = "announcement_interval_invalid") }
             return@launch
         }
-        _state.update { it.copy(loading = true, errorKey = null) }
+        _state.update { it.copy(loading = true, errorKey = null, errorText = null) }
         val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME
         val now = nowZoned()
         val deadlineAt = _state.value.deadlineDateTime?.let { dt ->
@@ -166,11 +169,14 @@ class CreateAnnouncementViewModel @Inject constructor(
             }
             _state.update { it.copy(loading = false, created = true, createdId = announcement.id, voiceFile = null) }
         }.onFailure { e ->
-            _state.update { it.copy(loading = false, errorKey = mapCreateError(e)) }
+            val err = mapCreateError(e)
+            _state.update {
+                it.copy(loading = false, errorKey = err.key, errorText = err.detail)
+            }
         }
     }
 
-    fun clearError() = _state.update { it.copy(errorKey = null) }
+    fun clearError() = _state.update { it.copy(errorKey = null, errorText = null) }
     fun resetForm() {
         _state.value.voiceFile?.delete()
         _state.update {
@@ -189,16 +195,39 @@ class CreateAnnouncementViewModel @Inject constructor(
         return minutesToHoursString(minutes)
     }
 
-    private fun mapCreateError(e: Throwable): String = when (e) {
+    private fun mapCreateError(e: Throwable): CreateAnnouncementError = when (e) {
         is HttpException -> {
             val body = e.response()?.errorBody()?.string().orEmpty()
+            val serverMsg = parseApiMessage(body)
             when (e.code()) {
-                403 -> if (body.contains("NOTIFICATIONS_REQUIRED")) "task_notifications_required" else "announcement_create_failed"
-                400 -> if (body.contains("O'zingizga")) "task_self_assign_forbidden" else "announcement_create_failed"
-                else -> "announcement_create_failed"
+                403 -> when {
+                    body.contains("NOTIFICATIONS_REQUIRED") -> CreateAnnouncementError("task_notifications_required")
+                    body.contains("huquqi") -> CreateAnnouncementError("announcement_create_forbidden")
+                    else -> CreateAnnouncementError("announcement_create_failed", serverMsg)
+                }
+                400 -> when {
+                    body.contains("O'zingizga") -> CreateAnnouncementError("task_self_assign_forbidden")
+                    body.contains("Muddat") -> CreateAnnouncementError("announcement_deadline_invalid")
+                    else -> CreateAnnouncementError("announcement_create_failed", serverMsg)
+                }
+                404 -> CreateAnnouncementError("announcement_api_missing")
+                500, 502, 503 -> CreateAnnouncementError("announcement_server_error", serverMsg)
+                else -> CreateAnnouncementError("announcement_create_failed", serverMsg)
             }
         }
-        else -> "announcement_create_failed"
+        is JsonSyntaxException -> CreateAnnouncementError("announcement_parse_failed")
+        else -> CreateAnnouncementError("announcement_create_failed")
+    }
+
+    private fun parseApiMessage(body: String): String? {
+        if (body.isBlank()) return null
+        return runCatching {
+            val json = JSONObject(body)
+            when (val message = json.opt("message")) {
+                is String -> message.takeIf { it.isNotBlank() }
+                else -> null
+            }
+        }.getOrNull()
     }
 }
 
@@ -219,6 +248,7 @@ data class CreateAnnouncementUiState(
     val created: Boolean = false,
     val createdId: String? = null,
     val errorKey: String? = null,
+    val errorText: String? = null,
 ) {
     fun reminderIntervalMinutes(): Int {
         val value = reminderValue.toIntOrNull() ?: return 0
@@ -247,6 +277,11 @@ data class CreateAnnouncementUiState(
         get() = contacts.filter { it.id in selectedIds }
 }
 
+private data class CreateAnnouncementError(
+    val key: String? = null,
+    val detail: String? = null,
+)
+
 @HiltViewModel
 class AnnouncementDetailViewModel @Inject constructor(
     private val repo: AnnouncementRepository,
@@ -259,7 +294,11 @@ class AnnouncementDetailViewModel @Inject constructor(
         _state.update { it.copy(loading = true) }
         runCatching {
             val userId = auth.currentUser()?.id
-            val announcement = repo.getById(id)
+            var announcement = repo.getById(id)
+            if (userId != null && !announcement.isCreator(userId) && !announcement.isViewedBy(userId)) {
+                runCatching { repo.markViewed(id) }
+                announcement = repo.getById(id)
+            }
             _state.update {
                 it.copy(
                     announcement = announcement,
@@ -313,11 +352,15 @@ class AnnouncementTrackingViewModel @Inject constructor(
             }
             val acknowledged = announcement.recipients.filter { it.acknowledgedAt != null }
             val pending = announcement.recipients.filter { it.acknowledgedAt == null }
+            val viewed = announcement.recipients.filter { it.viewedAt != null }
+            val notViewed = announcement.recipients.filter { it.viewedAt == null }
             _state.update {
                 it.copy(
                     announcement = announcement,
                     acknowledged = acknowledged,
                     pending = pending,
+                    viewed = viewed,
+                    notViewed = notViewed,
                     loading = false,
                 )
             }
@@ -331,6 +374,8 @@ data class AnnouncementTrackingUiState(
     val announcement: Announcement? = null,
     val acknowledged: List<uz.vazifa.app.domain.model.AnnouncementRecipient> = emptyList(),
     val pending: List<uz.vazifa.app.domain.model.AnnouncementRecipient> = emptyList(),
+    val viewed: List<uz.vazifa.app.domain.model.AnnouncementRecipient> = emptyList(),
+    val notViewed: List<uz.vazifa.app.domain.model.AnnouncementRecipient> = emptyList(),
     val loading: Boolean = false,
     val error: Boolean = false,
     val forbidden: Boolean = false,

@@ -1,6 +1,7 @@
 package uz.vazifa.app.presentation.announcements
 
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
@@ -12,14 +13,18 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Visibility
+import androidx.compose.material.icons.filled.VisibilityOff
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.focus.onFocusChanged
@@ -35,6 +40,7 @@ import uz.vazifa.app.domain.model.Announcement
 import uz.vazifa.app.domain.model.AnnouncementRecipient
 import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.domain.model.acknowledgedCount
+import uz.vazifa.app.domain.model.viewedCount
 import uz.vazifa.app.domain.model.isAcknowledgedBy
 import uz.vazifa.app.domain.model.isCreator
 import uz.vazifa.app.domain.model.pendingCount
@@ -76,7 +82,7 @@ fun CreateAnnouncementScreen(
     LaunchedEffect(state.selectedIds.size) {
         if (state.selectedIds.size <= 2) showAllSelected = false
     }
-    val errorMessage = state.errorKey?.let { localized(it) }
+    val errorMessage = state.errorText ?: state.errorKey?.let { localized(it) }
     LaunchedEffect(errorMessage) {
         errorMessage?.let {
             snackbarHostState.showSnackbar(it)
@@ -117,9 +123,10 @@ fun CreateAnnouncementScreen(
                     .verticalScroll(scrollState),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
+                AnnouncementScreenBanner()
                 OutlinedTextField(
                     state.title, viewModel::onTitle,
-                    label = { Text(localized("task_name")) },
+                    label = { Text(localized("announcement_title_label")) },
                     modifier = Modifier
                         .fillMaxWidth()
                         .onFocusChanged { focus ->
@@ -163,7 +170,7 @@ fun CreateAnnouncementScreen(
                         singleLine = true,
                         trailingIcon = {
                             IconButton(onClick = { showDatePicker = true }) {
-                                Icon(Icons.Default.CalendarToday, contentDescription = null, tint = LiquidGlass.Blue)
+                                Icon(Icons.Default.CalendarToday, contentDescription = null, tint = AnnouncementAccent.Primary)
                             }
                         },
                     )
@@ -266,7 +273,7 @@ fun CreateAnnouncementScreen(
                             } else {
                                 "${localized("task_show_more_assignees")} (+$hiddenCount)"
                             },
-                            color = LiquidGlass.BlueLight,
+                            color = AnnouncementAccent.Primary,
                             fontSize = 13.sp,
                         )
                     }
@@ -281,18 +288,18 @@ fun CreateAnnouncementScreen(
                 Spacer(Modifier.height(if (isKeyboardVisible) 24.dp else 8.dp))
             }
             if (!isKeyboardVisible) {
-                Button(
+                AnnouncementPrimaryButton(
                     onClick = submit,
                     enabled = !state.loading,
                     modifier = Modifier
-                        .fillMaxWidth()
                         .padding(16.dp)
                         .height(52.dp),
-                    shape = RoundedCornerShape(LiquidGlass.RadiusInput),
                 ) {
                     if (state.loading) {
-                        CircularProgressIndicator(Modifier.size(22.dp), color = MaterialTheme.colorScheme.onPrimary)
+                        CircularProgressIndicator(Modifier.size(22.dp), color = Color.White)
                     } else {
+                        Icon(Icons.Default.Campaign, contentDescription = null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
                         Text(localized("announcement_send"))
                     }
                 }
@@ -359,7 +366,7 @@ fun AnnouncementDetailScreen(
         val announcement = state.announcement
         if (state.loading && announcement == null) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = LiquidGlass.Blue)
+                CircularProgressIndicator(color = AnnouncementAccent.Primary)
             }
             return@VazifaStackScaffold
         }
@@ -380,28 +387,15 @@ fun AnnouncementDetailScreen(
                 .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            GlassCard(Modifier.fillMaxWidth()) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Text(announcement.title, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 22.sp)
-                    announcement.description?.takeIf { it.isNotBlank() }?.let {
-                        Text(it, color = LiquidTheme.textMuted, fontSize = 14.sp)
-                    }
-                    announcement.createdBy?.let { creator ->
-                        Text(
-                            "${localized("announcement_from")}: ${creator.fullName}",
-                            color = LiquidTheme.textMuted,
-                            fontSize = 13.sp,
-                        )
-                    }
-                    TaskCountdownText(deadlineAt = announcement.deadlineAt, status = null)
-                }
-            }
+            AnnouncementContentCard(
+                title = announcement.title,
+                description = announcement.description,
+                creatorName = announcement.createdBy?.fullName,
+                deadlineAt = announcement.deadlineAt,
+            )
             if (isCreator) {
-                Button(
-                    onClick = { onOpenTracking(announcement.id) },
-                    modifier = Modifier.fillMaxWidth(),
-                ) {
-                    Icon(Icons.Default.Notifications, contentDescription = null, Modifier.size(18.dp))
+                AnnouncementPrimaryButton(onClick = { onOpenTracking(announcement.id) }) {
+                    Icon(Icons.Default.Campaign, contentDescription = null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
                     Text(
                         "${localized("announcement_tracking")} " +
@@ -409,25 +403,28 @@ fun AnnouncementDetailScreen(
                     )
                 }
             } else if (!acknowledged) {
-                Button(
+                AnnouncementPrimaryButton(
                     onClick = { viewModel.acknowledge(announcement.id) },
                     enabled = !state.acknowledging,
-                    modifier = Modifier.fillMaxWidth(),
                 ) {
                     if (state.acknowledging) {
-                        CircularProgressIndicator(Modifier.size(20.dp))
+                        CircularProgressIndicator(Modifier.size(20.dp), color = Color.White)
                     } else {
                         Text(localized("announcement_acknowledge"))
                     }
                 }
             } else {
-                GlassCard(Modifier.fillMaxWidth()) {
+                GlassCard(
+                    Modifier
+                        .fillMaxWidth()
+                        .border(1.dp, AnnouncementAccent.Primary.copy(alpha = 0.3f), RoundedCornerShape(LiquidGlass.RadiusCard)),
+                ) {
                     Row(
                         Modifier.padding(16.dp),
                         verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.spacedBy(8.dp),
                     ) {
-                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = LiquidGlass.Blue)
+                        Icon(Icons.Default.CheckCircle, contentDescription = null, tint = AnnouncementAccent.Primary)
                         Text(localized("announcement_acknowledged"), color = LiquidTheme.text)
                     }
                 }
@@ -451,7 +448,7 @@ fun AnnouncementTrackingScreen(
     ) { padding ->
         if (state.loading) {
             Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator(color = LiquidGlass.Blue)
+                CircularProgressIndicator(color = AnnouncementAccent.Primary)
             }
             return@VazifaStackScaffold
         }
@@ -469,11 +466,28 @@ fun AnnouncementTrackingScreen(
         ) {
             item {
                 GlassCard(Modifier.fillMaxWidth()) {
-                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                        Row(
+                            verticalAlignment = Alignment.CenterVertically,
+                            horizontalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            AnnouncementIconCircle(size = 32.dp, iconSize = 18.dp)
+                            AnnouncementTypeBadge()
+                        }
                         Text(state.announcement!!.title, color = LiquidTheme.text, fontWeight = FontWeight.Bold, fontSize = 18.sp)
                         Text(
+                            "${localized("announcement_viewed_count")}: ${state.viewed.size}",
+                            color = AnnouncementAccent.Primary,
+                            fontSize = 13.sp,
+                        )
+                        Text(
+                            "${localized("announcement_not_viewed_count")}: ${state.notViewed.size}",
+                            color = LiquidTheme.textMuted,
+                            fontSize = 13.sp,
+                        )
+                        Text(
                             "${localized("announcement_acknowledged_count")}: ${state.acknowledged.size}",
-                            color = LiquidGlass.Blue,
+                            color = AnnouncementAccent.Primary,
                             fontSize = 13.sp,
                         )
                         Text(
@@ -485,13 +499,35 @@ fun AnnouncementTrackingScreen(
                 }
             }
             item {
+                Text(localized("announcement_viewed_list"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold)
+            }
+            if (state.viewed.isEmpty()) {
+                item { Text(localized("announcement_none_viewed"), color = LiquidTheme.textMuted, fontSize = 13.sp) }
+            } else {
+                items(state.viewed, key = { it.id }) { r ->
+                    RecipientStatusRow(r, status = RecipientTrackStatus.VIEWED)
+                }
+            }
+            item {
+                Spacer(Modifier.height(8.dp))
+                Text(localized("announcement_not_viewed_list"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold)
+            }
+            if (state.notViewed.isEmpty()) {
+                item { Text(localized("announcement_all_viewed"), color = AnnouncementAccent.Primary, fontSize = 13.sp) }
+            } else {
+                items(state.notViewed, key = { it.id }) { r ->
+                    RecipientStatusRow(r, status = RecipientTrackStatus.NOT_VIEWED)
+                }
+            }
+            item {
+                Spacer(Modifier.height(8.dp))
                 Text(localized("announcement_acknowledged_list"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold)
             }
             if (state.acknowledged.isEmpty()) {
                 item { Text(localized("announcement_none_acknowledged"), color = LiquidTheme.textMuted, fontSize = 13.sp) }
             } else {
                 items(state.acknowledged, key = { it.id }) { r ->
-                    RecipientStatusRow(r, acknowledged = true)
+                    RecipientStatusRow(r, status = RecipientTrackStatus.ACKNOWLEDGED)
                 }
             }
             item {
@@ -499,10 +535,10 @@ fun AnnouncementTrackingScreen(
                 Text(localized("announcement_pending_list"), color = LiquidTheme.text, fontWeight = FontWeight.SemiBold)
             }
             if (state.pending.isEmpty()) {
-                item { Text(localized("announcement_all_acknowledged"), color = LiquidGlass.Blue, fontSize = 13.sp) }
+                item { Text(localized("announcement_all_acknowledged"), color = AnnouncementAccent.Primary, fontSize = 13.sp) }
             } else {
                 items(state.pending, key = { it.id }) { r ->
-                    RecipientStatusRow(r, acknowledged = false)
+                    RecipientStatusRow(r, status = RecipientTrackStatus.NOT_ACKNOWLEDGED)
                 }
             }
         }
@@ -528,29 +564,26 @@ fun SentAnnouncementsScreen(
             verticalArrangement = Arrangement.spacedBy(10.dp),
             contentPadding = PaddingValues(vertical = 16.dp),
         ) {
+            if (state.loading && state.announcements.isEmpty()) {
+                item {
+                    Box(Modifier.fillMaxWidth().padding(32.dp), contentAlignment = Alignment.Center) {
+                        CircularProgressIndicator(color = AnnouncementAccent.Primary)
+                    }
+                }
+            }
             if (state.announcements.isEmpty() && !state.loading) {
                 item {
-                    Text(localized("dash_empty"), color = LiquidTheme.textMuted, modifier = Modifier.padding(24.dp))
+                    Text(localized("announcement_sent_empty"), color = LiquidTheme.textMuted, modifier = Modifier.padding(24.dp))
                 }
             }
             items(state.announcements, key = { it.id }) { a ->
-                GlassCard(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable { onAnnouncementClick(a.id) },
-                ) {
-                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(a.title, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold)
-                        Text(
-                            "${localized("announcement_acknowledged_count")}: ${a.acknowledgedCount()} / ${a.recipients.size}",
-                            color = LiquidTheme.textMuted,
-                            fontSize = 12.sp,
-                        )
-                        TextButton(onClick = { onTrackingClick(a.id) }) {
-                            Text(localized("announcement_tracking"), color = LiquidGlass.Blue)
-                        }
-                    }
-                }
+                AnnouncementListRow(
+                    title = a.title,
+                    viewedText = "${localized("announcement_viewed_count")}: ${a.viewedCount()} / ${a.recipients.size}",
+                    acknowledgedText = "${localized("announcement_acknowledged_count")}: ${a.acknowledgedCount()} / ${a.recipients.size}",
+                    onClick = { onAnnouncementClick(a.id) },
+                    onTrackingClick = { onTrackingClick(a.id) },
+                )
             }
         }
     }
@@ -579,8 +612,22 @@ private fun RecipientSelectRow(contact: User, checked: Boolean, onToggle: () -> 
     }
 }
 
+private enum class RecipientTrackStatus {
+    VIEWED,
+    NOT_VIEWED,
+    ACKNOWLEDGED,
+    NOT_ACKNOWLEDGED,
+}
+
 @Composable
-private fun RecipientStatusRow(recipient: AnnouncementRecipient, acknowledged: Boolean) {
+private fun RecipientStatusRow(recipient: AnnouncementRecipient, status: RecipientTrackStatus) {
+    val positive = status == RecipientTrackStatus.VIEWED || status == RecipientTrackStatus.ACKNOWLEDGED
+    val icon = when (status) {
+        RecipientTrackStatus.VIEWED -> Icons.Default.Visibility
+        RecipientTrackStatus.NOT_VIEWED -> Icons.Default.VisibilityOff
+        RecipientTrackStatus.ACKNOWLEDGED -> Icons.Default.CheckCircle
+        RecipientTrackStatus.NOT_ACKNOWLEDGED -> Icons.Default.RadioButtonUnchecked
+    }
     GlassCard(Modifier.fillMaxWidth()) {
         Row(
             Modifier.padding(12.dp),
@@ -588,9 +635,9 @@ private fun RecipientStatusRow(recipient: AnnouncementRecipient, acknowledged: B
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             Icon(
-                if (acknowledged) Icons.Default.CheckCircle else Icons.Default.RadioButtonUnchecked,
+                icon,
                 contentDescription = null,
-                tint = if (acknowledged) LiquidGlass.Blue else LiquidTheme.textMuted,
+                tint = if (positive) AnnouncementAccent.Primary else LiquidTheme.textMuted,
             )
             Column(Modifier.weight(1f)) {
                 Text(

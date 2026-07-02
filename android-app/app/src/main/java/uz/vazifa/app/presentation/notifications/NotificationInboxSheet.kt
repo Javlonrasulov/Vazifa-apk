@@ -1,27 +1,48 @@
 package uz.vazifa.app.presentation.notifications
 
+import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material.icons.automirrored.filled.Chat
+import androidx.compose.material.icons.filled.Campaign
+import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import uz.vazifa.app.domain.model.InboxNotification
+import uz.vazifa.app.presentation.announcements.AnnouncementAccent
+import uz.vazifa.app.presentation.announcements.AnnouncementTypeBadge
 import uz.vazifa.app.presentation.components.localized
-import uz.vazifa.app.presentation.theme.GlassCard
+import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
+import uz.vazifa.app.presentation.theme.VazifaColors
+import uz.vazifa.app.presentation.theme.liquidGlassThemed
 import java.time.Instant
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
@@ -65,39 +86,114 @@ fun NotificationInboxSheet(
                     contentPadding = PaddingValues(bottom = 24.dp),
                 ) {
                     items(items, key = { it.id }) { item ->
-                        GlassCard(
-                            modifier = Modifier
-                                .fillMaxWidth()
-                                .clickable { onItemClick(item) },
-                        ) {
-                            Column(Modifier.padding(14.dp)) {
-                                Text(
-                                    item.title,
-                                    color = LiquidTheme.text,
-                                    fontWeight = FontWeight.SemiBold,
-                                    fontSize = 15.sp,
-                                )
-                                if (item.body.isNotBlank()) {
-                                    Text(
-                                        item.body,
-                                        color = LiquidTheme.textMuted,
-                                        fontSize = 13.sp,
-                                        modifier = Modifier.padding(top = 4.dp),
-                                    )
-                                }
-                                Text(
-                                    Instant.ofEpochMilli(item.receivedAt)
-                                        .atZone(ZoneId.systemDefault())
-                                        .format(timeFmt),
-                                    color = LiquidTheme.textMuted,
-                                    fontSize = 11.sp,
-                                    modifier = Modifier.padding(top = 6.dp),
-                                )
-                            }
-                        }
+                        InboxNotificationRow(
+                            item = item,
+                            timeFmt = timeFmt,
+                            onClick = { onItemClick(item) },
+                        )
                     }
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun InboxNotificationRow(
+    item: InboxNotification,
+    timeFmt: DateTimeFormatter,
+    onClick: () -> Unit,
+) {
+    val isAnnouncement = item.announcementId != null ||
+        item.type == "announcement" ||
+        item.type == "announcement_reminder"
+    val isChat = item.chatUserId != null || item.roomId != null || item.type == "chat" || item.type == "room"
+    val isTask = item.taskId != null && !isAnnouncement
+
+    val icon: ImageVector = when {
+        isAnnouncement -> Icons.Default.Campaign
+        isChat -> Icons.AutoMirrored.Filled.Chat
+        isTask -> Icons.AutoMirrored.Filled.Assignment
+        else -> Icons.Default.Notifications
+    }
+    val gradient = when {
+        isAnnouncement -> AnnouncementAccent.Gradient
+        isChat -> listOf(LiquidGlass.Emerald, VazifaColors.Success)
+        isTask -> listOf(LiquidGlass.Blue, LiquidGlass.Cyan)
+        else -> listOf(LiquidGlass.Violet, LiquidGlass.Blue)
+    }
+    val typeLabel = when {
+        isAnnouncement -> localized("announcement_type_label")
+        isChat -> localized("nav_chat")
+        isTask -> localized("nav_tasks")
+        else -> localized("notif_inbox_title")
+    }
+    val borderColor = when {
+        isAnnouncement -> AnnouncementAccent.Primary.copy(alpha = 0.28f)
+        isTask -> LiquidGlass.Blue.copy(alpha = 0.2f)
+        else -> Color.Transparent
+    }
+
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .liquidGlassThemed()
+            .then(
+                if (borderColor != Color.Transparent) {
+                    Modifier.border(1.dp, borderColor, RoundedCornerShape(LiquidGlass.RadiusCard))
+                } else {
+                    Modifier
+                },
+            )
+            .clickable(onClick = onClick)
+            .padding(14.dp),
+        verticalAlignment = Alignment.Top,
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Box(
+            Modifier
+                .size(40.dp)
+                .clip(CircleShape)
+                .background(Brush.linearGradient(gradient)),
+            contentAlignment = Alignment.Center,
+        ) {
+            Icon(icon, contentDescription = typeLabel, tint = Color.White, modifier = Modifier.size(20.dp))
+        }
+        Column(Modifier.weight(1f)) {
+            if (isAnnouncement) {
+                AnnouncementTypeBadge(Modifier.padding(bottom = 6.dp))
+            } else {
+                Text(
+                    typeLabel,
+                    color = if (isTask) LiquidGlass.Blue else LiquidTheme.textMuted,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 10.sp,
+                    letterSpacing = 0.6.sp,
+                    modifier = Modifier.padding(bottom = 4.dp),
+                )
+            }
+            Text(
+                item.title,
+                color = LiquidTheme.text,
+                fontWeight = FontWeight.SemiBold,
+                fontSize = 15.sp,
+            )
+            if (item.body.isNotBlank()) {
+                Text(
+                    item.body,
+                    color = LiquidTheme.textMuted,
+                    fontSize = 13.sp,
+                    modifier = Modifier.padding(top = 4.dp),
+                )
+            }
+            Text(
+                Instant.ofEpochMilli(item.receivedAt)
+                    .atZone(ZoneId.systemDefault())
+                    .format(timeFmt),
+                color = LiquidTheme.textMuted,
+                fontSize = 11.sp,
+                modifier = Modifier.padding(top = 6.dp),
+            )
         }
     }
 }

@@ -4,6 +4,7 @@ data class AnnouncementRecipient(
     val id: String,
     val recipientId: String,
     val acknowledgedAt: String? = null,
+    val viewedAt: String? = null,
     val recipient: User? = null,
 )
 
@@ -37,8 +38,19 @@ fun Announcement.isAcknowledgedBy(userId: String?): Boolean {
         || myAcknowledgedAt != null
 }
 
+fun Announcement.isViewedBy(userId: String?): Boolean {
+    if (userId == null) return false
+    return recipients.find { it.recipientId == userId }?.viewedAt != null
+}
+
 fun Announcement.acknowledgedCount(): Int =
     recipients.count { it.acknowledgedAt != null }
 
 fun Announcement.pendingCount(): Int =
     recipients.count { it.acknowledgedAt == null }
+
+fun Announcement.viewedCount(): Int =
+    recipients.count { it.viewedAt != null }
+
+fun Announcement.notViewedCount(): Int =
+    recipients.count { it.viewedAt == null }

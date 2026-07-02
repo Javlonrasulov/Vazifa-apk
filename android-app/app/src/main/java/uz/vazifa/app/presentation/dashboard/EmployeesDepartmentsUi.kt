@@ -103,11 +103,15 @@ fun EmployeesHubContent(
     onSearch: (String) -> Unit,
     onSearchSubmit: () -> Unit,
     onDepartmentClick: (String?) -> Unit,
+    topContent: (@Composable () -> Unit)? = null,
 ) {
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
+        topContent?.let { content ->
+            item { content() }
+        }
         item {
             EmployeeSearchField(
                 value = searchQuery,

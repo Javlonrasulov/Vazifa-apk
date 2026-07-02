@@ -611,6 +611,31 @@ fun VazifaNavHost(
                     },
                 )
             }
+            composable(Routes.ANNOUNCEMENT_RECIPIENTS) {
+                AnnouncementRecipientsHubScreen(
+                    onBack = { navController.popBackStack() },
+                    onDepartmentClick = { dept ->
+                        navController.navigate(Routes.announcementDepartment(dept))
+                    },
+                    onSearchAll = { query ->
+                        navController.navigate(Routes.announcementDepartment(null, query))
+                    },
+                )
+            }
+            composable(
+                Routes.ANNOUNCEMENT_DEPT,
+                arguments = listOf(
+                    navArgument("department") { type = NavType.StringType },
+                    navArgument("q") { type = NavType.StringType; defaultValue = "" },
+                ),
+            ) {
+                DepartmentEmployeesScreen(
+                    onBack = { navController.popBackStack() },
+                    onEmployeeClick = { navController.navigate(Routes.employeeDetail(it)) },
+                    onAssignTask = { ids -> navController.navigate(Routes.createAnnouncement(ids)) },
+                    selectionButtonKey = "announcement_continue",
+                )
+            }
             composable(
                 Routes.ANNOUNCEMENT_DETAIL,
                 arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
@@ -721,11 +746,13 @@ fun VazifaNavHost(
 
         CreateActionSheet(
             visible = showCreateSheet,
+            canAssignTasks = canAssignTasks,
             onDismiss = { showCreateSheet = false },
             onAction = { action ->
                 when (action) {
                     CreateAction.NEW_TASK -> navController.navigate(Routes.createTask())
-                    CreateAction.NEW_ANNOUNCEMENT -> navController.navigate(Routes.createAnnouncement())
+                    CreateAction.NEW_ANNOUNCEMENT -> navController.navigate(Routes.ANNOUNCEMENT_RECIPIENTS)
+                    CreateAction.SENT_ANNOUNCEMENTS -> navController.navigate(Routes.ANNOUNCEMENTS_SENT)
                     CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
                     CreateAction.SUPPORT -> showSupportSheet = true
                 }

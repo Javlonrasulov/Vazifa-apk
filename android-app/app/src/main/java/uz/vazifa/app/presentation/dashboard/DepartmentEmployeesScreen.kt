@@ -108,6 +108,7 @@ fun DepartmentEmployeesScreen(
     onBack: () -> Unit,
     onEmployeeClick: (String) -> Unit,
     onAssignTask: (Set<String>) -> Unit,
+    selectionButtonKey: String = "task_create",
     viewModel: DepartmentEmployeesViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -222,7 +223,7 @@ fun DepartmentEmployeesScreen(
                         Icon(Icons.Default.Add, null, tint = androidx.compose.ui.graphics.Color.White)
                         Spacer(Modifier.width(8.dp))
                         Text(
-                            "${localized("task_create")} (${state.selectedEmployeeIds.size})",
+                            "${localized(selectionButtonKey)} (${state.selectedEmployeeIds.size})",
                             color = androidx.compose.ui.graphics.Color.White,
                             fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                         )

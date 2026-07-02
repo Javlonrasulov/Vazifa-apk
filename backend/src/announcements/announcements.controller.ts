@@ -83,6 +83,13 @@ export class AnnouncementsController {
     return this.announcementsService.acknowledge(id, req.user);
   }
 
+  @Post(':id/view')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  markViewed(@Param('id') id: string, @Request() req: { user: User }) {
+    return this.announcementsService.markViewed(id, req.user);
+  }
+
   @Post(':id/cancel')
   @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
   @UseGuards(RolesGuard)

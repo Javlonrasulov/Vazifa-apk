@@ -7,4 +7,10 @@ for db in vazifa_prod vazifa_dev; do
   fi
   sudo -u postgres psql -d "$db" -f /tmp/add-announcements.sql
   sudo -u postgres psql -d "$db" -f /tmp/add-push-outbox.sql
+  if [ "$db" = "vazifa_prod" ]; then
+    app_user="vazifa_app_prod"
+  else
+    app_user="vazifa_app_dev"
+  fi
+  sudo -u postgres psql -d "$db" -c "GRANT ALL ON TABLE announcements, announcement_recipients, announcement_attachments, push_outbox TO $app_user; GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO $app_user;"
 done

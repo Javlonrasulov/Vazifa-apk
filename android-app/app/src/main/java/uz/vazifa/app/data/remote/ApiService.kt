@@ -1,5 +1,6 @@
 package uz.vazifa.app.data.remote
 
+import com.google.gson.annotations.JsonAdapter
 import okhttp3.MultipartBody
 import retrofit2.http.*
 
@@ -30,6 +31,7 @@ data class UserDto(
     val notificationsEnabled: Boolean = true,
     val isOnline: Boolean = false,
     val lastSeenAt: String? = null,
+    @JsonAdapter(RestDaysDeserializer::class)
     val restDays: List<Int>? = null,
 )
 
@@ -70,12 +72,19 @@ data class CreateAnnouncementRequest(
 data class AnnouncementAckResponse(
     val acknowledged: Boolean,
     val acknowledgedAt: String?,
+    val viewedAt: String? = null,
+)
+
+data class AnnouncementViewResponse(
+    val viewed: Boolean,
+    val viewedAt: String?,
 )
 
 data class AnnouncementRecipientDto(
     val id: String,
     val recipientId: String,
     val acknowledgedAt: String? = null,
+    val viewedAt: String? = null,
     val recipient: UserDto? = null,
 )
 
@@ -294,6 +303,9 @@ interface ApiService {
 
     @POST("announcements/{id}/acknowledge")
     suspend fun acknowledgeAnnouncement(@Path("id") id: String): AnnouncementAckResponse
+
+    @POST("announcements/{id}/view")
+    suspend fun markAnnouncementViewed(@Path("id") id: String): AnnouncementViewResponse
 
     @POST("announcements/{id}/cancel")
     suspend fun cancelAnnouncement(@Path("id") id: String): AnnouncementDto

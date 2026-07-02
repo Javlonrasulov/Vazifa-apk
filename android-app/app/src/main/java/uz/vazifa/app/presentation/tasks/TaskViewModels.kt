@@ -12,6 +12,8 @@ import kotlinx.coroutines.launch
 import retrofit2.HttpException
 import uz.vazifa.app.data.repository.AuthRepository
 import uz.vazifa.app.data.repository.TaskRepository
+import uz.vazifa.app.domain.model.RestDayHelper
+import uz.vazifa.app.domain.model.RestDayWarning
 import uz.vazifa.app.domain.model.Task
 import uz.vazifa.app.domain.model.TaskStatus
 import uz.vazifa.app.domain.model.User
@@ -259,7 +261,59 @@ class CreateTaskViewModel @Inject constructor(
     fun toggleAssignee(id: String) = _state.update {
         val ids = it.selectedIds.toMutableSet()
         if (ids.contains(id)) ids.remove(id) else ids.add(id)
-        it.copy(selectedIds = ids)
+        it.copy(selectedIds = ids, restWarnings = emptyList())
+    }
+
+    /** Yaratishdan oldin yangi kontaktlar va dam olish kunini tekshiradi. */
+    fun requestCreate(imageUri: Uri?) = viewModelScope.launch {
+        val title = _state.value.title.trim()
+        if (title.isBlank()) {
+            _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
+            return@launch
+        }
+        val selfId = _state.value.currentUserId ?: auth.currentUser()?.id
+        val assigneeIds = _state.value.selectedIds.filter { it != selfId }
+        if (assigneeIds.isEmpty()) {
+            _state.update {
+                it.copy(
+                    errorKey = if (selfId != null && selfId in _state.value.selectedIds) {
+                        "task_self_assign_forbidden"
+                    } else {
+                        "task_assignee_required"
+                    },
+                )
+            }
+            return@launch
+        }
+
+        // Admin yangilagan dam kunlari darhol ko'rinsin — serverdan qayta yuklaymiz.
+        val freshContacts = runCatching {
+            repo.getContacts().filter { contact -> contact.isTaskAssignable(selfId) }
+        }.getOrElse { _state.value.contacts }
+        _state.update { it.copy(contacts = freshContacts, currentUserId = selfId) }
+
+        val assignees = freshContacts.filter { it.id in assigneeIds }
+        val resting = RestDayHelper.restingAssigneesTodayOrTomorrow(assignees)
+        if (resting.isNotEmpty()) {
+            _state.update {
+                it.copy(
+                    restWarnings = resting,
+                    pendingCreateImageUri = imageUri,
+                )
+            }
+            return@launch
+        }
+        create(imageUri)
+    }
+
+    fun confirmRestWarning() {
+        val imageUri = _state.value.pendingCreateImageUri
+        _state.update { it.copy(restWarnings = emptyList(), pendingCreateImageUri = null) }
+        create(imageUri)
+    }
+
+    fun dismissRestWarning() = _state.update {
+        it.copy(restWarnings = emptyList(), pendingCreateImageUri = null)
     }
 
     fun create(imageUri: Uri?, voiceFile: File? = null) = viewModelScope.launch {
@@ -440,6 +494,8 @@ data class CreateTaskUiState(
     val created: Boolean = false,
     val errorKey: String? = null,
     val isEditMode: Boolean = false,
+    val restWarnings: List<RestDayWarning> = emptyList(),
+    val pendingCreateImageUri: Uri? = null,
 ) {
     val canCreate: Boolean
         get() = when {

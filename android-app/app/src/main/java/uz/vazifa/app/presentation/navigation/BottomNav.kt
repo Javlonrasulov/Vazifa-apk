@@ -500,6 +500,8 @@ object Routes {
     const val CHAT_CONTACTS = "chat_contacts"
     const val CHAT_CREATE_ROOM = "chat_create_room/{type}"
     const val ROOM_CONVERSATION = "room_conv/{roomId}"
+    const val ANNOUNCEMENT_RECIPIENTS = "announcement/recipients"
+    const val ANNOUNCEMENT_DEPT = "announcement/dept/{department}?q={q}"
     const val CREATE_ANNOUNCEMENT = "create_announcement?recipientIds={recipientIds}"
     const val ANNOUNCEMENT_DETAIL = "announcement/{announcementId}"
     const val ANNOUNCEMENT_TRACKING = "announcement/{announcementId}/tracking"
@@ -520,6 +522,11 @@ object Routes {
     fun createAnnouncement(recipientIds: Set<String> = emptySet()): String {
         val encoded = android.net.Uri.encode(recipientIds.joinToString(","))
         return "create_announcement?recipientIds=$encoded"
+    }
+    fun announcementDepartment(department: String?, search: String = ""): String {
+        val dept = if (department.isNullOrBlank()) "_all_" else android.net.Uri.encode(department)
+        val q = android.net.Uri.encode(search)
+        return "announcement/dept/$dept?q=$q"
     }
     fun announcementDetail(id: String) = "announcement/$id"
     fun announcementTracking(id: String) = "announcement/$id/tracking"

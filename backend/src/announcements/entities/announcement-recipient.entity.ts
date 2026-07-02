@@ -32,6 +32,9 @@ export class AnnouncementRecipient {
   acknowledgedAt: Date | null;
 
   @Column({ type: 'timestamptz', nullable: true })
+  viewedAt: Date | null;
+
+  @Column({ type: 'timestamptz', nullable: true })
   lastReminderAt: Date | null;
 
   @CreateDateColumn()

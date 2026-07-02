@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Chat
@@ -22,10 +23,12 @@ import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import uz.vazifa.app.presentation.announcements.AnnouncementAccent
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -34,6 +37,7 @@ import uz.vazifa.app.presentation.theme.LiquidTheme
 enum class CreateAction {
     NEW_TASK,
     NEW_ANNOUNCEMENT,
+    SENT_ANNOUNCEMENTS,
     NEW_CHAT,
     SUPPORT,
 }
@@ -43,24 +47,29 @@ private data class CreateActionItem(
     val icon: ImageVector,
     val titleKey: String,
     val descKey: String,
+    val accent: Color = LiquidGlass.Blue,
 )
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun CreateActionSheet(
     visible: Boolean,
+    canAssignTasks: Boolean,
     onDismiss: () -> Unit,
     onAction: (CreateAction) -> Unit,
 ) {
     if (!visible) return
 
     val sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-    val items = listOf(
-        CreateActionItem(CreateAction.NEW_TASK, Icons.Default.Assignment, "create_new_task", "create_new_task_desc"),
-        CreateActionItem(CreateAction.NEW_ANNOUNCEMENT, Icons.Default.Campaign, "create_new_announcement", "create_new_announcement_desc"),
-        CreateActionItem(CreateAction.NEW_CHAT, Icons.Default.Chat, "create_new_chat", "create_new_chat_desc"),
-        CreateActionItem(CreateAction.SUPPORT, Icons.Default.HeadsetMic, "create_support", "create_support_desc"),
-    )
+    val items = buildList {
+        if (canAssignTasks) {
+            add(CreateActionItem(CreateAction.NEW_TASK, Icons.Default.Assignment, "create_new_task", "create_new_task_desc"))
+            add(CreateActionItem(CreateAction.NEW_ANNOUNCEMENT, Icons.Default.Campaign, "create_new_announcement", "create_new_announcement_desc", AnnouncementAccent.Primary))
+            add(CreateActionItem(CreateAction.SENT_ANNOUNCEMENTS, Icons.AutoMirrored.Filled.Send, "announcement_sent_list", "announcement_sent_list_desc", AnnouncementAccent.Primary))
+        }
+        add(CreateActionItem(CreateAction.NEW_CHAT, Icons.Default.Chat, "create_new_chat", "create_new_chat_desc"))
+        add(CreateActionItem(CreateAction.SUPPORT, Icons.Default.HeadsetMic, "create_support", "create_support_desc"))
+    }
 
     ModalBottomSheet(
         onDismissRequest = onDismiss,
@@ -98,7 +107,7 @@ fun CreateActionSheet(
                             Icon(
                                 item.icon,
                                 contentDescription = null,
-                                tint = LiquidGlass.Blue,
+                                tint = item.accent,
                                 modifier = Modifier.size(28.dp),
                             )
                             Column(Modifier.weight(1f)) {

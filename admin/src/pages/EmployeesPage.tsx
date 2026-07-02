@@ -1238,6 +1238,7 @@ export default function EmployeesPage() {
                   .split(',')
                   .map((dayName, idx) => {
                     const active = form.restDays.includes(idx);
+                    const isToday = idx === new Date().getDay();
                     return (
                       <button
                         key={idx}
@@ -1247,7 +1248,11 @@ export default function EmployeesPage() {
                           flex: 'none',
                           minWidth: 56,
                           padding: '8px 10px',
+                          ...(isToday && !active
+                            ? { border: `1px dashed ${INDIGO}`, opacity: 0.95 }
+                            : {}),
                         }}
+                        title={isToday ? t('restDayToday') : undefined}
                         onClick={() =>
                           setForm({
                             ...form,
@@ -1257,7 +1262,7 @@ export default function EmployeesPage() {
                           })
                         }
                       >
-                        {dayName}
+                        {dayName}{isToday ? ` (${t('restDayToday')})` : ''}
                       </button>
                     );
                   })}

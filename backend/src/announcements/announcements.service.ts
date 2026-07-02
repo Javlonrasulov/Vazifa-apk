@@ -2,10 +2,12 @@ import {
   BadRequestException,
   ForbiddenException,
   Injectable,
+  InternalServerErrorException,
   NotFoundException,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
+import { QueryFailedError } from 'typeorm';
 import { Announcement, AnnouncementStatus } from './entities/announcement.entity';
 import { AnnouncementRecipient } from './entities/announcement-recipient.entity';
 import { AnnouncementAttachment } from './entities/announcement-attachment.entity';
@@ -49,50 +51,66 @@ export class AnnouncementsService {
       throw new BadRequestException('Muddat kelajakdagi vaqt bo\'lishi kerak');
     }
 
-    const announcement = this.announcementRepo.create({
-      title: dto.title.trim(),
-      description: dto.description?.trim() ?? null,
-      deadlineAt,
-      reminderIntervalMinutes: dto.reminderIntervalMinutes,
-      createdById: creator.id,
-      status: AnnouncementStatus.ACTIVE,
-    });
-    const saved = await this.announcementRepo.save(announcement);
+    const existingUsers = (
+      await Promise.all(recipientIds.map((id) => this.usersService.findById(id)))
+    ).filter((u): u is User => !!u);
+    if (existingUsers.length !== recipientIds.length) {
+      throw new BadRequestException('Tanlangan xodimlardan biri topilmadi');
+    }
 
-    const recipients = recipientIds.map((recipientId) =>
-      this.recipientRepo.create({
-        announcementId: saved.id,
-        recipientId,
-        lastReminderAt: nowTashkent(),
-      }),
-    );
-    await this.recipientRepo.save(recipients);
+    try {
+      const announcement = this.announcementRepo.create({
+        title: dto.title.trim(),
+        description: dto.description?.trim() ?? null,
+        deadlineAt,
+        reminderIntervalMinutes: dto.reminderIntervalMinutes,
+        createdById: creator.id,
+        status: AnnouncementStatus.ACTIVE,
+      });
+      const saved = await this.announcementRepo.save(announcement);
 
-    const users = await Promise.all(recipientIds.map((id) => this.usersService.findById(id)));
-    await Promise.all(
-      users
-        .filter((u) => u.notificationsEnabled)
-        .map((u) => {
-          const text = newAnnouncementText(saved.title, u.language);
-          return this.notifications.notifyUser(u.id, text.title, text.body, {
-            announcementId: saved.id,
-            type: 'announcement',
-          });
+      const recipients = recipientIds.map((recipientId) =>
+        this.recipientRepo.create({
+          announcementId: saved.id,
+          recipientId,
+          lastReminderAt: nowTashkent(),
         }),
-    );
+      );
+      await this.recipientRepo.save(recipients);
 
-    return this.findOne(saved.id, creator);
+      for (const user of existingUsers) {
+        if (!user.notificationsEnabled) continue;
+        const text = newAnnouncementText(saved.title, user.language);
+        await this.notifications.notifyUser(user.id, text.title, text.body, {
+          announcementId: saved.id,
+          type: 'announcement',
+        });
+      }
+
+      return this.findOne(saved.id, creator);
+    } catch (e) {
+      if (e instanceof QueryFailedError) {
+        const msg = String(e.message ?? '');
+        if (msg.includes('announcements') || msg.includes('announcement_')) {
+          throw new InternalServerErrorException(
+            'Xabar jadvallari topilmadi. Server migratsiyasini ishga tushiring.',
+          );
+        }
+      }
+      throw e;
+    }
   }
 
   async findSent(user: User) {
     if (!userCanAssignTasks(user)) {
       throw new ForbiddenException('Ruxsat yo\'q');
     }
-    return this.announcementRepo.find({
+    const rows = await this.announcementRepo.find({
       where: { createdById: user.id },
-      relations: ['recipients', 'recipients.recipient', 'createdBy'],
+      relations: ['recipients', 'recipients.recipient', 'createdBy', 'attachments'],
       order: { createdAt: 'DESC' },
     });
+    return rows.map((row) => this.formatAnnouncement(row));
   }
 
   async findReceived(user: User) {
@@ -102,9 +120,10 @@ export class AnnouncementsService {
       order: { createdAt: 'DESC' },
     });
     return rows.map((r) => ({
-      ...r.announcement,
+      ...this.formatAnnouncement(r.announcement),
       myRecipientId: r.id,
       acknowledgedAt: r.acknowledgedAt,
+      viewedAt: r.viewedAt,
     }));
   }
 
@@ -126,7 +145,7 @@ export class AnnouncementsService {
       throw new ForbiddenException('Ruxsat yo\'q');
     }
 
-    return announcement;
+    return this.formatAnnouncement(announcement);
   }
 
   async acknowledge(id: string, user: User) {
@@ -135,13 +154,30 @@ export class AnnouncementsService {
       relations: ['announcement'],
     });
     if (!recipient) throw new NotFoundException('Xabar topilmadi');
+    const now = nowTashkent();
+    if (!recipient.viewedAt) recipient.viewedAt = now;
     if (recipient.acknowledgedAt) {
-      return { acknowledged: true, acknowledgedAt: recipient.acknowledgedAt };
+      await this.recipientRepo.save(recipient);
+      return { acknowledged: true, acknowledgedAt: recipient.acknowledgedAt, viewedAt: recipient.viewedAt };
     }
 
-    recipient.acknowledgedAt = nowTashkent();
+    recipient.acknowledgedAt = now;
     await this.recipientRepo.save(recipient);
-    return { acknowledged: true, acknowledgedAt: recipient.acknowledgedAt };
+    return { acknowledged: true, acknowledgedAt: recipient.acknowledgedAt, viewedAt: recipient.viewedAt };
+  }
+
+  async markViewed(id: string, user: User) {
+    const recipient = await this.recipientRepo.findOne({
+      where: { announcementId: id, recipientId: user.id },
+    });
+    if (!recipient) throw new NotFoundException('Xabar topilmadi');
+    if (recipient.viewedAt) {
+      return { viewed: true, viewedAt: recipient.viewedAt };
+    }
+
+    recipient.viewedAt = nowTashkent();
+    await this.recipientRepo.save(recipient);
+    return { viewed: true, viewedAt: recipient.viewedAt };
   }
 
   async cancel(id: string, user: User) {
@@ -152,7 +188,7 @@ export class AnnouncementsService {
     }
     announcement.status = AnnouncementStatus.CANCELLED;
     await this.announcementRepo.save(announcement);
-    return announcement;
+    return this.formatAnnouncement(announcement);
   }
 
   async addAttachment(id: string, user: User, file: Express.Multer.File) {
@@ -214,5 +250,35 @@ export class AnnouncementsService {
       .where('status = :status', { status: AnnouncementStatus.ACTIVE })
       .andWhere('deadlineAt <= :now', { now })
       .execute();
+  }
+
+  private formatAnnouncement(announcement: Announcement) {
+    return {
+      id: announcement.id,
+      title: announcement.title,
+      description: announcement.description,
+      deadlineAt: announcement.deadlineAt,
+      reminderIntervalMinutes: announcement.reminderIntervalMinutes,
+      status: announcement.status,
+      createdById: announcement.createdById,
+      createdBy: announcement.createdBy
+        ? this.usersService.sanitizeWithPresence(announcement.createdBy)
+        : null,
+      recipients: (announcement.recipients ?? []).map((r) => ({
+        id: r.id,
+        recipientId: r.recipientId,
+        acknowledgedAt: r.acknowledgedAt,
+        viewedAt: r.viewedAt,
+        recipient: r.recipient
+          ? this.usersService.sanitizeWithPresence(r.recipient)
+          : null,
+      })),
+      attachments: (announcement.attachments ?? []).map((a) => ({
+        id: a.id,
+        fileName: a.fileName,
+        mimeType: a.mimeType,
+        url: a.url ?? null,
+      })),
+    };
   }
 }

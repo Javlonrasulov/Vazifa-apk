@@ -34,7 +34,7 @@ export class AnnouncementRemindersService {
         r.recipient.id,
         text.title,
         text.body,
-        { announcementId: r.announcementId, type: 'announcement_reminder' },
+        { announcementId: r.announcementId, type: 'announcement' },
       );
       await this.announcementsService.markReminderSent(r.id);
       sent++;

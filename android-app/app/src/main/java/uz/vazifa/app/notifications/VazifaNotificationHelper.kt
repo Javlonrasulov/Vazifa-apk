@@ -20,8 +20,10 @@ import uz.vazifa.app.presentation.MainActivity
 object VazifaNotificationHelper {
     const val CHANNEL_TASKS = "vazifa_tasks"
     const val CHANNEL_CHAT = "vazifa_chat"
+    const val CHANNEL_ANNOUNCEMENTS = "vazifa_announcements"
     private const val GROUP_TASKS = "vazifa_task_group"
     private const val GROUP_CHAT = "vazifa_chat_group"
+    private const val GROUP_ANNOUNCEMENTS = "vazifa_announcement_group"
 
     private val vibrationPattern = longArrayOf(0, 600, 200, 600, 200, 600, 200, 800)
 
@@ -61,6 +63,21 @@ object VazifaNotificationHelper {
                 },
             )
         }
+
+        if (manager.getNotificationChannel(CHANNEL_ANNOUNCEMENTS) == null) {
+            manager.createNotificationChannel(
+                NotificationChannel(CHANNEL_ANNOUNCEMENTS, "E'lonlar", NotificationManager.IMPORTANCE_HIGH).apply {
+                    description = "Muhim e'lonlar va eslatmalar"
+                    enableVibration(true)
+                    vibrationPattern = this@VazifaNotificationHelper.vibrationPattern
+                    setSound(sound, attrs)
+                    enableLights(true)
+                    lightColor = 0xFFEA580C.toInt()
+                    setShowBadge(true)
+                    lockscreenVisibility = NotificationCompat.VISIBILITY_PUBLIC
+                },
+            )
+        }
     }
 
     fun canShowNotifications(context: Context): Boolean {
@@ -90,8 +107,16 @@ object VazifaNotificationHelper {
 
         val isChat = type == "chat" || type == "room"
         val isAnnouncement = type == "announcement" || type == "announcement_reminder"
-        val channelId = if (isChat) CHANNEL_CHAT else CHANNEL_TASKS
-        val groupKey = if (isChat) GROUP_CHAT else GROUP_TASKS
+        val channelId = when {
+            isChat -> CHANNEL_CHAT
+            isAnnouncement -> CHANNEL_ANNOUNCEMENTS
+            else -> CHANNEL_TASKS
+        }
+        val groupKey = when {
+            isChat -> GROUP_CHAT
+            isAnnouncement -> GROUP_ANNOUNCEMENTS
+            else -> GROUP_TASKS
+        }
 
         val intent = Intent(context, MainActivity::class.java).apply {
             flags = Intent.FLAG_ACTIVITY_NEW_TASK or
@@ -123,6 +148,12 @@ object VazifaNotificationHelper {
             .setContentTitle(title)
             .setContentText(body)
             .setStyle(NotificationCompat.BigTextStyle().bigText(body))
+            .apply {
+                if (isAnnouncement) {
+                    setSubText("E'lon")
+                    color = 0xFFEA580C.toInt()
+                }
+            }
             .setPriority(NotificationCompat.PRIORITY_MAX)
             .setCategory(
                 when {

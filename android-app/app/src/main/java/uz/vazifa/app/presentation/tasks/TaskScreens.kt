@@ -459,6 +459,16 @@ fun CreateTaskScreen(
         viewModel.loadContacts()
         viewModel.loadForEdit()
     }
+    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    DisposableEffect(lifecycleOwner) {
+        val observer = androidx.lifecycle.LifecycleEventObserver { _, event ->
+            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+                viewModel.loadContacts()
+            }
+        }
+        lifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lifecycleOwner.lifecycle.removeObserver(observer) }
+    }
     LaunchedEffect(preselectedAssigneeIds, state.contacts) {
         val ids = preselectedAssigneeIds?.takeIf { it.isNotEmpty() } ?: return@LaunchedEffect
         if (state.contacts.isEmpty()) return@LaunchedEffect
@@ -485,54 +495,39 @@ fun CreateTaskScreen(
         }
     }
 
-    var restWarning by remember { mutableStateOf<String?>(null) }
     val restTodayText = localized("task_rest_today")
     val restTomorrowText = localized("task_rest_tomorrow")
     val restQuestionText = localized("task_rest_question")
 
-    val submitCreate: () -> Unit = submit@{
+    val submitCreate: () -> Unit = {
         when {
             state.title.isBlank() -> viewModel.showTitleError()
             !state.isEditMode && state.selectedIds.isEmpty() -> viewModel.showAssigneeError()
             state.isEditMode -> viewModel.update()
-            else -> {
-                // Dam olish kuniga to'g'ri kelgan xodimlar uchun yumshoq ogohlantirish
-                val todayIdx = java.time.LocalDate.now(zone).dayOfWeek.value % 7
-                val tomorrowIdx = (todayIdx + 1) % 7
-                val resting = state.selectedContacts.mapNotNull { c ->
-                    val days = c.restDays ?: return@mapNotNull null
-                    when {
-                        todayIdx in days -> "${c.fullName} — $restTodayText"
-                        tomorrowIdx in days -> "${c.fullName} — $restTomorrowText"
-                        else -> null
-                    }
-                }
-                if (resting.isNotEmpty()) {
-                    restWarning = resting.joinToString("\n") + "\n\n" + restQuestionText
-                } else {
-                    viewModel.create(createImageUri)
-                }
-            }
+            else -> viewModel.requestCreate(createImageUri)
         }
     }
 
-    restWarning?.let { message ->
+    if (state.restWarnings.isNotEmpty()) {
+        val message = buildString {
+            state.restWarnings.forEach { warning ->
+                val label = if (warning.isToday) restTodayText else restTomorrowText
+                appendLine("${warning.fullName} — $label")
+            }
+            appendLine()
+            append(restQuestionText)
+        }
         AlertDialog(
-            onDismissRequest = { restWarning = null },
+            onDismissRequest = { viewModel.dismissRestWarning() },
             title = { Text(localized("task_rest_day_title")) },
-            text = { Text(message) },
+            text = { Text(message.trim()) },
             confirmButton = {
-                Button(
-                    onClick = {
-                        restWarning = null
-                        viewModel.create(createImageUri)
-                    },
-                ) {
+                Button(onClick = { viewModel.confirmRestWarning() }) {
                     Text(localized("task_rest_send"))
                 }
             },
             dismissButton = {
-                TextButton(onClick = { restWarning = null }) {
+                TextButton(onClick = { viewModel.dismissRestWarning() }) {
                     Text(localized("com_cancel"))
                 }
             },

@@ -57,6 +57,7 @@ ENV
   mkdir -p uploads
 
   if [ -f "$dir/deploy/run-migrations.sh" ]; then
+  cp "$dir/backend/scripts/add-rest-time.sql" /tmp/add-rest-time.sql
   cp "$dir/backend/scripts/add-announcements.sql" /tmp/add-announcements.sql
   cp "$dir/backend/scripts/add-push-outbox.sql" /tmp/add-push-outbox.sql
   bash "$dir/deploy/run-migrations.sh" || true

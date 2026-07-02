@@ -16,6 +16,7 @@ CREATE TABLE IF NOT EXISTS announcement_recipients (
   "announcementId" UUID NOT NULL REFERENCES announcements(id) ON DELETE CASCADE,
   "recipientId" UUID NOT NULL REFERENCES users(id),
   "acknowledgedAt" TIMESTAMPTZ,
+  "viewedAt" TIMESTAMPTZ,
   "lastReminderAt" TIMESTAMPTZ,
   "createdAt" TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   UNIQUE ("announcementId", "recipientId")
@@ -35,3 +36,6 @@ CREATE TABLE IF NOT EXISTS announcement_attachments (
 CREATE INDEX IF NOT EXISTS idx_announcement_recipients_pending
   ON announcement_recipients ("announcementId")
   WHERE "acknowledgedAt" IS NULL;
+
+ALTER TABLE announcement_recipients
+  ADD COLUMN IF NOT EXISTS "viewedAt" TIMESTAMPTZ;
