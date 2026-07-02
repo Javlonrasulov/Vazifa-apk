@@ -24,7 +24,6 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
@@ -40,7 +39,14 @@ import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.tappableElement
+import androidx.compose.foundation.layout.union
+import androidx.compose.foundation.layout.windowInsetsPadding
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
@@ -73,11 +79,30 @@ import uz.vazifa.app.presentation.components.formatBadgeCount
 import uz.vazifa.app.presentation.theme.LiquidTheme
 
 val DockBarHeight = 58.dp
-val DockBottomMargin = 8.dp
+val DockBottomMargin = 4.dp
 val DockHorizontalMargin = 12.dp
 val BottomNavHeight = DockBarHeight + DockBottomMargin
-/** Kontent va suzuvchi dock orasidagi qo'shimcha bo'shliq */
-val BottomNavContentGap = 8.dp
+
+/** Asosiy tablardagi ro‘yxatlar uchun pastki bo‘shliq (suzuvchi menyu ustida) */
+val LocalBottomBarPadding = compositionLocalOf { 0.dp }
+
+/** 3-tugmali navigatsiya va gesture rejimidagi pastki tizim maydoni */
+@Composable
+private fun bottomSystemInsets(): WindowInsets =
+    WindowInsets.navigationBars.union(WindowInsets.tappableElement)
+
+/** Telefon pastki tizim paneli balandligi (har qurilmada avtomatik) */
+@Composable
+fun systemBottomBarPadding(): Dp =
+    bottomSystemInsets().asPaddingValues().calculateBottomPadding()
+
+@Composable
+private fun Modifier.clearSystemBottomBar(): Modifier =
+    windowInsetsPadding(bottomSystemInsets())
+
+@Composable
+fun rememberBottomBarScrollPadding(): Dp =
+    BottomNavHeight + systemBottomBarPadding()
 
 private val dockShape = RoundedCornerShape(50.dp)
 private val tabActiveShape = RoundedCornerShape(50.dp)
@@ -122,7 +147,7 @@ fun VazifaBottomNav(
     Box(
         modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
+            .clearSystemBottomBar()
             .padding(horizontal = DockHorizontalMargin)
             .padding(bottom = DockBottomMargin),
     ) {

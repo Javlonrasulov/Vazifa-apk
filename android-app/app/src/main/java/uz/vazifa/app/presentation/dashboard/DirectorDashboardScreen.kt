@@ -95,7 +95,7 @@ fun DirectorDashboardScreen(
     ) { padding ->
         LiquidBackground(Modifier.fillMaxSize()) {
             VazifaScreenBox(padding) {
-                LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                LazyColumn(contentPadding = tabListContentPadding(), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                     item { StatsGrid(state.stats ?: DashboardStats(), onSectionClick) }
                     item {
                         Text(

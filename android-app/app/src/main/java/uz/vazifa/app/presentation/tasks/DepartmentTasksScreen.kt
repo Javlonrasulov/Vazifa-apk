@@ -83,7 +83,7 @@ fun DepartmentTasksScreen(
                         )
                     }
                     LazyColumn(
-                        contentPadding = PaddingValues(16.dp),
+                        contentPadding = tabListContentPadding(),
                         verticalArrangement = Arrangement.spacedBy(10.dp),
                     ) {
                         if (state.loading) {

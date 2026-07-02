@@ -84,6 +84,7 @@ import kotlinx.coroutines.launch
 import uz.vazifa.app.domain.model.ChatMessageStatus
 import uz.vazifa.app.domain.model.ChatRoom
 import uz.vazifa.app.domain.model.Conversation
+import uz.vazifa.app.presentation.components.tabListContentPadding
 import uz.vazifa.app.presentation.components.VazifaHeaderActions
 import uz.vazifa.app.presentation.components.CountBadgeLabel
 import uz.vazifa.app.presentation.components.formatBadgeCount
@@ -487,7 +488,7 @@ private fun ConversationsList(
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 104.dp),
+        contentPadding = tabListContentPadding(horizontal = 12.dp, top = 6.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(conversations, key = { it.peer.id }) { conv ->
@@ -547,7 +548,7 @@ private fun RoomsList(
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 6.dp, bottom = 104.dp),
+        contentPadding = tabListContentPadding(horizontal = 12.dp, top = 6.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         items(rooms, key = { it.id }) { room ->
@@ -685,7 +686,7 @@ private fun SearchResults(
     }
     LazyColumn(
         Modifier.fillMaxSize(),
-        contentPadding = PaddingValues(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 104.dp),
+        contentPadding = tabListContentPadding(horizontal = 12.dp, top = 4.dp, bottom = 12.dp),
         verticalArrangement = Arrangement.spacedBy(6.dp),
     ) {
         if (state.resultPeers.isNotEmpty()) {

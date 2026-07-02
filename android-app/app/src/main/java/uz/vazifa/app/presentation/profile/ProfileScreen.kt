@@ -29,6 +29,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.hilt.navigation.compose.hiltViewModel
 import uz.vazifa.app.presentation.chat.ChatAvatar
+import uz.vazifa.app.presentation.navigation.LocalBottomBarPadding
 import uz.vazifa.app.util.ChatFiles
 import uz.vazifa.app.presentation.components.*
 import uz.vazifa.app.presentation.components.roleLabelKey
@@ -64,6 +65,8 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
         }
     }
 
+    val bottomBarPadding = LocalBottomBarPadding.current
+
     VazifaTabScaffold(
         title = localized("nav_profile"),
         actions = { VazifaHeaderActions() },
@@ -71,7 +74,10 @@ fun ProfileScreen(onLogout: () -> Unit, viewModel: ProfileViewModel = hiltViewMo
         LiquidBackground(Modifier.fillMaxSize()) {
             Box(Modifier.fillMaxSize()) {
                 VazifaScreenBox(padding) {
-                Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(16.dp)) {
+                Column(
+                    Modifier.padding(start = 16.dp, end = 16.dp, top = 16.dp, bottom = 16.dp + bottomBarPadding),
+                    verticalArrangement = Arrangement.spacedBy(16.dp),
+                ) {
                     state.user?.let { u ->
                         GlassCard(Modifier.fillMaxWidth()) {
                             Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {

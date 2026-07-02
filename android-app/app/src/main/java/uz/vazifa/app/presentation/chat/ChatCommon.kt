@@ -85,6 +85,11 @@ object ChatFormat {
         return "%d:%02d".format(s / 60, s % 60)
     }
 
+    fun videoNoteDurationLabel(seconds: Int?): String {
+        val s = (seconds ?: 0).coerceAtLeast(0)
+        return "%02d:%02d".format(s / 60, s % 60)
+    }
+
     fun lastSeen(raw: String?, prefix: String, online: String, justNow: String): String =
         lastSeen(raw, LastSeenLabels(prefix = prefix, justNow = justNow))
 

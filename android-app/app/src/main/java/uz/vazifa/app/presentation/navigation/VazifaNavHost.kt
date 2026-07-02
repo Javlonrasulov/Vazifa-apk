@@ -8,6 +8,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.zIndex
@@ -242,7 +243,7 @@ fun VazifaNavHost(
     val canAssignTasks = user?.canAssignTasksInApp() == true
     ScreenshotPolicyEffect(allowScreenshot = user?.allowScreenshot != false)
     val showBottomNav = route == Routes.MAIN
-    val navigationBarPadding = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val systemBottomPadding = systemBottomBarPadding()
     val chatUnreadCount by viewModel.chatUnreadCount.collectAsState()
 
     var selectedTab by remember { mutableStateOf(AppTab.HOME) }
@@ -364,6 +365,8 @@ fun VazifaNavHost(
         onPendingAnnouncementConsumed()
     }
 
+    val bottomBarScrollPadding = if (showBottomNav) BottomNavHeight + systemBottomPadding else 0.dp
+
     CompositionLocalProvider(
         LocalTaskNavigator provides { taskId ->
             navController.navigate(Routes.taskDetail(taskId))
@@ -382,6 +385,7 @@ fun VazifaNavHost(
                 item.announcementId != null -> navController.navigate(Routes.announcementDetail(item.announcementId))
             }
         },
+        LocalBottomBarPadding provides bottomBarScrollPadding,
     ) {
     Box(
         Modifier
@@ -392,12 +396,8 @@ fun VazifaNavHost(
         NavHost(
             navController,
             startDestination = startDestination,
-            modifier = Modifier.fillMaxSize().padding(
-                bottom = if (showBottomNav) {
-                    BottomNavHeight + navigationBarPadding + BottomNavContentGap
-                } else {
-                    navigationBarPadding
-                },
+            modifier = Modifier.fillMaxSize().then(
+                if (!showBottomNav) Modifier.padding(bottom = systemBottomPadding) else Modifier,
             ),
         ) {
             composable(Routes.LOGIN) {

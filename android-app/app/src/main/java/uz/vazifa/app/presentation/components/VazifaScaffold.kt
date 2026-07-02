@@ -23,7 +23,9 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
+import uz.vazifa.app.presentation.navigation.LocalBottomBarPadding
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
@@ -152,4 +154,15 @@ fun VazifaScreenBox(padding: PaddingValues, content: @Composable () -> Unit) {
     Box(Modifier.fillMaxSize().padding(padding)) {
         content()
     }
+}
+
+/** Asosiy tab ro‘yxatlari uchun — pastki menyu ustida qolishi uchun */
+@Composable
+fun tabListContentPadding(
+    horizontal: Dp = 16.dp,
+    top: Dp = 16.dp,
+    bottom: Dp = 16.dp,
+): PaddingValues {
+    val bar = LocalBottomBarPadding.current
+    return PaddingValues(start = horizontal, end = horizontal, top = top, bottom = bottom + bar)
 }

@@ -637,7 +637,6 @@ private fun DateChip(createdAt: String) {
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun VideoNoteMessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Unit) {
-    val mutedColor = if (mine) LiquidTheme.textMuted else LiquidTheme.textMuted
     Row(
         Modifier
             .fillMaxWidth()
@@ -646,15 +645,7 @@ private fun VideoNoteMessageBubble(msg: ChatMessage, mine: Boolean, onLongPress:
         horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
     ) {
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
-            VideoNoteContent(msg)
-            Spacer(Modifier.height(4.dp))
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(ChatFormat.time(msg.createdAt), color = mutedColor, fontSize = 11.sp)
-                if (mine) {
-                    Spacer(Modifier.width(4.dp))
-                    MessageTicks(msg.status)
-                }
-            }
+            VideoNoteContent(msg, mine)
             if (msg.reactions.isNotEmpty()) {
                 ReactionChips(msg, mine)
             }
@@ -716,7 +707,7 @@ private fun BubbleContent(msg: ChatMessage, mine: Boolean) {
         }
         when (msg.type) {
                 ChatMessageType.IMAGE -> ImageContent(msg)
-                ChatMessageType.VIDEO -> if (msg.meta?.isRoundVideo == true) VideoNoteContent(msg) else VideoContent(msg)
+                ChatMessageType.VIDEO -> if (msg.meta?.isRoundVideo == true) VideoNoteContent(msg, mine) else VideoContent(msg)
                 ChatMessageType.VOICE -> VoiceContent(msg, mine)
                 ChatMessageType.AUDIO, ChatMessageType.FILE -> FileContent(msg, mine)
                 ChatMessageType.LOCATION -> LocationContent(msg, mine)
@@ -848,7 +839,7 @@ private fun ImageContent(msg: ChatMessage) {
 }
 
 @Composable
-private fun VideoNoteContent(msg: ChatMessage) {
+private fun VideoNoteContent(msg: ChatMessage, mine: Boolean) {
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
     val apiEntry = remember {
@@ -882,69 +873,103 @@ private fun VideoNoteContent(msg: ChatMessage) {
     }
 
     Box(
-        Modifier.size(size),
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color(0xFF1A1A2E))
+            .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
+                scope.launch {
+                    if (playing) {
+                        exoPlayer.pause()
+                        playing = false
+                        return@launch
+                    }
+                    loading = true
+                    val cached = cacheVideoFile(context, remoteUrl!!, apiEntry.apiClient().httpClient)
+                    if (cached != null) {
+                        exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(cached)))
+                        exoPlayer.prepare()
+                        exoPlayer.play()
+                        playing = true
+                    }
+                    loading = false
+                }
+            },
         contentAlignment = Alignment.Center,
     ) {
-        Box(
-            Modifier
-                .fillMaxSize()
-                .clip(CircleShape)
-                .border(2.dp, Color.White.copy(alpha = 0.15f), CircleShape)
-                .background(Color(0xFF1A1A2E))
-                .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
-                    scope.launch {
-                        if (playing) {
-                            exoPlayer.pause()
-                            playing = false
-                            return@launch
-                        }
-                        loading = true
-                        val cached = cacheVideoFile(context, remoteUrl!!, apiEntry.apiClient().httpClient)
-                        if (cached != null) {
-                            exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(cached)))
-                            exoPlayer.prepare()
-                            exoPlayer.play()
-                            playing = true
-                        }
-                        loading = false
-                    }
-                },
-            contentAlignment = Alignment.Center,
-        ) {
-            AndroidView(
-                factory = { ctx ->
-                    PlayerView(ctx).apply {
-                        player = exoPlayer
-                        useController = false
-                        resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
-                    }
-                },
-                modifier = Modifier.fillMaxSize().alpha(if (playing) 1f else 0f),
-            )
-            if (loading) {
-                CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
-            } else if (!playing) {
-                Box(
-                    Modifier.size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
-                    contentAlignment = Alignment.Center,
-                ) {
-                    Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(32.dp))
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
                 }
+            },
+            modifier = Modifier.fillMaxSize().alpha(if (playing) 1f else 0f),
+        )
+        if (loading) {
+            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
+        } else if (!playing) {
+            Box(
+                Modifier
+                    .size(56.dp)
+                    .clip(CircleShape)
+                    .background(Color.Black.copy(alpha = 0.35f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(34.dp))
             }
         }
-        msg.meta?.durationSec?.takeIf { it > 0 }?.let { dur ->
+
+        Box(
+            Modifier
+                .fillMaxWidth()
+                .fillMaxHeight(0.42f)
+                .align(Alignment.BottomCenter)
+                .background(
+                    Brush.verticalGradient(
+                        colors = listOf(
+                            Color.Transparent,
+                            Color.Black.copy(alpha = 0.18f),
+                            Color.Black.copy(alpha = 0.62f),
+                        ),
+                    ),
+                ),
+        )
+
+        Row(
+            Modifier
+                .fillMaxWidth()
+                .align(Alignment.BottomCenter)
+                .padding(start = 14.dp, end = 12.dp, bottom = 11.dp),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.Bottom,
+        ) {
             Text(
-                ChatFormat.durationLabel(dur),
+                ChatFormat.videoNoteDurationLabel(msg.meta?.durationSec),
                 color = Color.White,
                 fontSize = 12.sp,
-                fontWeight = FontWeight.SemiBold,
-                modifier = Modifier
-                    .align(Alignment.BottomCenter)
-                    .padding(bottom = 14.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.6f))
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
+                fontWeight = FontWeight.Medium,
             )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (msg.isEdited) {
+                    Text(
+                        localized("chat_edited"),
+                        color = Color.White.copy(alpha = 0.78f),
+                        fontSize = 10.sp,
+                    )
+                    Spacer(Modifier.width(4.dp))
+                }
+                Text(
+                    ChatFormat.time(msg.createdAt),
+                    color = Color.White.copy(alpha = 0.92f),
+                    fontSize = 11.sp,
+                )
+                if (mine) {
+                    Spacer(Modifier.width(3.dp))
+                    MessageTicks(msg.status)
+                }
+            }
         }
     }
 }
