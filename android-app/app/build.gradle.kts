@@ -34,8 +34,8 @@ android {
         applicationId = "uz.vazifa.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 14
-        versionName = "1.0.13"
+        versionCode = 15
+        versionName = "1.0.14"
     }
 
     buildTypes {
@@ -85,7 +85,6 @@ android {
 
 dependencies {
     implementation("androidx.core:core-ktx:1.15.0")
-    implementation("androidx.core:core-splashscreen:1.0.1")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-process:2.8.7")
     implementation("androidx.activity:activity-compose:1.9.3")
@@ -94,6 +93,8 @@ dependencies {
     implementation("androidx.compose.material3:material3")
     implementation("androidx.compose.material:material-icons-extended")
     implementation("androidx.navigation:navigation-compose:2.8.5")
+
+    implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
 
     implementation("com.google.dagger:hilt-android:2.52")
     ksp("com.google.dagger:hilt-android-compiler:2.52")
@@ -114,6 +115,17 @@ dependencies {
     implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
     implementation("com.google.firebase:firebase-messaging-ktx")
     implementation("io.coil-kt:coil-compose:2.7.0")
+
+    val camerax = "1.4.1"
+    implementation("androidx.camera:camera-core:$camerax")
+    implementation("androidx.camera:camera-camera2:$camerax")
+    implementation("androidx.camera:camera-lifecycle:$camerax")
+    implementation("androidx.camera:camera-video:$camerax")
+    implementation("androidx.camera:camera-view:$camerax")
+
+    val media3 = "1.5.1"
+    implementation("androidx.media3:media3-exoplayer:$media3")
+    implementation("androidx.media3:media3-ui:$media3")
 
     implementation("io.socket:socket.io-client:2.1.0") {
         exclude(group = "org.json", module = "json")

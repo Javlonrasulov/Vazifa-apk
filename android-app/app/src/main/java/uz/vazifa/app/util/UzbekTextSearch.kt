@@ -79,7 +79,7 @@ object UzbekTextSearch {
 
     fun matchesPhone(phone: String?, login: String?, query: String): Boolean {
         val queryDigits = query.filter { it.isDigit() }
-        if (queryDigits.length < 2) return false
+        if (queryDigits.isEmpty()) return false
         val nationalQuery = UzPhoneFormatter.extractNationalDigits(queryDigits)
         val targets = listOfNotNull(phone, login).map { it.filter(Char::isDigit) }
         return targets.any { target ->
@@ -88,11 +88,12 @@ object UzbekTextSearch {
         }
     }
 
-    fun matchesEmployee(fullName: String, login: String, phone: String?, query: String): Boolean {
+    fun matchesEmployee(fullName: String, login: String, phone: String?, query: String, position: String? = null): Boolean {
         val q = query.trim()
         if (q.isBlank()) return true
         return matches(fullName, q) ||
             matches(login, q) ||
+            position?.let { matches(it, q) } == true ||
             matchesPhone(phone, login, q)
     }
 }

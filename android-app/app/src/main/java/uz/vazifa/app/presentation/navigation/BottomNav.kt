@@ -503,9 +503,11 @@ object Routes {
     const val ANNOUNCEMENT_RECIPIENTS = "announcement/recipients"
     const val ANNOUNCEMENT_DEPT = "announcement/dept/{department}?q={q}"
     const val CREATE_ANNOUNCEMENT = "create_announcement?recipientIds={recipientIds}"
+    const val EDIT_ANNOUNCEMENT = "edit_announcement/{announcementId}"
     const val ANNOUNCEMENT_DETAIL = "announcement/{announcementId}"
     const val ANNOUNCEMENT_TRACKING = "announcement/{announcementId}/tracking"
     const val ANNOUNCEMENTS_SENT = "announcements/sent"
+    const val ANNOUNCEMENTS_RECEIVED = "announcements/received"
     fun taskDetail(id: String) = "task/$id"
     fun editTask(id: String) = "edit_task/$id"
     fun dashSection(section: String) = "dash/$section"
@@ -523,6 +525,7 @@ object Routes {
         val encoded = android.net.Uri.encode(recipientIds.joinToString(","))
         return "create_announcement?recipientIds=$encoded"
     }
+    fun editAnnouncement(id: String) = "edit_announcement/$id"
     fun announcementDepartment(department: String?, search: String = ""): String {
         val dept = if (department.isNullOrBlank()) "_all_" else android.net.Uri.encode(department)
         val q = android.net.Uri.encode(search)

@@ -9,6 +9,7 @@ import uz.vazifa.app.data.remote.AnnouncementDto
 import uz.vazifa.app.data.remote.AnnouncementRecipientDto
 import uz.vazifa.app.data.remote.ApiClient
 import uz.vazifa.app.data.remote.CreateAnnouncementRequest
+import uz.vazifa.app.data.remote.UpdateAnnouncementRequest
 import uz.vazifa.app.data.remote.UserDto
 import uz.vazifa.app.domain.model.Announcement
 import uz.vazifa.app.domain.model.AnnouncementAttachment
@@ -42,6 +43,21 @@ class AnnouncementRepository @Inject constructor(
     ): Announcement = api.api.createAnnouncement(
         CreateAnnouncementRequest(title, description, deadlineAt, reminderIntervalMinutes, recipientIds),
     ).toDomain()
+
+    suspend fun update(
+        id: String,
+        title: String,
+        description: String?,
+        deadlineAt: String,
+        reminderIntervalMinutes: Int,
+    ): Announcement = api.api.updateAnnouncement(
+        id,
+        UpdateAnnouncementRequest(title, description, deadlineAt, reminderIntervalMinutes),
+    ).toDomain()
+
+    suspend fun delete(id: String) {
+        api.api.deleteAnnouncement(id)
+    }
 
     suspend fun acknowledge(id: String) {
         api.api.acknowledgeAnnouncement(id)
@@ -79,7 +95,7 @@ class AnnouncementRepository @Inject constructor(
                 id = a.id,
                 fileName = a.fileName,
                 mimeType = a.mimeType,
-                url = MediaUrl.resolve(a.url.orEmpty()),
+                url = MediaUrl.announcementAttachmentApiUrl(a.id),
             )
         },
     )

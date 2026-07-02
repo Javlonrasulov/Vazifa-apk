@@ -270,7 +270,11 @@ fun messagePreview(msg: ChatMessage?, strings: (String) -> String): String {
     return when (msg.type) {
         ChatMessageType.TEXT -> msg.body.orEmpty()
         ChatMessageType.IMAGE -> "📷 " + strings("chat_photo")
-        ChatMessageType.VIDEO -> "🎬 " + strings("chat_video")
+        ChatMessageType.VIDEO -> if (msg.meta?.isRoundVideo == true) {
+            "⭕ " + strings("chat_video_note_message")
+        } else {
+            "🎬 " + strings("chat_video")
+        }
         ChatMessageType.VOICE -> "🎤 " + strings("chat_voice_message")
         ChatMessageType.AUDIO -> "🎵 " + (msg.fileName ?: "Audio")
         ChatMessageType.FILE -> "📎 " + (msg.fileName ?: strings("chat_attachment"))

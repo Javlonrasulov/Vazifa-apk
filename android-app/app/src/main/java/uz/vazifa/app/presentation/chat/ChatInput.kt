@@ -32,7 +32,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Forward
 import androidx.compose.material.icons.automirrored.filled.Reply
 import androidx.compose.material.icons.automirrored.filled.Send
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.ContentCopy
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Folder
+import androidx.compose.material.icons.filled.Image
+import androidx.compose.material.icons.filled.LocationOn
+import androidx.compose.material.icons.filled.Mic
+import androidx.compose.material.icons.filled.Mood
+import androidx.compose.material.icons.filled.Person
+import androidx.compose.material.icons.filled.PhotoCamera
+import androidx.compose.material.icons.filled.PushPin
+import androidx.compose.material.icons.filled.Videocam
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.*
@@ -63,8 +76,13 @@ import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
+import uz.vazifa.app.util.VideoNoteRecorder
 import uz.vazifa.app.util.VoiceRecorder
 import java.io.File
+
+private enum class RecordMode { VOICE, VIDEO }
+
+private const val MAX_VIDEO_NOTE_SEC = 60
 
 private val emojiPalette = listOf(
     "😀", "😁", "😂", "🤣", "😊", "😍", "😘", "😎", "🤩", "🥳",
@@ -81,6 +99,7 @@ fun ChatInputArea(
     onPickMedia: (Uri, ChatMessageType) -> Unit,
     onRecordingChange: (Boolean) -> Unit = {},
     onSendVoice: (File, Int, List<Int>) -> Unit,
+    onSendVideoNote: (File, Int) -> Unit = { _, _ -> },
     onSendLocation: (Double, Double) -> Unit,
     onSendContact: (String, String) -> Unit,
 ) {
@@ -89,14 +108,26 @@ fun ChatInputArea(
     var showEmoji by remember { mutableStateOf(false) }
     val sendFailedText = localized("chat_send_failed")
     val recorder = remember { VoiceRecorder(context) }
+    val videoRecorder = remember { VideoNoteRecorder(context) }
+    var recordMode by remember { mutableStateOf(RecordMode.VOICE) }
+    var showModeHint by remember { mutableStateOf(false) }
+    var showVideoOverlay by remember { mutableStateOf(false) }
+    var videoPendingStart by remember { mutableStateOf(false) }
+    var cameraReady by remember { mutableStateOf(false) }
     var recording by remember { mutableStateOf(false) }
     var recordLocked by remember { mutableStateOf(false) }
     var recordSeconds by remember { mutableStateOf(0) }
     var cancelHint by remember { mutableStateOf(false) }
+    var lockHint by remember { mutableStateOf(false) }
     var micPressed by remember { mutableStateOf(false) }
     var pendingMic by remember { mutableStateOf(false) }
+    var pendingVideo by remember { mutableStateOf(false) }
     val amplitudes = remember { mutableStateListOf<Int>() }
     var currentFile by remember { mutableStateOf<File?>(null) }
+
+    DisposableEffect(Unit) {
+        onDispose { videoRecorder.release() }
+    }
 
     val imageLauncher = rememberLauncherForActivityResult(ActivityResultContracts.GetMultipleContents()) { uris ->
         uris.forEach { onPickMedia(it, ChatMessageType.IMAGE) }
@@ -122,23 +153,37 @@ fun ChatInputArea(
         if (granted) videoLauncher.launch("video/*")
     }
 
-    fun beginRecording() {
+    fun beginVoiceRecording() {
         if (recording) return
         runCatching {
             currentFile = recorder.start()
             recording = true
             recordLocked = false
             cancelHint = false
+            lockHint = false
             onRecordingChange(true)
         }.onFailure {
             android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
         }
     }
 
-    fun finishRecording() {
+    fun beginVideoRecording() {
+        if (recording) return
+        cameraReady = false
+        videoPendingStart = true
+        showVideoOverlay = true
+        recording = true
+        recordLocked = false
+        cancelHint = false
+        lockHint = false
+        onRecordingChange(true)
+    }
+
+    fun finishVoiceRecording() {
         recording = false
         recordLocked = false
         cancelHint = false
+        lockHint = false
         onRecordingChange(false)
         val file = recorder.stop()
         if (file != null && recordSeconds >= 1) {
@@ -148,28 +193,95 @@ fun ChatInputArea(
         }
     }
 
-    fun cancelRecording() {
+    fun finishVideoRecording() {
         recording = false
         recordLocked = false
         cancelHint = false
+        lockHint = false
+        videoPendingStart = false
+        showVideoOverlay = false
+        cameraReady = false
+        onRecordingChange(false)
+        val file = videoRecorder.stop()
+        if (file != null && recordSeconds >= 1) {
+            onSendVideoNote(file, recordSeconds)
+        } else {
+            file?.delete()
+        }
+        videoRecorder.release()
+    }
+
+    fun cancelVoiceRecording() {
+        recording = false
+        recordLocked = false
+        cancelHint = false
+        lockHint = false
         onRecordingChange(false)
         recorder.cancel()
     }
 
+    fun cancelVideoRecording() {
+        recording = false
+        recordLocked = false
+        cancelHint = false
+        lockHint = false
+        videoPendingStart = false
+        showVideoOverlay = false
+        cameraReady = false
+        onRecordingChange(false)
+        videoRecorder.cancel()
+        videoRecorder.release()
+    }
+
+    fun finishRecording() {
+        if (recordMode == RecordMode.VIDEO) finishVideoRecording() else finishVoiceRecording()
+    }
+
+    fun cancelRecording() {
+        if (recordMode == RecordMode.VIDEO) cancelVideoRecording() else cancelVoiceRecording()
+    }
+
+    fun beginRecording() {
+        if (recordMode == RecordMode.VIDEO) beginVideoRecording() else beginVoiceRecording()
+    }
+
     val micPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
-        if (granted && pendingMic && micPressed) {
+        if (granted && pendingMic) {
             beginRecording()
         }
         pendingMic = false
     }
 
+    val videoPermissions = rememberLauncherForActivityResult(
+        ActivityResultContracts.RequestMultiplePermissions(),
+    ) { result ->
+        val ok = result[Manifest.permission.CAMERA] == true &&
+            result[Manifest.permission.RECORD_AUDIO] == true
+        if (ok && pendingVideo) beginRecording()
+        pendingVideo = false
+    }
+
     fun requestRecording() {
-        if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
+        if (recordMode == RecordMode.VIDEO) {
+            val cam = ContextCompat.checkSelfPermission(context, Manifest.permission.CAMERA) == PackageManager.PERMISSION_GRANTED
+            val mic = ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED
+            if (cam && mic) {
+                beginRecording()
+            } else {
+                pendingVideo = true
+                videoPermissions.launch(arrayOf(Manifest.permission.CAMERA, Manifest.permission.RECORD_AUDIO))
+            }
+        } else if (ContextCompat.checkSelfPermission(context, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) {
             beginRecording()
         } else {
             pendingMic = true
             micPermission.launch(Manifest.permission.RECORD_AUDIO)
         }
+    }
+
+    fun toggleRecordMode() {
+        recordMode = if (recordMode == RecordMode.VOICE) RecordMode.VIDEO else RecordMode.VOICE
+        showModeHint = true
     }
 
     fun launchCamera() {
@@ -191,17 +303,41 @@ fun ChatInputArea(
         }
     }
 
-    LaunchedEffect(recording) {
+    LaunchedEffect(recording, recordMode) {
         if (recording) {
             amplitudes.clear()
             recordSeconds = 0
             var ticks = 0
             while (recording && isActive) {
-                amplitudes.add(recorder.amplitude())
+                if (recordMode == RecordMode.VOICE) amplitudes.add(recorder.amplitude())
                 ticks++
-                if (ticks % 10 == 0) recordSeconds++
+                if (ticks % 10 == 0) {
+                    recordSeconds++
+                    if (recordMode == RecordMode.VIDEO && recordSeconds >= MAX_VIDEO_NOTE_SEC) {
+                        finishRecording()
+                        break
+                    }
+                }
                 delay(100)
             }
+        }
+    }
+
+    LaunchedEffect(videoPendingStart, cameraReady) {
+        if (videoPendingStart && cameraReady && recording && recordMode == RecordMode.VIDEO) {
+            runCatching { videoRecorder.start() }
+                .onFailure {
+                    cancelVideoRecording()
+                    android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                }
+            videoPendingStart = false
+        }
+    }
+
+    LaunchedEffect(showModeHint) {
+        if (showModeHint) {
+            delay(1800)
+            showModeHint = false
         }
     }
 
@@ -251,8 +387,30 @@ fun ChatInputArea(
             EmojiPanel { onInputChange(state.input + it) }
         }
 
-        if (recording) {
-            RecordingBar(seconds = recordSeconds, cancelHint = cancelHint, locked = recordLocked)
+        AnimatedVisibility(visible = showModeHint && !recording) {
+            Box(
+                Modifier
+                    .fillMaxWidth()
+                    .padding(horizontal = 16.dp, vertical = 4.dp),
+                contentAlignment = Alignment.Center,
+            ) {
+                Box(
+                    Modifier
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(Color.Black.copy(alpha = 0.75f))
+                        .padding(horizontal = 14.dp, vertical = 8.dp),
+                ) {
+                    Text(
+                        if (recordMode == RecordMode.VIDEO) localized("chat_record_mode_video") else localized("chat_record_mode_voice"),
+                        color = Color.White,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+        }
+
+        if (recording && recordMode == RecordMode.VOICE) {
+            RecordingBar(seconds = recordSeconds, cancelHint = cancelHint, lockHint = lockHint, locked = recordLocked, videoMode = false)
         }
 
         Row(
@@ -305,17 +463,34 @@ fun ChatInputArea(
             } else if (recording && recordLocked) {
                 SendButton(onClick = { finishRecording() })
             } else {
-                VoiceButton(
+                RecordCaptureButton(
+                    mode = recordMode,
                     recording = recording,
                     onPressChange = { micPressed = it },
-                    onStart = { requestRecording() },
+                    onTap = { toggleRecordMode() },
+                    onHoldStart = { requestRecording() },
                     onStop = { if (recording) finishRecording() },
                     onCancel = { if (recording) cancelRecording() },
                     onLock = { recordLocked = true },
                     onDragCancel = { cancelHint = it },
+                    onDragLock = { lockHint = it },
                 )
             }
         }
+    }
+
+    if (showVideoOverlay) {
+        VideoNoteRecordingOverlay(
+            seconds = recordSeconds,
+            locked = recordLocked,
+            lockHint = lockHint,
+            cancelHint = cancelHint,
+            recorder = videoRecorder,
+            onFlipCamera = { videoRecorder.flipCamera() },
+            onCancel = { cancelVideoRecording() },
+            onSend = { finishVideoRecording() },
+            onCameraReady = { cameraReady = true },
+        )
     }
 }
 
@@ -391,7 +566,7 @@ private fun EmojiPanel(onEmoji: (String) -> Unit) {
 }
 
 @Composable
-private fun RecordingBar(seconds: Int, cancelHint: Boolean, locked: Boolean) {
+private fun RecordingBar(seconds: Int, cancelHint: Boolean, lockHint: Boolean, locked: Boolean, videoMode: Boolean) {
     Row(
         Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
         verticalAlignment = Alignment.CenterVertically,
@@ -404,6 +579,7 @@ private fun RecordingBar(seconds: Int, cancelHint: Boolean, locked: Boolean) {
             when {
                 locked -> localized("chat_voice_locked")
                 cancelHint -> localized("chat_voice_cancel")
+                lockHint -> localized("chat_video_note_slide_lock")
                 else -> localized("chat_voice_slide_cancel")
             },
             color = if (cancelHint) LiquidGlass.Rose else LiquidTheme.textMuted,
@@ -431,14 +607,17 @@ private fun SendButton(onClick: () -> Unit) {
 }
 
 @Composable
-private fun VoiceButton(
+private fun RecordCaptureButton(
+    mode: RecordMode,
     recording: Boolean,
     onPressChange: (Boolean) -> Unit,
-    onStart: () -> Unit,
+    onTap: () -> Unit,
+    onHoldStart: () -> Unit,
     onStop: () -> Unit,
     onCancel: () -> Unit,
     onLock: () -> Unit,
     onDragCancel: (Boolean) -> Unit,
+    onDragLock: (Boolean) -> Unit,
 ) {
     Box(
         Modifier
@@ -448,27 +627,44 @@ private fun VoiceButton(
                 if (recording) Brush.linearGradient(listOf(LiquidGlass.Rose, LiquidGlass.Rose.copy(alpha = 0.7f)))
                 else Brush.linearGradient(listOf(LiquidGlass.Blue, LiquidGlass.Cyan)),
             )
-            .pointerInput(Unit) {
+            .pointerInput(mode) {
                 awaitEachGesture {
                     val down = awaitPointerEvent().changes.firstOrNull() ?: return@awaitEachGesture
                     onPressChange(true)
-                    onStart()
                     val downAt = System.currentTimeMillis()
+                    var holdStarted = false
                     var locked = false
                     var cancelled = false
                     while (true) {
                         val event = awaitPointerEvent()
                         val change = event.changes.firstOrNull() ?: break
                         val dx = change.position.x - down.position.x
-                        if (!locked) cancelled = dx < -120f
-                        onDragCancel(cancelled)
-                        if (!locked && System.currentTimeMillis() - downAt >= 1_000L) {
-                            locked = true
-                            onLock()
+                        val dy = change.position.y - down.position.y
+                        val elapsed = System.currentTimeMillis() - downAt
+                        if (!holdStarted && elapsed >= 150L) {
+                            holdStarted = true
+                            onHoldStart()
+                        }
+                        if (holdStarted && !locked) {
+                            cancelled = dx < -120f
+                            onDragCancel(cancelled)
+                            if (dy < -100f) {
+                                locked = true
+                                onLock()
+                                onDragLock(true)
+                            } else {
+                                onDragLock(false)
+                            }
                         }
                         if (change.changedToUp()) break
                     }
                     onPressChange(false)
+                    onDragCancel(false)
+                    onDragLock(false)
+                    if (!holdStarted) {
+                        onTap()
+                        return@awaitEachGesture
+                    }
                     if (locked) return@awaitEachGesture
                     if (cancelled) onCancel() else onStop()
                 }
@@ -476,7 +672,11 @@ private fun VoiceButton(
         contentAlignment = Alignment.Center,
     ) {
         Icon(
-            if (recording) Icons.AutoMirrored.Filled.Send else Icons.Default.Mic,
+            when {
+                recording -> Icons.AutoMirrored.Filled.Send
+                mode == RecordMode.VIDEO -> Icons.Default.Videocam
+                else -> Icons.Default.Mic
+            },
             null,
             tint = Color.White,
             modifier = Modifier.size(24.dp),

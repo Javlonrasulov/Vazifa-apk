@@ -1,9 +1,11 @@
 import {
   Body,
   Controller,
+  Delete,
   Get,
   NotFoundException,
   Param,
+  Patch,
   Post,
   Request,
   StreamableFile,
@@ -18,7 +20,7 @@ import { diskStorage } from 'multer';
 import { extname, isAbsolute, join } from 'path';
 import { v4 as uuid } from 'uuid';
 import { AnnouncementsService } from './announcements.service';
-import { CreateAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
 import { RolesGuard, Roles } from '../common/guards/roles.guard';
 import { NotificationsGuard } from '../common/guards/notifications.guard';
 import { UserRole } from '../common/enums';
@@ -88,6 +90,24 @@ export class AnnouncementsController {
   @UseGuards(RolesGuard)
   markViewed(@Param('id') id: string, @Request() req: { user: User }) {
     return this.announcementsService.markViewed(id, req.user);
+  }
+
+  @Patch(':id')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  update(
+    @Param('id') id: string,
+    @Body() dto: UpdateAnnouncementDto,
+    @Request() req: { user: User },
+  ) {
+    return this.announcementsService.update(id, req.user, dto);
+  }
+
+  @Delete(':id')
+  @Roles(UserRole.DIRECTOR, UserRole.EMPLOYEE)
+  @UseGuards(RolesGuard)
+  remove(@Param('id') id: string, @Request() req: { user: User }) {
+    return this.announcementsService.remove(id, req.user);
   }
 
   @Post(':id/cancel')

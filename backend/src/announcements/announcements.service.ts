@@ -11,7 +11,7 @@ import { QueryFailedError } from 'typeorm';
 import { Announcement, AnnouncementStatus } from './entities/announcement.entity';
 import { AnnouncementRecipient } from './entities/announcement-recipient.entity';
 import { AnnouncementAttachment } from './entities/announcement-attachment.entity';
-import { CreateAnnouncementDto } from './dto/announcement.dto';
+import { CreateAnnouncementDto, UpdateAnnouncementDto } from './dto/announcement.dto';
 import { User } from '../users/entities/user.entity';
 import { userCanAssignTasks } from '../common/utils/user-permissions';
 import { parseTashkent, nowTashkent } from '../common/utils/time';
@@ -178,6 +178,41 @@ export class AnnouncementsService {
     recipient.viewedAt = nowTashkent();
     await this.recipientRepo.save(recipient);
     return { viewed: true, viewedAt: recipient.viewedAt };
+  }
+
+  async update(id: string, user: User, dto: UpdateAnnouncementDto) {
+    const announcement = await this.announcementRepo.findOne({ where: { id } });
+    if (!announcement) throw new NotFoundException('Xabar topilmadi');
+    if (announcement.createdById !== user.id) {
+      throw new ForbiddenException('Faqat yaratuvchi tahrirlay oladi');
+    }
+    if (announcement.status !== AnnouncementStatus.ACTIVE) {
+      throw new BadRequestException('Faol bo\'lmagan e\'lonni tahrirlab bo\'lmaydi');
+    }
+    if (dto.title !== undefined) announcement.title = dto.title.trim();
+    if (dto.description !== undefined) announcement.description = dto.description?.trim() || null;
+    if (dto.deadlineAt !== undefined) {
+      const deadlineAt = parseTashkent(dto.deadlineAt);
+      if (deadlineAt <= nowTashkent()) {
+        throw new BadRequestException('Muddat kelajakdagi vaqt bo\'lishi kerak');
+      }
+      announcement.deadlineAt = deadlineAt;
+    }
+    if (dto.reminderIntervalMinutes !== undefined) {
+      announcement.reminderIntervalMinutes = dto.reminderIntervalMinutes;
+    }
+    await this.announcementRepo.save(announcement);
+    return this.findOne(id, user);
+  }
+
+  async remove(id: string, user: User) {
+    const announcement = await this.announcementRepo.findOne({ where: { id } });
+    if (!announcement) throw new NotFoundException('Xabar topilmadi');
+    if (announcement.createdById !== user.id) {
+      throw new ForbiddenException('Faqat yaratuvchi o\'chira oladi');
+    }
+    await this.announcementRepo.remove(announcement);
+    return { deleted: true };
   }
 
   async cancel(id: string, user: User) {

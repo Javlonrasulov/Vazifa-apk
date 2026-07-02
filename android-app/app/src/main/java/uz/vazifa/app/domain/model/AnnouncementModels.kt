@@ -54,3 +54,5 @@ fun Announcement.viewedCount(): Int =
 
 fun Announcement.notViewedCount(): Int =
     recipients.count { it.viewedAt == null }
+
+fun Announcement.isActive(): Boolean = status == "active"

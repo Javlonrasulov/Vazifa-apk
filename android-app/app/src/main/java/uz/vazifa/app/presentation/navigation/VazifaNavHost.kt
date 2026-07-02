@@ -232,7 +232,6 @@ fun VazifaNavHost(
     onPendingRoomConsumed: () -> Unit = {},
     pendingAnnouncementId: String? = null,
     onPendingAnnouncementConsumed: () -> Unit = {},
-    onSplashActiveChange: (Boolean) -> Unit = {},
     viewModel: NavViewModel = hiltViewModel(),
 ) {
     val navController = rememberNavController()
@@ -253,10 +252,6 @@ fun VazifaNavHost(
     var splashDone by remember { mutableStateOf(skipSplash) }
     var destination by remember { mutableStateOf(viewModel.bootRoute) }
     val lifecycleOwner = LocalLifecycleOwner.current
-
-    LaunchedEffect(splashDone) {
-        onSplashActiveChange(!splashDone)
-    }
 
     LaunchedEffect(Unit) {
         if (skipSplash) return@LaunchedEffect
@@ -395,8 +390,8 @@ fun VazifaNavHost(
         NavHost(
             navController,
             startDestination = startDestination,
-            modifier = Modifier.fillMaxSize().then(
-                if (showBottomNav) Modifier.padding(bottom = BottomNavHeight + navigationBarPadding) else Modifier,
+            modifier = Modifier.fillMaxSize().padding(
+                bottom = if (showBottomNav) BottomNavHeight + navigationBarPadding else navigationBarPadding,
             ),
         ) {
             composable(Routes.LOGIN) {
@@ -460,11 +455,8 @@ fun VazifaNavHost(
                         onAssignTask = { ids ->
                             navController.navigate(Routes.createTask(ids))
                         },
-                        onDepartmentClick = { dept ->
-                            navController.navigate(Routes.employeesDepartment(dept))
-                        },
-                        onSearchAll = { query ->
-                            navController.navigate(Routes.employeesDepartment(null, query))
+                        onDepartmentClick = { dept, query ->
+                            navController.navigate(Routes.employeesDepartment(dept, query))
                         },
                     )
                     AppTab.TASKS -> TasksScreen(
@@ -524,11 +516,8 @@ fun VazifaNavHost(
                     onEmployeeClick = { employeeId ->
                         navController.navigate(Routes.employeeDetail(employeeId))
                     },
-                    onDepartmentClick = { dept ->
-                        navController.navigate(Routes.employeesDepartment(dept))
-                    },
-                    onSearchAll = { query ->
-                        navController.navigate(Routes.employeesDepartment(null, query))
+                    onDepartmentClick = { dept, query ->
+                        navController.navigate(Routes.employeesDepartment(dept, query))
                     },
                 )
             }
@@ -606,19 +595,30 @@ fun VazifaNavHost(
                 CreateAnnouncementScreen(
                     onBack = { navController.popBackStack() },
                     onCreated = { id ->
-                        navController.popBackStack()
-                        navController.navigate(Routes.announcementTracking(id))
+                        navController.navigate(Routes.announcementTracking(id)) {
+                            popUpTo(Routes.MAIN) { inclusive = false }
+                            launchSingleTop = true
+                        }
                     },
+                )
+            }
+            composable(
+                Routes.EDIT_ANNOUNCEMENT,
+                arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
+            ) {
+                CreateAnnouncementScreen(
+                    onBack = { navController.popBackStack() },
+                    onSaved = { navController.popBackStack() },
                 )
             }
             composable(Routes.ANNOUNCEMENT_RECIPIENTS) {
                 AnnouncementRecipientsHubScreen(
                     onBack = { navController.popBackStack() },
-                    onDepartmentClick = { dept ->
-                        navController.navigate(Routes.announcementDepartment(dept))
+                    onDepartmentClick = { dept, query ->
+                        navController.navigate(Routes.announcementDepartment(dept, query))
                     },
-                    onSearchAll = { query ->
-                        navController.navigate(Routes.announcementDepartment(null, query))
+                    onSelectRecipients = { ids ->
+                        navController.navigate(Routes.createAnnouncement(ids))
                     },
                 )
             }
@@ -637,16 +637,6 @@ fun VazifaNavHost(
                 )
             }
             composable(
-                Routes.ANNOUNCEMENT_DETAIL,
-                arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
-            ) { entry ->
-                AnnouncementDetailScreen(
-                    announcementId = entry.arguments?.getString("announcementId").orEmpty(),
-                    onBack = { navController.popBackStack() },
-                    onOpenTracking = { navController.navigate(Routes.announcementTracking(it)) },
-                )
-            }
-            composable(
                 Routes.ANNOUNCEMENT_TRACKING,
                 arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
             ) { entry ->
@@ -655,11 +645,30 @@ fun VazifaNavHost(
                     onBack = { navController.popBackStack() },
                 )
             }
+            composable(
+                Routes.ANNOUNCEMENT_DETAIL,
+                arguments = listOf(navArgument("announcementId") { type = NavType.StringType }),
+            ) { entry ->
+                AnnouncementDetailScreen(
+                    announcementId = entry.arguments?.getString("announcementId").orEmpty(),
+                    onBack = { navController.popBackStack() },
+                    onOpenTracking = { navController.navigate(Routes.announcementTracking(it)) },
+                    onEdit = { navController.navigate(Routes.editAnnouncement(it)) },
+                    onDeleted = { navController.popBackStack() },
+                )
+            }
             composable(Routes.ANNOUNCEMENTS_SENT) {
                 SentAnnouncementsScreen(
                     onBack = { navController.popBackStack() },
                     onAnnouncementClick = { navController.navigate(Routes.announcementDetail(it)) },
                     onTrackingClick = { navController.navigate(Routes.announcementTracking(it)) },
+                    onEditClick = { navController.navigate(Routes.editAnnouncement(it)) },
+                )
+            }
+            composable(Routes.ANNOUNCEMENTS_RECEIVED) {
+                ReceivedAnnouncementsScreen(
+                    onBack = { navController.popBackStack() },
+                    onAnnouncementClick = { navController.navigate(Routes.announcementDetail(it)) },
                 )
             }
             composable(
@@ -753,6 +762,7 @@ fun VazifaNavHost(
                     CreateAction.NEW_TASK -> navController.navigate(Routes.createTask())
                     CreateAction.NEW_ANNOUNCEMENT -> navController.navigate(Routes.ANNOUNCEMENT_RECIPIENTS)
                     CreateAction.SENT_ANNOUNCEMENTS -> navController.navigate(Routes.ANNOUNCEMENTS_SENT)
+                    CreateAction.RECEIVED_ANNOUNCEMENTS -> navController.navigate(Routes.ANNOUNCEMENTS_RECEIVED)
                     CreateAction.NEW_CHAT -> navController.navigate(Routes.CHAT_NEW)
                     CreateAction.SUPPORT -> showSupportSheet = true
                 }

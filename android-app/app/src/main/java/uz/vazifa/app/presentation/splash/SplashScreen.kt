@@ -8,7 +8,6 @@ import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
-import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -23,6 +22,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Assignment
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -34,12 +36,9 @@ import androidx.compose.ui.draw.scale
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.layout.ContentScale
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import uz.vazifa.app.R
 import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
@@ -63,8 +62,8 @@ fun SplashScreen(
         label = "orbDrift",
     )
     val glowPulse by infinite.animateFloat(
-        initialValue = 0.92f,
-        targetValue = 1.08f,
+        initialValue = 0.96f,
+        targetValue = 1.04f,
         animationSpec = infiniteRepeatable(
             animation = tween(1_800, easing = FastOutSlowInEasing),
             repeatMode = RepeatMode.Reverse,
@@ -80,12 +79,6 @@ fun SplashScreen(
         ),
         label = "shimmer",
     )
-
-    val logoScale = 1f
-    val logoAlpha = 1f
-    val titleAlpha = 1f
-    val titleOffset = 0f
-    val subtitleAlpha = 1f
 
     val barProgress by animateFloatAsState(
         targetValue = 1f,
@@ -134,63 +127,46 @@ fun SplashScreen(
             ) {
                 Box(
                     Modifier
-                        .size(112.dp * glowPulse)
-                        .scale(logoScale)
-                        .alpha(logoAlpha)
-                        .glowEffect(color = LiquidGlass.Blue, radius = 220f),
+                        .size(88.dp * glowPulse)
+                        .scale(glowPulse)
+                        .glowEffect(color = LiquidGlass.Blue, radius = 180f)
+                        .clip(RoundedCornerShape(LiquidGlass.RadiusCard))
+                        .background(
+                            Brush.linearGradient(
+                                listOf(
+                                    LiquidGlass.Blue,
+                                    LiquidGlass.BlueLight,
+                                    LiquidGlass.Cyan.copy(alpha = 0.95f + shimmer * 0.05f),
+                                ),
+                                start = Offset(0f, 0f),
+                                end = Offset(200f, 200f),
+                            ),
+                        ),
                     contentAlignment = Alignment.Center,
                 ) {
-                    Box(
-                        Modifier
-                            .size(96.dp)
-                            .clip(RoundedCornerShape(28.dp))
-                            .background(
-                                Brush.linearGradient(
-                                    listOf(
-                                        LiquidGlass.Blue,
-                                        LiquidGlass.BlueLight,
-                                        LiquidGlass.Cyan.copy(alpha = 0.95f + shimmer * 0.05f),
-                                    ),
-                                    start = Offset(0f, 0f),
-                                    end = Offset(200f, 200f),
-                                ),
-                            ),
-                        contentAlignment = Alignment.Center,
-                    ) {
-                        Image(
-                            painter = painterResource(R.drawable.ic_launcher_foreground),
-                            contentDescription = null,
-                            modifier = Modifier
-                                .size(72.dp)
-                                .padding(8.dp),
-                            contentScale = ContentScale.Fit,
-                        )
-                    }
-                }
-
-                Spacer(Modifier.height(28.dp))
-
-                Column(
-                    Modifier
-                        .alpha(titleAlpha)
-                        .offset(y = titleOffset.dp),
-                    horizontalAlignment = Alignment.CenterHorizontally,
-                ) {
-                    Text(
-                        localized("app_name"),
-                        color = LiquidTheme.text,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = 30.sp,
-                        letterSpacing = 0.5.sp,
-                    )
-                    Spacer(Modifier.height(6.dp))
-                    Text(
-                        localized("app_subtitle"),
-                        modifier = Modifier.alpha(subtitleAlpha),
-                        color = LiquidTheme.textMuted,
-                        fontSize = 14.sp,
+                    Icon(
+                        Icons.AutoMirrored.Filled.Assignment,
+                        contentDescription = null,
+                        tint = Color.White,
+                        modifier = Modifier.size(40.dp),
                     )
                 }
+
+                Spacer(Modifier.height(24.dp))
+
+                Text(
+                    localized("app_name"),
+                    color = LiquidTheme.text,
+                    fontWeight = FontWeight.Bold,
+                    fontSize = 30.sp,
+                    letterSpacing = 0.5.sp,
+                )
+                Spacer(Modifier.height(6.dp))
+                Text(
+                    localized("app_subtitle"),
+                    color = LiquidTheme.textMuted,
+                    fontSize = 14.sp,
+                )
             }
 
             Column(
@@ -216,16 +192,19 @@ fun SplashScreen(
                     )
                 }
                 Spacer(Modifier.height(16.dp))
-                LoadingDots(alpha = titleAlpha)
+                LoadingDots()
             }
         }
     }
 }
 
 @Composable
-private fun LoadingDots(alpha: Float) {
+private fun LoadingDots() {
     val infinite = rememberInfiniteTransition(label = "dots")
-    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.alpha(alpha * 0.85f)) {
+    Row(
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        modifier = Modifier.alpha(0.85f),
+    ) {
         repeat(3) { index ->
             val scale by infinite.animateFloat(
                 initialValue = 0.6f,

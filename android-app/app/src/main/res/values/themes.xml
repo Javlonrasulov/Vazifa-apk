@@ -5,8 +5,4 @@
         <item name="android:navigationBarColor">@android:color/transparent</item>
         <item name="android:windowBackground">@color/splash_background</item>
     </style>
-
-    <style name="Theme.Vazifa.Splash" parent="Theme.Vazifa">
-        <item name="android:windowBackground">@color/splash_background</item>
-    </style>
 </resources>

@@ -44,6 +44,7 @@ import uz.vazifa.app.domain.model.hasCompletedAssignment
 import uz.vazifa.app.domain.model.canCreatorManage
 import uz.vazifa.app.domain.model.isOverdue
 import uz.vazifa.app.presentation.components.*
+import uz.vazifa.app.util.UzbekTextSearch
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
@@ -108,6 +109,17 @@ data class DashboardSectionUiState(
     val tasks: List<Task> = emptyList(),
 ) {
     val totalEmployees: Int get() = employees.size
+
+    val filteredEmployees: List<User>
+        get() {
+            val q = searchQuery.trim()
+            if (q.isBlank()) return emptyList()
+            return employees.filter { user ->
+                UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q)
+            }
+        }
+
+    val isSearching: Boolean get() = searchQuery.trim().isNotBlank()
 }
 
 @HiltViewModel
@@ -203,8 +215,7 @@ class EmployeesTabViewModel @Inject constructor(
 fun EmployeesTabScreen(
     onEmployeeClick: (String) -> Unit,
     onAssignTask: (Set<String>) -> Unit,
-    onDepartmentClick: (String?) -> Unit,
-    onSearchAll: (String) -> Unit,
+    onDepartmentClick: (String?, String) -> Unit,
     viewModel: EmployeesTabViewModel = hiltViewModel(),
 ) {
     val state by viewModel.state.collectAsState()
@@ -233,10 +244,12 @@ fun EmployeesTabScreen(
                         EmployeesHubContent(
                             totalEmployees = state.totalEmployees,
                             departments = state.departments,
+                            filteredEmployees = state.filteredEmployees,
                             searchQuery = state.searchQuery,
                             onSearch = viewModel::onSearch,
-                            onSearchSubmit = { onSearchAll(state.searchQuery) },
-                            onDepartmentClick = onDepartmentClick,
+                            onDepartmentClick = { dept -> onDepartmentClick(dept, state.searchQuery) },
+                            onEmployeeClick = onEmployeeClick,
+                            onAssignTask = onAssignTask,
                         )
                     }
                 }
@@ -252,8 +265,7 @@ fun DashboardSectionScreen(
     onAssignTask: (Set<String>) -> Unit = {},
     onEmployeeClick: (String) -> Unit = {},
     onEditTask: (String) -> Unit = {},
-    onDepartmentClick: (String?) -> Unit = {},
-    onSearchAll: (String) -> Unit = {},
+    onDepartmentClick: (String?, String) -> Unit = { _, _ -> },
     currentUserId: String? = null,
     viewModel: DashboardSectionViewModel = hiltViewModel(),
 ) {
@@ -322,10 +334,12 @@ fun DashboardSectionScreen(
                             EmployeesHubContent(
                                 totalEmployees = state.totalEmployees,
                                 departments = state.departments,
+                                filteredEmployees = state.filteredEmployees,
                                 searchQuery = state.searchQuery,
                                 onSearch = viewModel::onSearch,
-                                onSearchSubmit = { onSearchAll(state.searchQuery) },
-                                onDepartmentClick = onDepartmentClick,
+                                onDepartmentClick = { dept -> onDepartmentClick(dept, state.searchQuery) },
+                                onEmployeeClick = onEmployeeClick,
+                                onAssignTask = onAssignTask,
                             )
                         }
                         else -> {

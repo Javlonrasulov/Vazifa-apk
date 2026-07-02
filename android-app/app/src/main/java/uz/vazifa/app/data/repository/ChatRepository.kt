@@ -371,6 +371,7 @@ fun ChatMetaDto.toDomain(): ChatMessageMeta = ChatMessageMeta(
     longitude = longitude,
     contactName = contactName,
     contactPhone = contactPhone,
+    isRoundVideo = isRoundVideo,
 )
 
 fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
@@ -385,6 +386,7 @@ fun ChatMessageMeta.toDto(): ChatMetaDto = ChatMetaDto(
     longitude = longitude,
     contactName = contactName,
     contactPhone = contactPhone,
+    isRoundVideo = isRoundVideo,
 )
 
 private fun ChatPeerDto.toDomain(): ChatPeer = ChatPeer(

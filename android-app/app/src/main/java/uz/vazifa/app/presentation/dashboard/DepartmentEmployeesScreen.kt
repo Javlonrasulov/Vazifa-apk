@@ -44,7 +44,7 @@ data class DepartmentEmployeesUiState(
             val q = searchQuery.trim()
             if (q.isBlank()) return employees
             return employees.filter { user ->
-                UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q)
+                UzbekTextSearch.matchesEmployee(user.fullName, user.login, user.phone, q, user.position)
             }
         }
 }
@@ -62,7 +62,9 @@ class DepartmentEmployeesViewModel @Inject constructor(
     val screenTitle: String
         get() = departmentName ?: "dash_total"
 
-    private val initialSearch: String = savedStateHandle.get<String>("q").orEmpty()
+    private val initialSearch: String = savedStateHandle.get<String>("q")
+        .orEmpty()
+        .let { android.net.Uri.decode(it) }
 
     private val _state = MutableStateFlow(DepartmentEmployeesUiState(searchQuery = initialSearch))
     val state = _state.asStateFlow()
@@ -149,87 +151,109 @@ fun DepartmentEmployeesScreen(
         },
     ) { padding ->
         LiquidBackground(Modifier.fillMaxSize()) {
-            Box(Modifier.fillMaxSize()) {
-                VazifaScreenBox(padding) {
-                    when {
-                        state.loading -> {
-                            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                                CircularProgressIndicator(color = LiquidGlass.Blue)
-                            }
+            Column(
+                Modifier
+                    .fillMaxSize()
+                    .padding(padding)
+                    .imePadding(),
+            ) {
+                when {
+                    state.loading -> {
+                        Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                            CircularProgressIndicator(color = LiquidGlass.Blue)
                         }
-                        else -> {
-                            LazyColumn(
-                                contentPadding = PaddingValues(
-                                    start = 16.dp,
-                                    end = 16.dp,
-                                    top = 16.dp,
-                                    bottom = if (state.selectedEmployeeIds.isNotEmpty()) 88.dp else 16.dp,
-                                ),
-                                verticalArrangement = Arrangement.spacedBy(10.dp),
-                            ) {
-                                item {
-                                    EmployeeSearchField(
-                                        value = state.searchQuery,
-                                        onValueChange = viewModel::onSearch,
+                    }
+                    else -> {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            contentPadding = PaddingValues(
+                                start = 16.dp,
+                                end = 16.dp,
+                                top = 16.dp,
+                                bottom = 16.dp,
+                            ),
+                            verticalArrangement = Arrangement.spacedBy(10.dp),
+                        ) {
+                            item {
+                                EmployeeSearchField(
+                                    value = state.searchQuery,
+                                    onValueChange = viewModel::onSearch,
+                                )
+                            }
+                            item {
+                                Row(
+                                    Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.SpaceBetween,
+                                    verticalAlignment = Alignment.CenterVertically,
+                                ) {
+                                    Text(
+                                        localized("dash_employees"),
+                                        color = LiquidTheme.textMuted,
+                                        fontSize = 13.sp,
+                                    )
+                                    Text(
+                                        "${visibleEmployees.size} ${localized("dash_unit")}",
+                                        color = LiquidTheme.textMuted,
+                                        fontSize = 13.sp,
                                     )
                                 }
-                                item {
-                                    Row(
-                                        Modifier.fillMaxWidth(),
-                                        horizontalArrangement = Arrangement.SpaceBetween,
-                                        verticalAlignment = Alignment.CenterVertically,
-                                    ) {
-                                        Text(
-                                            localized("dash_employees"),
-                                            color = LiquidTheme.textMuted,
-                                            fontSize = 13.sp,
-                                        )
-                                        Text(
-                                            "${visibleEmployees.size} ${localized("dash_unit")}",
-                                            color = LiquidTheme.textMuted,
-                                            fontSize = 13.sp,
-                                        )
-                                    }
-                                }
-                                if (visibleEmployees.isEmpty()) {
-                                    item { EmployeesEmptyCard(style) }
-                                } else {
-                                    items(visibleEmployees, key = { it.id }) { employee ->
-                                        EmployeeRow(
-                                            user = employee,
-                                            style = style,
-                                            selected = employee.id in state.selectedEmployeeIds,
-                                            onToggleSelect = { viewModel.toggleEmployee(employee.id) },
-                                            onClick = { onEmployeeClick(employee.id) },
-                                            onAssignTask = { onAssignTask(setOf(employee.id)) },
-                                        )
-                                    }
+                            }
+                            if (visibleEmployees.isEmpty()) {
+                                item { EmployeesEmptyCard(style) }
+                            } else {
+                                items(visibleEmployees, key = { it.id }) { employee ->
+                                    EmployeeRow(
+                                        user = employee,
+                                        style = style,
+                                        selected = employee.id in state.selectedEmployeeIds,
+                                        onToggleSelect = { viewModel.toggleEmployee(employee.id) },
+                                        onClick = { onEmployeeClick(employee.id) },
+                                        onAssignTask = { onAssignTask(setOf(employee.id)) },
+                                    )
                                 }
                             }
                         }
                     }
                 }
                 if (state.selectedEmployeeIds.isNotEmpty()) {
-                    Button(
+                    DepartmentSelectionBar(
+                        label = "${localized(selectionButtonKey)} (${state.selectedEmployeeIds.size})",
                         onClick = { onAssignTask(state.selectedEmployeeIds) },
-                        modifier = Modifier
-                            .align(Alignment.BottomCenter)
-                            .fillMaxWidth()
-                            .padding(horizontal = 16.dp, vertical = 12.dp)
-                            .height(52.dp),
-                        shape = RoundedCornerShape(LiquidGlass.RadiusChip),
-                        colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
-                    ) {
-                        Icon(Icons.Default.Add, null, tint = androidx.compose.ui.graphics.Color.White)
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            "${localized(selectionButtonKey)} (${state.selectedEmployeeIds.size})",
-                            color = androidx.compose.ui.graphics.Color.White,
-                            fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
-                        )
-                    }
+                    )
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun DepartmentSelectionBar(
+    label: String,
+    onClick: () -> Unit,
+) {
+    Surface(
+        modifier = Modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        color = LiquidTheme.bgMid.copy(alpha = 0.95f),
+        shadowElevation = 8.dp,
+    ) {
+        Button(
+            onClick = onClick,
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 16.dp, vertical = 12.dp)
+                .height(52.dp),
+            shape = RoundedCornerShape(LiquidGlass.RadiusChip),
+            colors = ButtonDefaults.buttonColors(containerColor = LiquidGlass.Blue),
+        ) {
+            Icon(Icons.Default.Add, null, tint = androidx.compose.ui.graphics.Color.White)
+            Spacer(Modifier.width(8.dp))
+            Text(
+                label,
+                color = androidx.compose.ui.graphics.Color.White,
+                fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+            )
         }
     }
 }

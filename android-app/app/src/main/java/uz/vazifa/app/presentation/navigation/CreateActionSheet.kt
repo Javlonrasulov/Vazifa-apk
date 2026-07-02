@@ -15,6 +15,7 @@ import androidx.compose.material.icons.filled.Assignment
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.Chat
 import androidx.compose.material.icons.filled.HeadsetMic
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ModalBottomSheet
@@ -38,6 +39,7 @@ enum class CreateAction {
     NEW_TASK,
     NEW_ANNOUNCEMENT,
     SENT_ANNOUNCEMENTS,
+    RECEIVED_ANNOUNCEMENTS,
     NEW_CHAT,
     SUPPORT,
 }
@@ -67,6 +69,7 @@ fun CreateActionSheet(
             add(CreateActionItem(CreateAction.NEW_ANNOUNCEMENT, Icons.Default.Campaign, "create_new_announcement", "create_new_announcement_desc", AnnouncementAccent.Primary))
             add(CreateActionItem(CreateAction.SENT_ANNOUNCEMENTS, Icons.AutoMirrored.Filled.Send, "announcement_sent_list", "announcement_sent_list_desc", AnnouncementAccent.Primary))
         }
+        add(CreateActionItem(CreateAction.RECEIVED_ANNOUNCEMENTS, Icons.Default.Inbox, "announcement_received_list", "announcement_received_list_desc", AnnouncementAccent.Primary))
         add(CreateActionItem(CreateAction.NEW_CHAT, Icons.Default.Chat, "create_new_chat", "create_new_chat_desc"))
         add(CreateActionItem(CreateAction.SUPPORT, Icons.Default.HeadsetMic, "create_support", "create_support_desc"))
     }

@@ -14,6 +14,11 @@ object MediaUrl {
         return "$base/tasks/attachments/$attachmentId/file"
     }
 
+    fun announcementAttachmentApiUrl(attachmentId: String): String {
+        val base = BuildConfig.API_BASE_URL.removeSuffix("/")
+        return "$base/announcements/attachments/$attachmentId/file"
+    }
+
     fun resolveChatMedia(filePath: String?, metaUrl: String?): String? {
         val path = filePath?.takeIf { it.isNotBlank() }
         val url = metaUrl?.takeIf { it.isNotBlank() }

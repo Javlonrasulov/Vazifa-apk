@@ -43,6 +43,7 @@ data class ChatMessageMeta(
     val longitude: Double? = null,
     val contactName: String? = null,
     val contactPhone: String? = null,
+    val isRoundVideo: Boolean? = null,
 )
 
 data class ChatMessage(

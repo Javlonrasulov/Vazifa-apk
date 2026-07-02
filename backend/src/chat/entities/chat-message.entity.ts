@@ -42,6 +42,7 @@ export interface ChatMessageMeta {
   contactName?: string;
   contactPhone?: string;
   stickerId?: string;
+  isRoundVideo?: boolean;
 }
 
 @Entity('chat_messages')

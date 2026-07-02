@@ -33,3 +33,24 @@ export class CreateAnnouncementDto {
   @IsUUID('4', { each: true })
   recipientIds: string[];
 }
+
+export class UpdateAnnouncementDto {
+  @IsOptional()
+  @IsString()
+  @MinLength(1)
+  title?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsDateString()
+  deadlineAt?: string;
+
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10080)
+  reminderIntervalMinutes?: number;
+}

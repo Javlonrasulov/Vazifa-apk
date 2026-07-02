@@ -59,7 +59,18 @@ import dagger.hilt.android.EntryPointAccessors
 import uz.vazifa.app.di.ImageLoaderEntryPoint
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.draw.alpha
+import androidx.compose.ui.viewinterop.AndroidView
+import androidx.media3.common.MediaItem
+import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.ui.AspectRatioFrameLayout
+import androidx.media3.ui.PlayerView
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
+import kotlinx.coroutines.withContext
+import okhttp3.Request
+import java.io.File
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import uz.vazifa.app.domain.model.ChatMessage
@@ -196,6 +207,23 @@ fun ChatConversationScreen(
                                 ChatMessageType.VOICE,
                                 upload,
                                 ChatMessageMeta(durationSec = dur, waveform = wave),
+                            )
+                        }.onFailure {
+                            android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                        }
+                        viewModel.setUploading(false)
+                    }
+                },
+                onSendVideoNote = { file, dur ->
+                    scope.launch {
+                        viewModel.setRecording(false)
+                        viewModel.setUploading(true)
+                        runCatching {
+                            val upload = viewModel.upload(file, "video/mp4")
+                            viewModel.sendUpload(
+                                ChatMessageType.VIDEO,
+                                upload,
+                                ChatMessageMeta(durationSec = dur, width = 480, height = 480, isRoundVideo = true),
                             )
                         }.onFailure {
                             android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
@@ -656,7 +684,7 @@ private fun BubbleContent(msg: ChatMessage, mine: Boolean) {
         }
         when (msg.type) {
                 ChatMessageType.IMAGE -> ImageContent(msg)
-                ChatMessageType.VIDEO -> VideoContent(msg)
+                ChatMessageType.VIDEO -> if (msg.meta?.isRoundVideo == true) VideoNoteContent(msg) else VideoContent(msg)
                 ChatMessageType.VOICE -> VoiceContent(msg, mine)
                 ChatMessageType.AUDIO, ChatMessageType.FILE -> FileContent(msg, mine)
                 ChatMessageType.LOCATION -> LocationContent(msg, mine)
@@ -786,6 +814,108 @@ private fun ImageContent(msg: ChatMessage) {
         )
     }
 }
+
+@Composable
+private fun VideoNoteContent(msg: ChatMessage) {
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val apiEntry = remember {
+        EntryPointAccessors.fromApplication(
+            context.applicationContext,
+            uz.vazifa.app.di.ApiClientEntryPoint::class.java,
+        )
+    }
+    val remoteUrl = remember(msg.id, msg.filePath, msg.meta?.fileUrl) {
+        uz.vazifa.app.util.MediaUrl.resolveChatMedia(msg.filePath, msg.meta?.fileUrl)
+    }
+    val size = 240.dp
+    var playing by remember { mutableStateOf(false) }
+    var loading by remember { mutableStateOf(false) }
+    val exoPlayer = remember { ExoPlayer.Builder(context).build() }
+
+    DisposableEffect(Unit) {
+        onDispose {
+            exoPlayer.release()
+        }
+    }
+
+    Box(
+        Modifier
+            .size(size)
+            .clip(CircleShape)
+            .background(Color.Black)
+            .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
+                scope.launch {
+                    if (playing) {
+                        exoPlayer.pause()
+                        playing = false
+                        return@launch
+                    }
+                    loading = true
+                    val cached = cacheVideoFile(context, remoteUrl!!, apiEntry.apiClient().httpClient)
+                    if (cached != null) {
+                        exoPlayer.setMediaItem(MediaItem.fromUri(android.net.Uri.fromFile(cached)))
+                        exoPlayer.prepare()
+                        exoPlayer.play()
+                        playing = true
+                    }
+                    loading = false
+                }
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        AndroidView(
+            factory = { ctx ->
+                PlayerView(ctx).apply {
+                    player = exoPlayer
+                    useController = false
+                    resizeMode = AspectRatioFrameLayout.RESIZE_MODE_ZOOM
+                }
+            },
+            modifier = Modifier.fillMaxSize().alpha(if (playing) 1f else 0f),
+        )
+        if (loading) {
+            CircularProgressIndicator(color = Color.White, modifier = Modifier.size(32.dp), strokeWidth = 2.dp)
+        } else if (!playing) {
+            Box(
+                Modifier.size(52.dp).clip(CircleShape).background(Color.Black.copy(alpha = 0.45f)),
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(Icons.Default.PlayArrow, null, tint = Color.White, modifier = Modifier.size(32.dp))
+            }
+        }
+        msg.meta?.durationSec?.takeIf { it > 0 }?.let { dur ->
+            Text(
+                ChatFormat.durationLabel(dur),
+                color = Color.White,
+                fontSize = 11.sp,
+                modifier = Modifier
+                    .align(Alignment.BottomStart)
+                    .padding(12.dp)
+                    .clip(RoundedCornerShape(8.dp))
+                    .background(Color.Black.copy(alpha = 0.45f))
+                    .padding(horizontal = 6.dp, vertical = 2.dp),
+            )
+        }
+    }
+}
+
+private suspend fun cacheVideoFile(context: Context, remoteUrl: String, client: okhttp3.OkHttpClient): File? =
+    withContext(Dispatchers.IO) {
+        runCatching {
+            val name = remoteUrl.substringAfterLast('/').ifBlank { remoteUrl.hashCode().toString() }
+            val cacheFile = File(context.cacheDir, "video_note_play_$name")
+            if (cacheFile.exists() && cacheFile.length() > 1024) return@withContext cacheFile
+            val response = client.newCall(Request.Builder().url(remoteUrl).get().build()).execute()
+            response.use { resp ->
+                if (!resp.isSuccessful) return@withContext null
+                resp.body?.byteStream()?.use { input ->
+                    cacheFile.outputStream().use { output -> input.copyTo(output) }
+                }
+            }
+            cacheFile.takeIf { it.exists() && it.length() > 0 }
+        }.getOrNull()
+    }
 
 @Composable
 private fun VideoContent(msg: ChatMessage) {
@@ -1153,6 +1283,23 @@ fun RoomConversationScreen(
                                     ChatMessageType.VOICE,
                                     upload,
                                     ChatMessageMeta(durationSec = dur, waveform = wave),
+                                )
+                            }.onFailure {
+                                android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()
+                            }
+                            viewModel.setUploading(false)
+                        }
+                    },
+                    onSendVideoNote = { file, dur ->
+                        scope.launch {
+                            viewModel.setRecording(false)
+                            viewModel.setUploading(true)
+                            runCatching {
+                                val upload = viewModel.upload(file, "video/mp4")
+                                viewModel.sendUpload(
+                                    ChatMessageType.VIDEO,
+                                    upload,
+                                    ChatMessageMeta(durationSec = dur, width = 480, height = 480, isRoundVideo = true),
                                 )
                             }.onFailure {
                                 android.widget.Toast.makeText(context, sendFailedText, android.widget.Toast.LENGTH_SHORT).show()

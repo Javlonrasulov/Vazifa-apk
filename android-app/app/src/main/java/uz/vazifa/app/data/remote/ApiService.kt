@@ -61,6 +61,13 @@ data class UpdateTaskRequest(
     val deadlineAt: String? = null,
 )
 data class CommentRequest(val body: String)
+data class UpdateAnnouncementRequest(
+    val title: String,
+    val description: String?,
+    val deadlineAt: String,
+    val reminderIntervalMinutes: Int,
+)
+
 data class CreateAnnouncementRequest(
     val title: String,
     val description: String?,
@@ -301,6 +308,15 @@ interface ApiService {
     @POST("announcements")
     suspend fun createAnnouncement(@Body body: CreateAnnouncementRequest): AnnouncementDto
 
+    @PATCH("announcements/{id}")
+    suspend fun updateAnnouncement(
+        @Path("id") id: String,
+        @Body body: UpdateAnnouncementRequest,
+    ): AnnouncementDto
+
+    @DELETE("announcements/{id}")
+    suspend fun deleteAnnouncement(@Path("id") id: String)
+
     @POST("announcements/{id}/acknowledge")
     suspend fun acknowledgeAnnouncement(@Path("id") id: String): AnnouncementAckResponse
 
@@ -330,6 +346,7 @@ data class ChatMetaDto(
     val longitude: Double? = null,
     val contactName: String? = null,
     val contactPhone: String? = null,
+    val isRoundVideo: Boolean? = null,
 )
 
 data class ChatMessageDto(

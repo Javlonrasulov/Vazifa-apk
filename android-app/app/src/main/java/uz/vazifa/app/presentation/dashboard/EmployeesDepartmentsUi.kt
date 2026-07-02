@@ -7,6 +7,7 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
@@ -38,8 +39,8 @@ import uz.vazifa.app.domain.model.User
 import uz.vazifa.app.presentation.components.EmployeePresenceDot
 import uz.vazifa.app.presentation.components.EmployeePresenceStatus
 import uz.vazifa.app.presentation.components.GlassHeaderIconButton
-import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.components.liquidGlassFieldColors
+import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.VazifaColors
@@ -66,30 +67,20 @@ fun EmployeeSearchField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
+        modifier = modifier.fillMaxWidth(),
         placeholder = {
             Text(
-                localized("task_search_employee"),
-                color = LiquidTheme.textMuted,
-                fontSize = 13.sp,
+                localized("emp_search_hint"),
                 maxLines = 1,
                 overflow = TextOverflow.Ellipsis,
             )
         },
-        modifier = modifier
-            .fillMaxWidth()
-            .heightIn(min = 44.dp, max = 48.dp),
-        shape = RoundedCornerShape(LiquidGlass.RadiusInput),
-        colors = fieldColors,
         leadingIcon = {
-            Icon(
-                Icons.Default.Search,
-                contentDescription = null,
-                tint = LiquidTheme.textMuted,
-                modifier = Modifier.size(20.dp),
-            )
+            Icon(Icons.Default.Search, contentDescription = null, tint = LiquidTheme.textMuted)
         },
         singleLine = true,
-        textStyle = androidx.compose.ui.text.TextStyle(fontSize = 14.sp),
+        shape = RoundedCornerShape(LiquidGlass.RadiusInput),
+        colors = fieldColors,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch?.invoke() }),
     )
@@ -99,12 +90,17 @@ fun EmployeeSearchField(
 fun EmployeesHubContent(
     totalEmployees: Int,
     departments: List<Department>,
+    filteredEmployees: List<User>,
     searchQuery: String,
     onSearch: (String) -> Unit,
-    onSearchSubmit: () -> Unit,
     onDepartmentClick: (String?) -> Unit,
+    onEmployeeClick: (String) -> Unit = {},
+    onAssignTask: (Set<String>) -> Unit = {},
+    employeeStyle: SectionStyle = DashboardSection.EMPLOYEES.style(),
     topContent: (@Composable () -> Unit)? = null,
 ) {
+    val isSearching = searchQuery.trim().isNotBlank()
+
     LazyColumn(
         contentPadding = PaddingValues(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
@@ -116,15 +112,50 @@ fun EmployeesHubContent(
             EmployeeSearchField(
                 value = searchQuery,
                 onValueChange = onSearch,
-                onSearch = onSearchSubmit,
             )
         }
-        item {
-            EmployeeDepartmentGrid(
-                totalEmployees = totalEmployees,
-                departments = departments,
-                onDepartmentClick = onDepartmentClick,
-            )
+        if (isSearching) {
+            item {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        localized("emp_search_results"),
+                        color = LiquidTheme.textMuted,
+                        fontSize = 13.sp,
+                    )
+                    Text(
+                        "${filteredEmployees.size} ${localized("dash_unit")}",
+                        color = LiquidTheme.textMuted,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+            if (filteredEmployees.isEmpty()) {
+                item { EmployeesEmptyCard(employeeStyle) }
+            } else {
+                items(filteredEmployees, key = { it.id }) { employee ->
+                    EmployeeRow(
+                        user = employee,
+                        style = employeeStyle,
+                        selected = false,
+                        onToggleSelect = {},
+                        onClick = { onEmployeeClick(employee.id) },
+                        onAssignTask = { onAssignTask(setOf(employee.id)) },
+                        showCheckbox = false,
+                    )
+                }
+            }
+        } else {
+            item {
+                EmployeeDepartmentGrid(
+                    totalEmployees = totalEmployees,
+                    departments = departments,
+                    onDepartmentClick = onDepartmentClick,
+                )
+            }
         }
     }
 }
@@ -228,6 +259,7 @@ fun EmployeeRow(
     onToggleSelect: () -> Unit,
     onClick: () -> Unit,
     onAssignTask: () -> Unit,
+    showCheckbox: Boolean = true,
 ) {
     Row(
         Modifier
@@ -237,7 +269,9 @@ fun EmployeeRow(
         verticalAlignment = Alignment.CenterVertically,
         horizontalArrangement = Arrangement.spacedBy(8.dp),
     ) {
-        Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+        if (showCheckbox) {
+            Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+        }
         Row(
             Modifier
                 .weight(1f)

@@ -8,7 +8,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.core.splashscreen.SplashScreen.Companion.installSplashScreen
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.collectAsState
@@ -55,10 +54,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    private var keepSystemSplash = true
-
     override fun onCreate(savedInstanceState: Bundle?) {
-        installSplashScreen().setKeepOnScreenCondition { keepSystemSplash }
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
         pendingTaskId = intent.getStringExtra(VazifaNotificationHelper.EXTRA_TASK_ID)
@@ -97,7 +93,6 @@ class MainActivity : ComponentActivity() {
                         onPendingRoomConsumed = { pendingRoomId = null },
                         pendingAnnouncementId = pendingAnnouncementId,
                         onPendingAnnouncementConsumed = { pendingAnnouncementId = null },
-                        onSplashActiveChange = { active -> keepSystemSplash = active },
                     )
                 }
             }

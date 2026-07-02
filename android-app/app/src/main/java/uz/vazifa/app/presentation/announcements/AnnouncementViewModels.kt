@@ -22,6 +22,8 @@ import uz.vazifa.app.domain.model.isCreator
 import uz.vazifa.app.domain.model.isViewedBy
 import uz.vazifa.app.domain.model.pendingCount
 import uz.vazifa.app.domain.model.isTaskAssignable
+import uz.vazifa.app.domain.model.isActive
+import uz.vazifa.app.util.TaskDeadlineCountdown
 import uz.vazifa.app.util.UzbekTextSearch
 import java.io.File
 import java.time.LocalDateTime
@@ -44,9 +46,10 @@ class CreateAnnouncementViewModel @Inject constructor(
     private val auth: AuthRepository,
     savedStateHandle: SavedStateHandle,
 ) : ViewModel() {
+    private val editAnnouncementId: String? = savedStateHandle.get<String>("announcementId")
     private val zone = ZoneId.of("Asia/Tashkent")
     private val _state = MutableStateFlow(
-        CreateAnnouncementUiState().withSyncedDeadline(zone),
+        CreateAnnouncementUiState(isEditMode = editAnnouncementId != null).withSyncedDeadline(zone),
     )
     val state = _state.asStateFlow()
 
@@ -69,6 +72,41 @@ class CreateAnnouncementViewModel @Inject constructor(
                     currentUserId = selfId,
                     contacts = taskRepo.getContacts().filter { c -> c.isTaskAssignable(selfId) },
                 )
+            }
+            if (editAnnouncementId != null) loadForEdit()
+        }
+    }
+
+    fun loadForEdit() {
+        val id = editAnnouncementId ?: return
+        viewModelScope.launch {
+            _state.update { it.copy(loading = true) }
+            runCatching {
+                val announcement = announcementRepo.getById(id)
+                if (!announcement.isActive()) {
+                    _state.update { it.copy(loading = false, errorKey = "announcement_edit_inactive_forbidden") }
+                    return@runCatching
+                }
+                val deadline = TaskDeadlineCountdown.parseDeadline(announcement.deadlineAt)
+                val deadlineDateTime = deadline?.atZone(zone)?.toLocalDateTime()
+                val deadlineHours = deadlineDateTime?.let { dt ->
+                    hoursUntil(ZonedDateTime.of(dt, zone))
+                } ?: _state.value.deadlineHours
+                val (reminderValue, reminderUnit) = reminderFromMinutes(announcement.reminderIntervalMinutes)
+                _state.update {
+                    it.copy(
+                        title = announcement.title,
+                        description = announcement.description.orEmpty(),
+                        deadlineDateTime = deadlineDateTime,
+                        deadlineHours = deadlineHours,
+                        reminderValue = reminderValue,
+                        reminderUnit = reminderUnit,
+                        selectedIds = announcement.recipients.map { r -> r.recipientId }.toSet(),
+                        loading = false,
+                    )
+                }
+            }.onFailure {
+                _state.update { it.copy(loading = false, errorKey = "announcement_update_failed") }
             }
         }
     }
@@ -176,12 +214,67 @@ class CreateAnnouncementViewModel @Inject constructor(
         }
     }
 
+    fun update() = viewModelScope.launch {
+        val id = editAnnouncementId ?: return@launch
+        val title = _state.value.title.trim()
+        if (title.isBlank()) {
+            _state.update { it.copy(titleError = true, errorKey = "task_title_empty") }
+            return@launch
+        }
+        val intervalMinutes = _state.value.reminderIntervalMinutes()
+        if (intervalMinutes < 1) {
+            _state.update { it.copy(errorKey = "announcement_interval_invalid") }
+            return@launch
+        }
+        _state.update { it.copy(loading = true, errorKey = null, errorText = null) }
+        val fmt = DateTimeFormatter.ISO_OFFSET_DATE_TIME
+        val now = nowZoned()
+        val deadlineAt = _state.value.deadlineDateTime?.let { dt ->
+            ZonedDateTime.of(dt, zone).format(fmt)
+        } ?: run {
+            val hours = parseDeadlineHours(_state.value.deadlineHours) ?: 48.0
+            val minutes = (hours * 60).roundToLong().coerceAtLeast(1)
+            now.plusMinutes(minutes).format(fmt)
+        }
+        runCatching {
+            val announcement = announcementRepo.update(
+                id = id,
+                title = title,
+                description = _state.value.description.ifBlank { null },
+                deadlineAt = deadlineAt,
+                reminderIntervalMinutes = intervalMinutes,
+            )
+            val voice = _state.value.voiceFile
+            if (voice != null) {
+                runCatching { announcementRepo.uploadVoice(announcement.id, voice) }
+                    .onFailure { _state.update { it.copy(errorKey = "task_voice_upload_failed") } }
+            }
+            _state.update { it.copy(loading = false, saved = true, savedId = announcement.id, voiceFile = null) }
+        }.onFailure { e ->
+            val err = mapCreateError(e)
+            _state.update {
+                it.copy(loading = false, errorKey = err.key ?: "announcement_update_failed", errorText = err.detail)
+            }
+        }
+    }
+
     fun clearError() = _state.update { it.copy(errorKey = null, errorText = null) }
     fun resetForm() {
         _state.value.voiceFile?.delete()
         _state.update {
-            CreateAnnouncementUiState(contacts = it.contacts, currentUserId = it.currentUserId)
-                .withSyncedDeadline(zone)
+            CreateAnnouncementUiState(
+                contacts = it.contacts,
+                currentUserId = it.currentUserId,
+                isEditMode = editAnnouncementId != null,
+            ).withSyncedDeadline(zone)
+        }
+    }
+
+    private fun reminderFromMinutes(minutes: Int): Pair<String, ReminderUnit> {
+        return if (minutes % 60 == 0 && minutes >= 60) {
+            (minutes / 60).toString() to ReminderUnit.HOURS
+        } else {
+            minutes.toString() to ReminderUnit.MINUTES
         }
     }
 
@@ -232,6 +325,7 @@ class CreateAnnouncementViewModel @Inject constructor(
 }
 
 data class CreateAnnouncementUiState(
+    val isEditMode: Boolean = false,
     val title: String = "",
     val description: String = "",
     val deadlineHours: String = "48",
@@ -247,6 +341,8 @@ data class CreateAnnouncementUiState(
     val loading: Boolean = false,
     val created: Boolean = false,
     val createdId: String? = null,
+    val saved: Boolean = false,
+    val savedId: String? = null,
     val errorKey: String? = null,
     val errorText: String? = null,
 ) {
@@ -322,6 +418,17 @@ class AnnouncementDetailViewModel @Inject constructor(
     }
 
     fun clearError() = _state.update { it.copy(errorKey = null) }
+
+    fun delete(onSuccess: () -> Unit) = viewModelScope.launch {
+        val id = _state.value.announcement?.id ?: return@launch
+        _state.update { it.copy(deleting = true) }
+        runCatching {
+            repo.delete(id)
+            onSuccess()
+        }.onFailure {
+            _state.update { it.copy(deleting = false, errorKey = "announcement_delete_failed") }
+        }
+    }
 }
 
 data class AnnouncementDetailUiState(
@@ -329,6 +436,7 @@ data class AnnouncementDetailUiState(
     val currentUserId: String? = null,
     val loading: Boolean = false,
     val acknowledging: Boolean = false,
+    val deleting: Boolean = false,
     val error: Boolean = false,
     val errorKey: String? = null,
 )
@@ -396,9 +504,40 @@ class SentAnnouncementsViewModel @Inject constructor(
             _state.update { it.copy(loading = false) }
         }
     }
+
+    fun delete(id: String, onFailure: () -> Unit = {}) = viewModelScope.launch {
+        runCatching {
+            repo.delete(id)
+            load()
+        }.onFailure {
+            onFailure()
+        }
+    }
 }
 
 data class SentAnnouncementsUiState(
+    val announcements: List<Announcement> = emptyList(),
+    val loading: Boolean = false,
+)
+
+@HiltViewModel
+class ReceivedAnnouncementsViewModel @Inject constructor(
+    private val repo: AnnouncementRepository,
+) : ViewModel() {
+    private val _state = MutableStateFlow(ReceivedAnnouncementsUiState())
+    val state = _state.asStateFlow()
+
+    fun load() = viewModelScope.launch {
+        _state.update { it.copy(loading = true) }
+        runCatching {
+            _state.update { it.copy(announcements = repo.getReceived(), loading = false) }
+        }.onFailure {
+            _state.update { it.copy(loading = false) }
+        }
+    }
+}
+
+data class ReceivedAnnouncementsUiState(
     val announcements: List<Announcement> = emptyList(),
     val loading: Boolean = false,
 )
