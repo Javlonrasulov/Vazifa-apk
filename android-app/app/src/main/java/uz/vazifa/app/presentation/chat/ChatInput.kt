@@ -76,6 +76,7 @@ import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
+import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.util.VideoNoteRecorder
 import uz.vazifa.app.util.VoiceRecorder
 import java.io.File
@@ -341,7 +342,13 @@ fun ChatInputArea(
         }
     }
 
-    Column(Modifier.fillMaxWidth().background(LiquidTheme.bgMid.copy(alpha = 0.92f)).navigationBarsPadding()) {
+    Column(
+        Modifier
+            .fillMaxWidth()
+            .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
+            .padding(WindowInsets.navigationBars.asPaddingValues())
+            .padding(bottom = BottomNavHeight),
+    ) {
         AnimatedVisibility(visible = state.replyTo != null || state.editing != null) {
             ReplyEditBar(state, onCancelReplyEdit)
         }

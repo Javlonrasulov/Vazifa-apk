@@ -54,12 +54,14 @@ fun TaskVoiceCompleteBar(
                 )
                 Text(
                     if (voiceState.isLocked) {
-                        localized("chat_voice_locked")
+                        localized("task_voice_locked")
                     } else {
                         localized("task_voice_release_send")
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     color = LiquidTheme.textMuted,
                     fontSize = 12.sp,
+                    lineHeight = 16.sp,
                 )
             }
             if (showTooShort) {

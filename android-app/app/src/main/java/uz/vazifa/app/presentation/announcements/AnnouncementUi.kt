@@ -9,14 +9,14 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.Pause
 import androidx.compose.material.icons.filled.PlayArrow
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Visibility
 import androidx.compose.material.icons.filled.VisibilityOff
+import androidx.compose.material.icons.outlined.DeleteOutline
+import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.IconButton
 import androidx.compose.runtime.DisposableEffect
@@ -51,6 +51,7 @@ import uz.vazifa.app.presentation.components.localized
 import uz.vazifa.app.presentation.theme.GlassCard
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
+import uz.vazifa.app.presentation.theme.VazifaColors
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
 import uz.vazifa.app.util.TaskDeadlineCountdown
 
@@ -60,6 +61,61 @@ object AnnouncementAccent {
     val Soft = Color(0xFFFFEDD5)
     val SoftDark = Color(0x33EA580C)
     val Gradient = listOf(Light, Primary)
+}
+
+@Composable
+fun AnnouncementActionChip(
+    onClick: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    contentDescription: String,
+    tint: Color,
+    background: Color,
+    modifier: Modifier = Modifier,
+) {
+    Box(
+        modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(background)
+            .border(1.dp, tint.copy(alpha = 0.18f), CircleShape)
+            .clickable(onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription = contentDescription, tint = tint, modifier = Modifier.size(18.dp))
+    }
+}
+
+@Composable
+fun AnnouncementRowActions(
+    onEditClick: (() -> Unit)?,
+    onDeleteClick: (() -> Unit)?,
+    modifier: Modifier = Modifier,
+) {
+    if (onEditClick == null && onDeleteClick == null) return
+    Row(
+        modifier,
+        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        onEditClick?.let { action ->
+            AnnouncementActionChip(
+                onClick = action,
+                icon = Icons.Outlined.Edit,
+                contentDescription = localized("announcement_edit"),
+                tint = AnnouncementAccent.Primary,
+                background = AnnouncementAccent.Soft.copy(alpha = if (LiquidTheme.isDark) 0.22f else 0.85f),
+            )
+        }
+        onDeleteClick?.let { action ->
+            AnnouncementActionChip(
+                onClick = action,
+                icon = Icons.Outlined.DeleteOutline,
+                contentDescription = localized("announcement_delete"),
+                tint = VazifaColors.Danger,
+                background = VazifaColors.Danger.copy(alpha = if (LiquidTheme.isDark) 0.18f else 0.1f),
+            )
+        }
+    }
 }
 
 @Composable
@@ -263,18 +319,11 @@ fun AnnouncementListRow(
             }
         }
         if (onEditClick != null || onDeleteClick != null) {
-            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                onEditClick?.let { action ->
-                    IconButton(onClick = action) {
-                        Icon(Icons.Default.Edit, contentDescription = localized("announcement_edit"), tint = AnnouncementAccent.Primary)
-                    }
-                }
-                onDeleteClick?.let { action ->
-                    IconButton(onClick = action) {
-                        Icon(Icons.Default.Delete, contentDescription = localized("announcement_delete"), tint = LiquidTheme.textMuted)
-                    }
-                }
-            }
+            AnnouncementRowActions(
+                onEditClick = onEditClick,
+                onDeleteClick = onDeleteClick,
+                modifier = Modifier.align(Alignment.CenterVertically),
+            )
         }
     }
 }

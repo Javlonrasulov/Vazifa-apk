@@ -16,8 +16,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Campaign
 import androidx.compose.material.icons.filled.CalendarToday
 import androidx.compose.material.icons.filled.CheckCircle
-import androidx.compose.material.icons.filled.Delete
-import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Notifications
 import androidx.compose.material.icons.filled.RadioButtonUnchecked
 import androidx.compose.material.icons.filled.Search
@@ -322,6 +320,7 @@ fun CreateAnnouncementScreen(
                     onClick = submit,
                     enabled = !state.loading,
                     modifier = Modifier
+                        .navigationBarsPadding()
                         .padding(16.dp)
                         .height(52.dp),
                 ) {
@@ -408,12 +407,11 @@ fun AnnouncementDetailScreen(
         actions = {
             val announcement = state.announcement
             if (announcement != null && announcement.isCreator(state.currentUserId) && announcement.isActive()) {
-                IconButton(onClick = { onEdit(announcement.id) }) {
-                    Icon(Icons.Default.Edit, contentDescription = localized("announcement_edit"))
-                }
-                IconButton(onClick = { showDeleteDialog = true }, enabled = !state.deleting) {
-                    Icon(Icons.Default.Delete, contentDescription = localized("announcement_delete"))
-                }
+                AnnouncementRowActions(
+                    onEditClick = { onEdit(announcement.id) },
+                    onDeleteClick = if (!state.deleting) {{ showDeleteDialog = true }} else null,
+                    modifier = Modifier.padding(end = 8.dp),
+                )
             }
         },
     ) { padding ->

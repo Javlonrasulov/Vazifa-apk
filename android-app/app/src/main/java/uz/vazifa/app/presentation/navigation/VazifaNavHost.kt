@@ -4,6 +4,7 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.luminance
@@ -248,6 +249,8 @@ fun VazifaNavHost(
     var showCreateSheet by remember { mutableStateOf(false) }
     var showSupportSheet by remember { mutableStateOf(false) }
     var preselectedAssigneeIds by remember { mutableStateOf<Set<String>?>(null) }
+    var pendingAnnouncementTrackingId by remember { mutableStateOf<String?>(null) }
+    var mainInitialized by rememberSaveable { mutableStateOf(false) }
     val skipSplash = viewModel.bootRoute != null
     var splashDone by remember { mutableStateOf(skipSplash) }
     var destination by remember { mutableStateOf(viewModel.bootRoute) }
@@ -307,6 +310,16 @@ fun VazifaNavHost(
         if (!splashDone) return@LaunchedEffect
         if (startDestination == Routes.MAIN && !viewModel.auth.shouldSkipNotifGate()) {
             redirectToNotificationGate()
+        }
+    }
+
+    LaunchedEffect(pendingAnnouncementTrackingId) {
+        val id = pendingAnnouncementTrackingId ?: return@LaunchedEffect
+        pendingAnnouncementTrackingId = null
+        delay(50)
+        navController.navigate(Routes.announcementTracking(id)) {
+            popUpTo(Routes.ANNOUNCEMENT_RECIPIENTS) { inclusive = false }
+            launchSingleTop = true
         }
     }
 
@@ -436,8 +449,11 @@ fun VazifaNavHost(
                 }
                 LaunchedEffect(Unit) {
                     viewModel.refreshUser(onSessionExpired = goLogin)
-                    if (!viewModel.auth.shouldSkipNotifGate()) {
-                        redirectToNotificationGate()
+                    if (!mainInitialized) {
+                        if (!viewModel.auth.shouldSkipNotifGate()) {
+                            redirectToNotificationGate()
+                        }
+                        mainInitialized = true
                     }
                 }
                 key(selectedTab) {
@@ -594,12 +610,7 @@ fun VazifaNavHost(
             ) {
                 CreateAnnouncementScreen(
                     onBack = { navController.popBackStack() },
-                    onCreated = { id ->
-                        navController.navigate(Routes.announcementTracking(id)) {
-                            popUpTo(Routes.MAIN) { inclusive = false }
-                            launchSingleTop = true
-                        }
-                    },
+                    onCreated = { id -> pendingAnnouncementTrackingId = id },
                 )
             }
             composable(

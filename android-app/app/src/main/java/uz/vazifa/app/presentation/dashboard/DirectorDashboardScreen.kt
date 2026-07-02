@@ -3,7 +3,9 @@ package uz.vazifa.app.presentation.dashboard
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.border
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
@@ -31,6 +33,8 @@ import uz.vazifa.app.domain.model.canCreatorManage
 import uz.vazifa.app.domain.model.isCreator
 import uz.vazifa.app.domain.model.myAssignment
 import uz.vazifa.app.presentation.components.*
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownItem
+import uz.vazifa.app.presentation.theme.LiquidGlassDropdownMenu
 import uz.vazifa.app.presentation.theme.LiquidBackground
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.LiquidTheme
@@ -226,17 +230,19 @@ fun TaskRow(
         isReceived -> listOf(LiquidGlass.Emerald, VazifaColors.Success)
         else -> listOf(LiquidGlass.Blue.copy(alpha = 0.85f), LiquidGlass.Cyan.copy(alpha = 0.85f))
     }
+    var showActions by remember { mutableStateOf(false) }
+
     Row(
         Modifier
             .fillMaxWidth()
             .liquidGlassThemed()
             .padding(14.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(8.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Box(
             Modifier
-                .size(40.dp)
+                .size(44.dp)
                 .clip(CircleShape)
                 .background(Brush.linearGradient(directionGradient))
                 .clickable(onClick = onClick),
@@ -246,16 +252,29 @@ fun TaskRow(
                 directionIcon,
                 contentDescription = directionLabel,
                 tint = Color.White,
-                modifier = Modifier.size(20.dp),
+                modifier = Modifier.size(22.dp),
             )
         }
         Column(
             Modifier
                 .weight(1f)
                 .clickable(onClick = onClick),
-            verticalArrangement = Arrangement.spacedBy(2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
         ) {
-            Text(task.title, color = LiquidTheme.text, fontWeight = FontWeight.SemiBold, fontSize = 15.sp)
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Text(
+                    task.title,
+                    color = LiquidTheme.text,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 15.sp,
+                    modifier = Modifier.weight(1f),
+                    maxLines = 2,
+                )
+                TaskStatusBadge(chipLabel, chipColor)
+            }
             if (!isCreator && myAssignment != null) {
                 task.createdBy?.let {
                     Text(
@@ -271,6 +290,7 @@ fun TaskRow(
                         "${localized("task_assignees")}: $names",
                         color = LiquidTheme.textMuted,
                         fontSize = 12.sp,
+                        maxLines = 1,
                     )
                 }
             }
@@ -280,37 +300,64 @@ fun TaskRow(
             )
         }
         if (canManage) {
-            IconButton(
-                onClick = { onEdit?.invoke() },
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    Icons.Default.Edit,
-                    contentDescription = localized("task_edit"),
-                    tint = LiquidGlass.Blue,
-                    modifier = Modifier.size(20.dp),
-                )
-            }
-            IconButton(
-                onClick = { onDelete?.invoke() },
-                modifier = Modifier.size(36.dp),
-            ) {
-                Icon(
-                    Icons.Default.Delete,
-                    contentDescription = localized("task_delete"),
-                    tint = VazifaColors.Danger,
-                    modifier = Modifier.size(20.dp),
-                )
+            Box {
+                Box(
+                    Modifier
+                        .size(34.dp)
+                        .clip(CircleShape)
+                        .background(LiquidGlass.Blue.copy(alpha = 0.10f))
+                        .border(1.dp, LiquidGlass.Blue.copy(alpha = 0.14f), CircleShape)
+                        .clickable { showActions = true },
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Icon(
+                        Icons.Default.MoreVert,
+                        contentDescription = localized("com_settings"),
+                        tint = LiquidTheme.textMuted,
+                        modifier = Modifier.size(18.dp),
+                    )
+                }
+                LiquidGlassDropdownMenu(
+                    expanded = showActions,
+                    onDismissRequest = { showActions = false },
+                ) {
+                    LiquidGlassDropdownItem(
+                        text = localized("task_edit"),
+                        selected = false,
+                        onClick = {
+                            showActions = false
+                            onEdit?.invoke()
+                        },
+                    )
+                    LiquidGlassDropdownItem(
+                        text = localized("task_delete"),
+                        selected = false,
+                        onClick = {
+                            showActions = false
+                            onDelete?.invoke()
+                        },
+                    )
+                }
             }
         }
-        AssistChip(
-            onClick = {},
-            label = { Text(chipLabel, fontSize = 10.sp) },
-            colors = AssistChipDefaults.assistChipColors(
-                containerColor = chipColor.copy(alpha = 0.14f),
-                labelColor = chipColor,
-            ),
-            border = null,
+    }
+}
+
+@Composable
+private fun TaskStatusBadge(label: String, color: Color) {
+    Box(
+        Modifier
+            .clip(RoundedCornerShape(LiquidGlass.RadiusChip))
+            .background(color.copy(alpha = 0.10f))
+            .border(1.dp, color.copy(alpha = 0.22f), RoundedCornerShape(LiquidGlass.RadiusChip))
+            .padding(horizontal = 9.dp, vertical = 4.dp),
+    ) {
+        Text(
+            label,
+            color = color,
+            fontSize = 11.sp,
+            fontWeight = FontWeight.SemiBold,
+            maxLines = 1,
         )
     }
 }

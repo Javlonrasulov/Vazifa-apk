@@ -61,31 +61,37 @@ fun DescriptionVoiceInput(
             )
         }
         if (voiceState.isRecording) {
-            Row(
+            Column(
                 Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                verticalAlignment = Alignment.CenterVertically,
+                verticalArrangement = Arrangement.spacedBy(4.dp),
             ) {
-                Box(
-                    Modifier
-                        .size(8.dp)
-                        .clip(CircleShape)
-                        .background(VazifaColors.Danger),
-                )
-                Text(
-                    "${localized("task_voice_recording")} ${formatVoiceTimer(voiceState.elapsedSec)}",
-                    color = VazifaColors.Danger,
-                    fontSize = 12.sp,
-                    fontWeight = FontWeight.Medium,
-                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Box(
+                        Modifier
+                            .size(8.dp)
+                            .clip(CircleShape)
+                            .background(VazifaColors.Danger),
+                    )
+                    Text(
+                        "${localized("task_voice_recording")} ${formatVoiceTimer(voiceState.elapsedSec)}",
+                        color = VazifaColors.Danger,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                    )
+                }
                 Text(
                     if (voiceState.isLocked) {
-                        localized("chat_voice_locked")
+                        localized("task_voice_locked")
                     } else {
                         localized("task_voice_release_send")
                     },
+                    modifier = Modifier.fillMaxWidth(),
                     color = LiquidTheme.textMuted,
                     fontSize = 12.sp,
+                    lineHeight = 16.sp,
                 )
             }
         }

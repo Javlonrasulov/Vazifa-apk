@@ -26,9 +26,14 @@ import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.asPaddingValues
+import androidx.compose.foundation.layout.navigationBars
+import androidx.compose.foundation.layout.statusBars
 import androidx.lifecycle.compose.LocalLifecycleOwner
 import kotlinx.coroutines.launch
 import uz.vazifa.app.presentation.components.localized
+import uz.vazifa.app.presentation.navigation.BottomNavHeight
 import uz.vazifa.app.presentation.theme.LiquidGlass
 import uz.vazifa.app.presentation.theme.liquidGlassThemed
 import uz.vazifa.app.util.VideoNoteRecorder
@@ -48,6 +53,8 @@ fun VideoNoteRecordingOverlay(
     val lifecycleOwner = LocalLifecycleOwner.current
     val scope = rememberCoroutineScope()
     var previewReady by remember { mutableStateOf(false) }
+    val navBottom = WindowInsets.navigationBars.asPaddingValues().calculateBottomPadding()
+    val bottomControlsPadding = maxOf(navBottom, 48.dp) + BottomNavHeight + 12.dp
 
     Dialog(
         onDismissRequest = {},
@@ -57,8 +64,7 @@ fun VideoNoteRecordingOverlay(
             Modifier
                 .fillMaxSize()
                 .background(Color.Black.copy(alpha = 0.88f))
-                .statusBarsPadding()
-                .navigationBarsPadding(),
+                .padding(WindowInsets.statusBars.asPaddingValues()),
         ) {
             val lockAlpha by animateFloatAsState(if (lockHint) 1f else 0.35f, label = "lockAlpha")
 
@@ -129,7 +135,7 @@ fun VideoNoteRecordingOverlay(
                 Modifier
                     .align(Alignment.BottomCenter)
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 20.dp, bottom = 28.dp),
+                    .padding(start = 20.dp, end = 20.dp, bottom = bottomControlsPadding),
             ) {
                 Row(
                     Modifier.fillMaxWidth(),
@@ -174,18 +180,21 @@ fun VideoNoteRecordingOverlay(
                         color = LiquidGlass.Blue,
                         fontSize = 15.sp,
                         fontWeight = FontWeight.SemiBold,
-                        modifier = Modifier.clickable(onClick = onCancel),
+                        modifier = Modifier
+                            .clip(RoundedCornerShape(12.dp))
+                            .clickable(onClick = onCancel)
+                            .padding(horizontal = 16.dp, vertical = 14.dp),
                     )
                     if (locked) {
                         Box(
                             Modifier
-                                .size(52.dp)
+                                .size(56.dp)
                                 .clip(CircleShape)
                                 .background(LiquidGlass.Blue)
                                 .clickable(onClick = onSend),
                             contentAlignment = Alignment.Center,
                         ) {
-                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(24.dp))
+                            Icon(Icons.AutoMirrored.Filled.Send, null, tint = Color.White, modifier = Modifier.size(26.dp))
                         }
                     } else {
                         Spacer(Modifier.size(52.dp))
