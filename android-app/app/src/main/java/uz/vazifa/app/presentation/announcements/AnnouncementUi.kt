@@ -156,33 +156,6 @@ fun AnnouncementIconCircle(
 }
 
 @Composable
-fun AnnouncementScreenBanner(modifier: Modifier = Modifier) {
-    Row(
-        modifier
-            .fillMaxWidth()
-            .liquidGlassThemed()
-            .border(
-                width = 1.dp,
-                brush = Brush.horizontalGradient(AnnouncementAccent.Gradient),
-                shape = RoundedCornerShape(LiquidGlass.RadiusCard),
-            )
-            .padding(14.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(12.dp),
-    ) {
-        AnnouncementIconCircle(size = 40.dp, iconSize = 22.dp)
-        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
-            AnnouncementTypeBadge()
-            Text(
-                localized("announcement_type_desc"),
-                color = LiquidTheme.textMuted,
-                fontSize = 12.sp,
-            )
-        }
-    }
-}
-
-@Composable
 fun AnnouncementContentCard(
     title: String,
     description: String?,

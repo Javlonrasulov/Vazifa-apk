@@ -19,7 +19,6 @@ import androidx.compose.runtime.*
 import androidx.compose.ui.focus.onFocusEvent
 import androidx.compose.ui.focus.onFocusChanged
 import androidx.compose.ui.Alignment
-import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
@@ -534,8 +533,13 @@ fun CreateTaskScreen(
         )
     }
 
+    val showSubmitBar = !isKeyboardVisible && when {
+        state.isEditMode -> state.title.isNotBlank()
+        else -> state.title.isNotBlank() && state.selectedIds.isNotEmpty()
+    }
+
     val formContent: @Composable (PaddingValues) -> Unit = { padding ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -543,9 +547,10 @@ fun CreateTaskScreen(
         ) {
             Column(
                 Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .padding(horizontal = 16.dp)
-                    .verticalScroll(scrollState),
+                    .verticalScroll(scrollState)
+                    .padding(bottom = if (showSubmitBar) 72.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
             OutlinedTextField(
@@ -678,13 +683,13 @@ fun CreateTaskScreen(
                     label = localized("task_add_photo"),
                 )
             }
-                Spacer(Modifier.height(if (isKeyboardVisible) 24.dp else 8.dp))
             }
-            if (!isKeyboardVisible) {
+            if (showSubmitBar) {
                 CreateTaskSubmitBar(
                     isEditMode = state.isEditMode,
                     loading = state.loading,
                     onSubmit = submitCreate,
+                    modifier = Modifier.align(Alignment.BottomCenter),
                 )
             }
         }
@@ -780,12 +785,15 @@ private fun CreateTaskSubmitBar(
     isEditMode: Boolean,
     loading: Boolean,
     onSubmit: () -> Unit,
+    modifier: Modifier = Modifier,
 ) {
+    // NavHost allaqachon navigationBars + pastki dock uchun joy qoldiradi —
+    // bu yerda qayta navigationBarsPadding qo'shilmaydi (turli telefonlarda ikki marta siljimasin).
     Column(
-        Modifier
+        modifier
             .fillMaxWidth()
-            .navigationBarsPadding()
-            .padding(horizontal = 16.dp, vertical = 12.dp),
+            .padding(horizontal = 16.dp)
+            .padding(top = 8.dp, bottom = 8.dp),
     ) {
         Button(
             onClick = onSubmit,

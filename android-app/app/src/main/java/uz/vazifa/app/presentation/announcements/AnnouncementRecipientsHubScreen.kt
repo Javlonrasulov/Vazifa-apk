@@ -52,7 +52,6 @@ fun AnnouncementRecipientsHubScreen(
                             onSearch = viewModel::onSearch,
                             onDepartmentClick = { dept -> onDepartmentClick(dept, state.searchQuery) },
                             onAssignTask = onSelectRecipients,
-                            topContent = { AnnouncementScreenBanner() },
                         )
                     }
                 }

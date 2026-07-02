@@ -30,6 +30,7 @@ class VideoNoteRecorder(private val context: Context) {
     private var previewView: PreviewView? = null
     private var lifecycleOwner: LifecycleOwner? = null
     private var finalizeDeferred: CompletableDeferred<File?>? = null
+    private val segmentFiles = mutableListOf<File>()
 
     var useFrontCamera: Boolean = true
         private set
@@ -44,16 +45,24 @@ class VideoNoteRecorder(private val context: Context) {
         bindUseCases(provider, lifecycleOwner, previewView)
     }
 
-    fun flipCamera() {
-        if (activeRecording != null) return
+    suspend fun flipCamera() {
+        if (activeRecording != null) {
+            awaitSegment()?.let { segmentFiles.add(it) }
+            useFrontCamera = !useFrontCamera
+            rebindCamera()
+            startSegment()
+            return
+        }
         useFrontCamera = !useFrontCamera
-        val provider = cameraProvider ?: return
-        val owner = lifecycleOwner ?: return
-        val view = previewView ?: return
-        bindUseCases(provider, owner, view)
+        rebindCamera()
     }
 
     fun start(): File {
+        segmentFiles.clear()
+        return startSegment()
+    }
+
+    private fun startSegment(): File {
         cancelRecordingOnly()
         val file = File(context.cacheDir, "video_note_${System.currentTimeMillis()}.mp4")
         outputFile = file
@@ -79,11 +88,23 @@ class VideoNoteRecorder(private val context: Context) {
     }
 
     suspend fun stop(): File? {
-        val recording = activeRecording ?: return outputFile?.takeIf { it.exists() && it.length() > 512 }
+        awaitSegment()?.let { segmentFiles.add(it) }
+        val segments = segmentFiles.toList()
+        segmentFiles.clear()
+        if (segments.isEmpty()) return null
+        if (segments.size == 1) return segments.first()
+        val merged = File(context.cacheDir, "video_note_merged_${System.currentTimeMillis()}.mp4")
+        val result = VideoNoteMerger.merge(segments, merged)
+        segments.forEach { if (it != result) it.delete() }
+        return result
+    }
+
+    private suspend fun awaitSegment(): File? {
+        val recording = activeRecording ?: return null
         val deferred = finalizeDeferred ?: CompletableDeferred<File?>().also { finalizeDeferred = it }
         activeRecording = null
         recording.stop()
-        return withTimeoutOrNull(8_000) { deferred.await() }
+        return withTimeoutOrNull(30_000) { deferred.await() }
     }
 
     fun cancel() {
@@ -92,9 +113,10 @@ class VideoNoteRecorder(private val context: Context) {
         finalizeDeferred = null
         outputFile?.delete()
         outputFile = null
+        segmentFiles.forEach { it.delete() }
+        segmentFiles.clear()
     }
 
-    /** Kamerani bo'shatadi, yozilgan faylni o'chirmaydi */
     fun releaseCamera() {
         cancelRecordingOnly()
         cameraProvider?.unbindAll()
@@ -112,6 +134,13 @@ class VideoNoteRecorder(private val context: Context) {
     private fun cancelRecordingOnly() {
         runCatching { activeRecording?.stop() }
         activeRecording = null
+    }
+
+    private fun rebindCamera() {
+        val provider = cameraProvider ?: return
+        val owner = lifecycleOwner ?: return
+        val view = previewView ?: return
+        bindUseCases(provider, owner, view)
     }
 
     private fun bindUseCases(

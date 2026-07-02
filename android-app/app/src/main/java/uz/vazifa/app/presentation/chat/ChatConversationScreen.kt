@@ -636,7 +636,39 @@ private fun DateChip(createdAt: String) {
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
+private fun VideoNoteMessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Unit) {
+    val mutedColor = if (mine) LiquidTheme.textMuted else LiquidTheme.textMuted
+    Row(
+        Modifier
+            .fillMaxWidth()
+            .padding(vertical = 2.dp)
+            .combinedClickable(onClick = {}, onLongClick = onLongPress),
+        horizontalArrangement = if (mine) Arrangement.End else Arrangement.Start,
+    ) {
+        Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start) {
+            VideoNoteContent(msg)
+            Spacer(Modifier.height(4.dp))
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(ChatFormat.time(msg.createdAt), color = mutedColor, fontSize = 11.sp)
+                if (mine) {
+                    Spacer(Modifier.width(4.dp))
+                    MessageTicks(msg.status)
+                }
+            }
+            if (msg.reactions.isNotEmpty()) {
+                ReactionChips(msg, mine)
+            }
+        }
+    }
+}
+
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
 private fun MessageBubble(msg: ChatMessage, mine: Boolean, onLongPress: () -> Unit) {
+    if (msg.type == ChatMessageType.VIDEO && msg.meta?.isRoundVideo == true) {
+        VideoNoteMessageBubble(msg, mine, onLongPress)
+        return
+    }
     val bubbleShape = RoundedCornerShape(
         topStart = 18.dp,
         topEnd = 18.dp,
@@ -834,7 +866,17 @@ private fun VideoNoteContent(msg: ChatMessage) {
     val exoPlayer = remember { ExoPlayer.Builder(context).build() }
 
     DisposableEffect(Unit) {
+        val listener = object : androidx.media3.common.Player.Listener {
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == androidx.media3.common.Player.STATE_ENDED) {
+                    playing = false
+                    exoPlayer.seekTo(0)
+                }
+            }
+        }
+        exoPlayer.addListener(listener)
         onDispose {
+            exoPlayer.removeListener(listener)
             exoPlayer.release()
         }
     }
@@ -843,7 +885,8 @@ private fun VideoNoteContent(msg: ChatMessage) {
         Modifier
             .size(size)
             .clip(CircleShape)
-            .background(Color.Black)
+            .border(2.dp, Color.White.copy(alpha = 0.15f), CircleShape)
+            .background(Color(0xFF1A1A2E))
             .clickable(enabled = !remoteUrl.isNullOrBlank() && !loading) {
                 scope.launch {
                     if (playing) {
@@ -885,16 +928,18 @@ private fun VideoNoteContent(msg: ChatMessage) {
             }
         }
         msg.meta?.durationSec?.takeIf { it > 0 }?.let { dur ->
+            val s = dur.coerceAtLeast(0)
             Text(
-                ChatFormat.durationLabel(dur),
+                "%02d:%02d".format(s / 60, s % 60),
                 color = Color.White,
                 fontSize = 11.sp,
+                fontWeight = FontWeight.Medium,
                 modifier = Modifier
                     .align(Alignment.BottomStart)
-                    .padding(12.dp)
-                    .clip(RoundedCornerShape(8.dp))
-                    .background(Color.Black.copy(alpha = 0.45f))
-                    .padding(horizontal = 6.dp, vertical = 2.dp),
+                    .padding(10.dp)
+                    .clip(RoundedCornerShape(10.dp))
+                    .background(Color.Black.copy(alpha = 0.55f))
+                    .padding(horizontal = 7.dp, vertical = 3.dp),
             )
         }
     }
@@ -1490,8 +1535,7 @@ private fun ChannelReadOnlyBar() {
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
-            .navigationBarsPadding()
-            .padding(vertical = 16.dp),
+            .padding(bottom = 8.dp, top = 16.dp),
         contentAlignment = Alignment.Center,
     ) {
         Row(verticalAlignment = Alignment.CenterVertically) {

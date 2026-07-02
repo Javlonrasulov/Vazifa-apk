@@ -120,12 +120,17 @@ fun CreateAnnouncementScreen(
 
     val screenTitle = localized(if (state.isEditMode) "announcement_edit" else "announcement_create")
 
+    val showSubmitBar = !isKeyboardVisible && when {
+        state.isEditMode -> state.title.isNotBlank()
+        else -> state.title.isNotBlank() && state.selectedIds.isNotEmpty()
+    }
+
     VazifaStackScaffold(
         title = screenTitle,
         onBack = onBack,
         snackbarHost = { SnackbarHost(snackbarHostState) },
     ) { padding ->
-        Column(
+        Box(
             Modifier
                 .fillMaxSize()
                 .padding(padding)
@@ -133,12 +138,12 @@ fun CreateAnnouncementScreen(
         ) {
             Column(
                 Modifier
-                    .weight(1f)
+                    .fillMaxSize()
                     .padding(horizontal = 16.dp)
-                    .verticalScroll(scrollState),
+                    .verticalScroll(scrollState)
+                    .padding(bottom = if (showSubmitBar) 72.dp else 16.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                AnnouncementScreenBanner()
                 OutlinedTextField(
                     state.title, viewModel::onTitle,
                     label = { Text(localized("announcement_title_label")) },
@@ -313,15 +318,15 @@ fun CreateAnnouncementScreen(
                         RecipientSelectRow(c, checked = true, onToggle = {})
                     }
                 }
-                Spacer(Modifier.height(if (isKeyboardVisible) 24.dp else 8.dp))
             }
-            if (!isKeyboardVisible) {
+            if (showSubmitBar) {
                 AnnouncementPrimaryButton(
                     onClick = submit,
                     enabled = !state.loading,
                     modifier = Modifier
-                        .navigationBarsPadding()
-                        .padding(16.dp)
+                        .align(Alignment.BottomCenter)
+                        .fillMaxWidth()
+                        .padding(horizontal = 16.dp, vertical = 8.dp)
                         .height(52.dp),
                 ) {
                     if (state.loading) {

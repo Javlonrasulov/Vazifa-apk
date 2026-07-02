@@ -351,7 +351,7 @@ fun ChatInputArea(
         Modifier
             .fillMaxWidth()
             .background(LiquidTheme.bgMid.copy(alpha = 0.92f))
-            .padding(WindowInsets.navigationBars.asPaddingValues()),
+            .padding(bottom = 8.dp),
     ) {
         AnimatedVisibility(visible = state.replyTo != null || state.editing != null) {
             ReplyEditBar(state, onCancelReplyEdit)
@@ -497,7 +497,7 @@ fun ChatInputArea(
             lockHint = lockHint,
             cancelHint = cancelHint,
             recorder = videoRecorder,
-            onFlipCamera = { videoRecorder.flipCamera() },
+            onFlipCamera = { scope.launch { runCatching { videoRecorder.flipCamera() } } },
             onCancel = { cancelVideoRecording() },
             onSend = { finishVideoRecording() },
             onCameraReady = { cameraReady = true },
